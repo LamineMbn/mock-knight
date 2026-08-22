@@ -34,6 +34,8 @@ export interface MockListItem {
   hasFault: boolean
   isProxy: boolean
   bodyFile: string | null
+  /** Request header matchers — on many corpora these are what actually distinguish two stubs. */
+  headers: { name: string; operator: string; value: string | null }[]
   bodyTruncated: boolean
   lastServedAt: string | null
   contentHash: string
@@ -50,6 +52,8 @@ export interface Facets {
   scenario: FacetBucket[]
   folder: FacetBucket[]
   tag: FacetBucket[]
+  /** Header *names* used as matchers, so the sidebar can offer the discriminator directly. */
+  header: FacetBucket[]
   hasDelay: number
   hasFault: number
   isProxy: number
@@ -153,6 +157,24 @@ function filterToSql(filter: QueryFilter): { sql: string; params: unknown[] } {
       }
     case 'disabled':
       return { sql: 'm.enabled = ?', params: [filter.value ? 0 : 1] }
+    case 'header': {
+      // Matched against the structured JSON rather than the flattened `header_text`, so a
+      // value cannot accidentally match across two different headers. `json_each` over a NULL
+      // column yields no rows, which is exactly "this stub has no header matchers".
+      const name = `lower(json_extract(j.value, '$.name')) = ?`
+      if (filter.op === 'present') {
+        return {
+          sql: `EXISTS (SELECT 1 FROM json_each(m.headers) j WHERE ${name})`,
+          params: [filter.name],
+        }
+      }
+      const value = filter.value ?? ''
+      return {
+        sql: `EXISTS (SELECT 1 FROM json_each(m.headers) j WHERE ${name}
+                      AND json_extract(j.value, '$.value') LIKE ? ESCAPE '${LIKE_ESCAPE}')`,
+        params: [filter.name, filter.op === 'glob' ? globToLike(value) : `%${escapeLike(value)}%`],
+      }
+    }
   }
 }
 
@@ -266,6 +288,7 @@ interface MockRow {
   has_fault: number
   is_proxy: number
   body_file: string | null
+  headers: string | null
   body_truncated: number
   last_served_at: string | null
   content_hash: string
@@ -276,6 +299,16 @@ function parseTags(raw: string | null): string[] {
   try {
     const parsed: unknown = JSON.parse(raw)
     return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function parseHeaders(raw: string | null): MockListItem['headers'] {
+  if (raw === null) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as MockListItem['headers']) : []
   } catch {
     return []
   }
@@ -302,6 +335,7 @@ function toItem(row: MockRow): MockListItem {
     hasFault: row.has_fault === 1,
     isProxy: row.is_proxy === 1,
     bodyFile: row.body_file,
+    headers: parseHeaders(row.headers),
     bodyTruncated: row.body_truncated === 1,
     lastServedAt: row.last_served_at,
     contentHash: row.content_hash,
@@ -311,7 +345,7 @@ function toItem(row: MockRow): MockListItem {
 const SELECT_COLUMNS = `
   m.client_key, m.server_id, m.name, m.folder, m.folder_source, m.tags, m.method, m.url_kind,
   m.url_value, m.status, m.priority, m.enabled, m.scenario, m.has_delay, m.has_fault,
-  m.is_proxy, m.body_file, m.body_truncated, m.last_served_at, m.content_hash`
+  m.is_proxy, m.body_file, m.headers, m.body_truncated, m.last_served_at, m.content_hash`
 
 function countBucket(
   db: Db,
@@ -324,14 +358,18 @@ function countBucket(
   // zero the count beside every other method in the same list.
   const conditions = buildConditions(request, field)
   const { sql, params } = fromWhere(conditions, extraFrom)
+  // Grouped and ordered by **ordinal**, not by the alias. `json_each` exposes its own column
+  // called `value`, so `GROUP BY value` silently binds to that instead of the alias — which
+  // split one header name into a group per row and made every count 1. The tag facet had the
+  // same shape and only gave right answers by coincidence.
   const rows = db
     .prepare(
-      `SELECT ${expression} AS value, count(*) AS count ${sql}
+      `SELECT ${expression} AS facet_value, count(*) AS facet_count ${sql}
        AND ${expression} IS NOT NULL
-       GROUP BY value ORDER BY count DESC, value ASC`,
+       GROUP BY 1 ORDER BY 2 DESC, 1 ASC`,
     )
-    .all(...params) as { value: string | number; count: number }[]
-  return rows.map((row) => ({ value: String(row.value), count: row.count }))
+    .all(...params) as { facet_value: string | number; facet_count: number }[]
+  return rows.map((row) => ({ value: String(row.facet_value), count: row.facet_count }))
 }
 
 function countFlag(db: Db, request: SearchRequest, column: string): number {
@@ -377,6 +415,13 @@ export function searchCorpus(db: Db, request: SearchRequest): SearchResult {
       scenario: countBucket(db, request, 'scenario', 'm.scenario'),
       folder: countBucket(db, request, 'folder', 'm.folder'),
       tag: countBucket(db, request, 'tag', 'j.value', ', json_each(m.tags) j'),
+      header: countBucket(
+        db,
+        request,
+        'header',
+        `json_extract(h.value, '$.name')`,
+        ', json_each(m.headers) h',
+      ),
       hasDelay: countFlag(db, request, 'has_delay'),
       hasFault: countFlag(db, request, 'has_fault'),
       isProxy: countFlag(db, request, 'is_proxy'),

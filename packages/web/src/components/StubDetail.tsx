@@ -143,6 +143,30 @@ export function StubDetail({ profileId, clientKey }: StubDetailProps) {
                 {mock.url === null ? <Muted>any</Muted> : `${mock.url.kind} ${mock.url.value}`}
               </span>
             </Row>
+            <Row label="Headers">
+              {mock.headers.length === 0 ? (
+                <Muted>matches on no header</Muted>
+              ) : (
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4 }}>
+                  {mock.headers.map((header, index) => (
+                    <li
+                      key={`${header.name}-${index}`}
+                      className="mk-mono"
+                      style={{ fontSize: 12, overflowWrap: 'anywhere' }}
+                    >
+                      <span style={{ color: 'var(--mk-code-key)' }}>{header.name}</span>{' '}
+                      <span style={{ color: 'var(--mk-text-tertiary)' }}>{header.operator}</span>
+                      {header.value !== null && (
+                        <>
+                          {' '}
+                          <span style={{ color: 'var(--mk-code-string)' }}>{header.value}</span>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Row>
             <Row label="Status">
               <StatusCode status={mock.status} />
             </Row>

@@ -54,6 +54,24 @@ for (const colorScheme of ['light', 'dark'] as const) {
       expect(new URL(page.url()).searchParams.get('q')).toBe('method:GET')
     })
 
+    test('shows header matchers, which are the discriminator on a header-selected corpus', async ({
+      page,
+    }) => {
+      await page.goto('/')
+      await expect(page.locator(ROW).first()).toBeVisible()
+
+      // The column appears only where the corpus actually matches on a header.
+      await expect(page.getByRole('columnheader', { name: 'Header' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Matches on header' })).toBeVisible()
+
+      await page.getByLabel('Search stubs').fill('header:X-Tenant=acme')
+      await page.getByLabel('Search stubs').press('Enter')
+      await expect(page.locator(ROW)).toHaveCount(1)
+
+      await page.locator(ROW).first().click()
+      await expect(page.locator('aside').last()).toContainText('X-Tenant')
+    })
+
     test('names a token this backend cannot answer instead of ignoring it', async ({ page }) => {
       await page.goto('/?q=disabled%3Atrue')
       await expect(page.locator(ROW).first()).toBeVisible()

@@ -32,13 +32,23 @@ interface Column {
   width: number | 'flex'
 }
 
-const COLUMNS: Column[] = [
-  { key: 'method', label: 'Method', width: 72 },
-  { key: 'path', label: 'Path', width: 'flex' },
-  { key: 'status', label: 'Status', width: 56 },
-  { key: 'scenario', label: 'Scenario', width: 112 },
-  { key: 'served', label: 'Last served', width: 96 },
-]
+/**
+ * The header column is conditional rather than user-toggled-off-by-default.
+ *
+ * Where a team selects stubs by header, the header value *is* the stub's identity and a list
+ * without it shows rows that are indistinguishable. Where no stub matches on a header, the
+ * column would be 180px of nothing. So it appears exactly when the result set uses one.
+ */
+function columnsFor(showHeader: boolean): Column[] {
+  return [
+    { key: 'method', label: 'Method', width: 72 },
+    { key: 'path', label: 'Path', width: 'flex' },
+    ...(showHeader ? [{ key: 'header', label: 'Header', width: 240 } as Column] : []),
+    { key: 'status', label: 'Status', width: 56 },
+    { key: 'scenario', label: 'Scenario', width: 112 },
+    { key: 'served', label: 'Last served', width: 96 },
+  ]
+}
 
 function cellStyle(column: Column): CSSProperties {
   return {
@@ -54,6 +64,29 @@ function cellStyle(column: Column): CSSProperties {
   }
 }
 
+/** One matcher rendered compactly; the name and operator live in the tooltip. */
+function HeaderCell({ headers }: { headers: MockListItem['headers'] }) {
+  if (headers.length === 0) return <span style={{ color: 'var(--mk-text-tertiary)' }}>—</span>
+  const first = headers[0]!
+  const describe = headers
+    .map((h) => `${h.name} ${h.operator}${h.value === null ? '' : ` ${h.value}`}`)
+    .join('\n')
+  return (
+    <>
+      <MiddleEllipsis
+        text={first.value ?? `${first.name} ${first.operator}`}
+        title={describe}
+        tailChars={10}
+      />
+      {headers.length > 1 && (
+        <Chip tone="neutral" title={describe}>
+          +{headers.length - 1}
+        </Chip>
+      )}
+    </>
+  )
+}
+
 export interface CorpusListProps {
   items: MockListItem[]
   /** The full result-set size, which may exceed what is loaded. Announced to assistive tech. */
@@ -62,6 +95,8 @@ export interface CorpusListProps {
   onSelect: (clientKey: string) => void
   loading: boolean
   emptyMessage: React.ReactNode
+  /** Show the Header column — true when anything in the corpus matches on a header. */
+  showHeaderColumn: boolean
 }
 
 export function CorpusList({
@@ -71,7 +106,9 @@ export function CorpusList({
   onSelect,
   loading,
   emptyMessage,
+  showHeaderColumn,
 }: CorpusListProps) {
+  const COLUMNS = columnsFor(showHeaderColumn)
   const scrollRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
     count: items.length,
@@ -195,10 +232,19 @@ export function CorpusList({
                       </Chip>
                     )}
                   </span>
-                  <span role="gridcell" style={cellStyle(COLUMNS[2]!)}>
+                  {showHeaderColumn && (
+                    <span
+                      role="gridcell"
+                      className="mk-mono"
+                      style={{ ...cellStyle(COLUMNS[2]!), fontSize: 12 }}
+                    >
+                      <HeaderCell headers={item.headers} />
+                    </span>
+                  )}
+                  <span role="gridcell" style={cellStyle(COLUMNS[showHeaderColumn ? 3 : 2]!)}>
                     <StatusCode status={item.status} />
                   </span>
-                  <span role="gridcell" style={cellStyle(COLUMNS[3]!)}>
+                  <span role="gridcell" style={cellStyle(COLUMNS[showHeaderColumn ? 4 : 3]!)}>
                     {item.scenario !== null && (
                       <Chip tone="accent" title={`Scenario: ${item.scenario}`}>
                         <MiddleEllipsis text={item.scenario} tailChars={5} />
@@ -209,7 +255,7 @@ export function CorpusList({
                     role="gridcell"
                     className="mk-tabular"
                     style={{
-                      ...cellStyle(COLUMNS[4]!),
+                      ...cellStyle(COLUMNS[showHeaderColumn ? 5 : 4]!),
                       color: 'var(--mk-text-tertiary)',
                       fontSize: 12,
                     }}

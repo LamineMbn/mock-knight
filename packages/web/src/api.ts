@@ -24,6 +24,8 @@ export interface MockListItem {
   hasFault: boolean
   isProxy: boolean
   bodyFile: string | null
+  /** Request header matchers. On a header-selected corpus these are the real discriminator. */
+  headers: { name: string; operator: string; value: string | null }[]
   bodyTruncated: boolean
   lastServedAt: string | null
   contentHash: string
@@ -40,6 +42,7 @@ export interface Facets {
   scenario: FacetBucket[]
   folder: FacetBucket[]
   tag: FacetBucket[]
+  header: FacetBucket[]
   hasDelay: number
   hasFault: number
   isProxy: number

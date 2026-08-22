@@ -141,11 +141,52 @@ CREATE TABLE saved_search (
 CREATE INDEX ss_profile ON saved_search(profile_id);
 `
 
+/**
+ * Header matchers, added after the schema was first written.
+ *
+ * Stubs selected by a header are not a corner case: on a real corpus, 525 of 582 stubs were
+ * distinguished only by `X-Mock`, so without this the list showed nine identical-looking rows
+ * and search could not tell them apart.
+ *
+ * Two columns for the same reason `raw` and `body_excerpt` are separate: `headers` is JSON the
+ * UI renders, `header_text` is the flattened `name=value` form the FTS index actually searches.
+ * Indexing the JSON directly would make a free-text search for `equalTo` match everything.
+ *
+ * The FTS table has to be dropped and recreated — an external-content table's column list is
+ * fixed at creation. The mirror is emptied in the same transaction rather than left half
+ * indexed: it is a disposable cache (CLAUDE.md invariant 6), and the next refresh refills it.
+ * Leaving stale rows would mean header search silently missing everything ingested before the
+ * upgrade, which is the failure mode this whole feature exists to prevent.
+ */
+const ADD_HEADER_MATCHERS = `
+ALTER TABLE mock ADD COLUMN headers TEXT;
+ALTER TABLE mock ADD COLUMN header_text TEXT;
+
+DELETE FROM mock;
+
+DROP TABLE mock_fts;
+CREATE VIRTUAL TABLE mock_fts USING fts5(
+  url_value, name, folder, tags, body_excerpt, header_text,
+  tokenize = 'trigram',
+  detail   = 'full',
+  content  = 'mock',
+  content_rowid = 'rowid'
+);
+`
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: 'initial mirror schema', sql: INITIAL },
+  { version: 2, name: 'index request header matchers', sql: ADD_HEADER_MATCHERS },
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version
 
 /** The `mock_fts` columns, which must all exist on `mock`. Asserted by a test. */
-export const FTS_COLUMNS = ['url_value', 'name', 'folder', 'tags', 'body_excerpt'] as const
+export const FTS_COLUMNS = [
+  'url_value',
+  'name',
+  'folder',
+  'tags',
+  'body_excerpt',
+  'header_text',
+] as const

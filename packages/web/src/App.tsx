@@ -85,20 +85,24 @@ export function App() {
   )
 
   /**
-   * Toggle a facet by rewriting the query string, so the URL stays the single source of truth
-   * for what is filtered. Takes a *set* of tokens because selecting a folder branch needs two:
-   * one for stubs filed directly in it, one glob for everything beneath.
+   * Apply a facet change by rewriting the query string, so the URL stays the single source of
+   * truth for what is filtered.
+   *
+   * Takes adds *and* removes in one edit rather than a plain toggle, because a folder click is
+   * not a toggle of one value: selecting a branch has to clear whatever is already selected
+   * beneath it, or the branch's own checkbox can never turn that subtree back off.
    */
-  const toggleFacet = (tokens: string[]) => {
-    const present = query.split(/\s+/).filter((part) => part !== '')
-    const allPresent = tokens.every((token) => present.includes(token))
-    const next = allPresent
-      ? present.filter((part) => !tokens.includes(part))
-      : [...present.filter((part) => !tokens.includes(part)), ...tokens]
-    const joined = next.join(' ')
-    setDraft(joined)
-    setUrlState(joined, selectedKey)
-  }
+  const applyFacetTokens = useCallback(
+    ({ add = [], remove = [] }: { add?: string[]; remove?: string[] }) => {
+      const present = query.split(/\s+/).filter((part) => part !== '')
+      const dropped = new Set([...remove, ...add])
+      const next = [...present.filter((part) => !dropped.has(part)), ...add]
+      const joined = next.join(' ')
+      setDraft(joined)
+      setUrlState(joined, selectedKey)
+    },
+    [query, selectedKey, setUrlState],
+  )
 
   useEffect(() => setDraft(query), [query])
 
@@ -143,7 +147,7 @@ export function App() {
         <FacetPane
           facets={corpus.data?.facets}
           active={activeFacetTokens}
-          onToggle={toggleFacet}
+          onApply={applyFacetTokens}
           expandedFolders={expandedFolders}
           onExpandedFoldersChange={setExpandedFolders}
         />
@@ -187,6 +191,7 @@ export function App() {
           <CorpusList
             items={corpus.data?.items ?? []}
             total={corpus.data?.total ?? 0}
+            showHeaderColumn={(corpus.data?.facets.header?.length ?? 0) > 0}
             selectedKey={selectedKey}
             onSelect={(key) => setUrlState(query, key === selectedKey ? null : key)}
             loading={corpus.isPending}

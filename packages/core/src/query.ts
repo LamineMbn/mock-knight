@@ -19,6 +19,11 @@ import { CAPABILITY_REGISTRY, type CapabilityBit, type CapabilitySet } from './c
  * Browser-safe: no `node:` imports. The BFF and the SPA parse with the same code.
  */
 
+/**
+ * `header:` is the eleventh token, added after TECH-DESIGN §11 was written — see amendment A6.
+ * It exists because header-selected stubs are not a corner case: on a real corpus 90% of stubs
+ * were distinguished only by one header, which made path search almost useless there.
+ */
 export const QUERY_FIELDS = [
   'method',
   'url',
@@ -30,6 +35,7 @@ export const QUERY_FIELDS = [
   'folder',
   'unused',
   'disabled',
+  'header',
 ] as const
 export type QueryField = (typeof QUERY_FIELDS)[number]
 
@@ -78,6 +84,16 @@ export type QueryFilter =
       readonly field: 'unused' | 'disabled'
       readonly op: 'is'
       readonly value: boolean
+      readonly span: Span
+    }
+  | {
+      readonly field: 'header'
+      /** `present` when only a name was given; the stub matches on that header at all. */
+      readonly op: 'present' | 'contains' | 'glob'
+      /** Lower-cased: HTTP header names are case-insensitive. */
+      readonly name: string
+      /** Case preserved — header *values* are case-sensitive. Null for `present`. */
+      readonly value: string | null
       readonly span: Span
     }
 
@@ -200,6 +216,27 @@ function parsePriority(value: string, span: Span): QueryFilter | null {
   return { field: 'priority', op, value: Number(match[2]), span }
 }
 
+/**
+ * `header:Name` or `header:Name=value`. Split on the **first** `=` only, so a value that itself
+ * contains one (a signature, a base64 blob) survives intact.
+ */
+function parseHeader(raw: string, span: Span): QueryFilter | null {
+  const separator = raw.indexOf('=')
+  const name = (separator === -1 ? raw : raw.slice(0, separator)).trim().toLowerCase()
+  if (name === '') return null
+  if (separator === -1) return { field: 'header', op: 'present', name, value: null, span }
+
+  const { text: value } = unquote(raw.slice(separator + 1))
+  if (value === '') return { field: 'header', op: 'present', name, value: null, span }
+  return {
+    field: 'header',
+    op: WILDCARD.test(value) ? 'glob' : 'contains',
+    name,
+    value,
+    span,
+  }
+}
+
 function buildFilter(field: QueryField, value: string, span: Span): QueryFilter | null {
   if (value === '') return null
   switch (field) {
@@ -220,6 +257,8 @@ function buildFilter(field: QueryField, value: string, span: Span): QueryFilter 
       const parsed = parseBoolean(value)
       return parsed === null ? null : { field, op: 'is', value: parsed, span }
     }
+    case 'header':
+      return parseHeader(value, span)
   }
 }
 

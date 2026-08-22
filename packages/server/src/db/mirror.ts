@@ -49,6 +49,47 @@ function bodyExcerptFor(mock: Mock): { excerpt: string | null; truncated: boolea
   return { excerpt: sliced.replace(/�$/, ''), truncated: true }
 }
 
+export interface StoredHeaderMatcher {
+  name: string
+  operator: string
+  /** Rendered form of the matcher's value; `null` where the operator carries none. */
+  value: string | null
+}
+
+/**
+ * Flatten the request's header matchers for storage.
+ *
+ * `value` is stringified rather than kept as JSON because it is for display and substring
+ * search, not for round-tripping — `raw` remains the only thing a write is ever rebuilt from.
+ */
+export function headerMatchersOf(mock: Mock): StoredHeaderMatcher[] {
+  const out: StoredHeaderMatcher[] = []
+  for (const [name, matchers] of Object.entries(mock.request.headers)) {
+    for (const matcher of matchers) {
+      const value =
+        matcher.value === null
+          ? null
+          : typeof matcher.value === 'string'
+            ? matcher.value
+            : canonicalJson(matcher.value)
+      out.push({ name, operator: matcher.operator, value })
+    }
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name) || a.operator.localeCompare(b.operator))
+}
+
+/**
+ * The searchable form: `name=value` per line, plus the bare name so `header:X-Mock` with no
+ * value still matches. Lower-cased name, because HTTP header names are case-insensitive and the
+ * query lower-cases them too; the value keeps its case, because values are not.
+ */
+export function headerSearchText(matchers: readonly StoredHeaderMatcher[]): string | null {
+  if (matchers.length === 0) return null
+  return matchers
+    .map((m) => (m.value === null ? m.name.toLowerCase() : `${m.name.toLowerCase()}=${m.value}`))
+    .join('\n')
+}
+
 interface MockRow {
   profile_id: string
   client_key: string
@@ -70,6 +111,8 @@ interface MockRow {
   has_fault: number
   is_proxy: number
   body_file: string | null
+  headers: string | null
+  header_text: string | null
   content_hash: string
   raw: string
   body_excerpt: string | null
@@ -79,6 +122,7 @@ interface MockRow {
 
 export function toRow(profileId: string, mock: Mock, fetchedAt: string): MockRow {
   const { excerpt, truncated } = bodyExcerptFor(mock)
+  const headers = headerMatchersOf(mock)
   return {
     profile_id: profileId,
     client_key: mock.clientKey,
@@ -101,6 +145,8 @@ export function toRow(profileId: string, mock: Mock, fetchedAt: string): MockRow
     has_fault: mock.response.fault !== null ? 1 : 0,
     is_proxy: mock.response.proxy !== null ? 1 : 0,
     body_file: mock.response.body.kind === 'file' ? String(mock.response.body.value) : null,
+    headers: headers.length > 0 ? JSON.stringify(headers) : null,
+    header_text: headerSearchText(headers),
     content_hash: mock.contentHash,
     raw: JSON.stringify(mock.raw),
     body_excerpt: excerpt,
@@ -113,12 +159,13 @@ const INSERT_MOCK = `
 INSERT INTO mock (
   profile_id, client_key, server_id, name, folder, folder_source, tags, method, url_kind,
   url_value, status, priority, enabled, scenario, required_state, new_state, has_delay,
-  has_fault, is_proxy, body_file, content_hash, raw, body_excerpt, body_truncated, fetched_at
+  has_fault, is_proxy, body_file, headers, header_text, content_hash, raw, body_excerpt,
+  body_truncated, fetched_at
 ) VALUES (
   @profile_id, @client_key, @server_id, @name, @folder, @folder_source, @tags, @method, @url_kind,
   @url_value, @status, @priority, @enabled, @scenario, @required_state, @new_state, @has_delay,
-  @has_fault, @is_proxy, @body_file, @content_hash, @raw, @body_excerpt, @body_truncated,
-  @fetched_at
+  @has_fault, @is_proxy, @body_file, @headers, @header_text, @content_hash, @raw, @body_excerpt,
+  @body_truncated, @fetched_at
 )`
 
 /**

@@ -70,6 +70,13 @@ export function folderTokensFor(path: string, hasChildren: boolean): string[] {
   return hasChildren ? [`folder:${path}`, `folder:${path}/*`] : [`folder:${path}`]
 }
 
+/** Every `folder:` token under this node, its own included — what a click has to clear. */
+function subtreeTokens(node: TreeNode): string[] {
+  const out = folderTokensFor(node.path, node.children.length > 0)
+  for (const child of node.children) out.push(...subtreeTokens(child))
+  return out
+}
+
 type Selection = 'on' | 'off' | 'partial'
 
 function selectionOf(node: TreeNode, active: ReadonlySet<string>): Selection {
@@ -128,7 +135,7 @@ function TriStateCheckbox({
 export interface FolderTreeProps {
   buckets: FacetBucket[]
   active: ReadonlySet<string>
-  onToggle: (tokens: string[]) => void
+  onApply: (change: { add?: string[]; remove?: string[] }) => void
   expanded: ReadonlySet<string>
   onExpandedChange: (next: ReadonlySet<string>) => void
 }
@@ -136,7 +143,7 @@ export interface FolderTreeProps {
 export function FolderTree({
   buckets,
   active,
-  onToggle,
+  onApply,
   expanded,
   onExpandedChange,
 }: FolderTreeProps) {
@@ -231,7 +238,21 @@ export function FolderTree({
             <TriStateCheckbox
               selection={selection}
               label={`Filter to ${node.path}`}
-              onChange={() => onToggle(folderTokensFor(node.path, hasChildren))}
+              /**
+               * Standard tri-state semantics, and the reason a click always clears the whole
+               * subtree first: without that, selecting a child and then clicking its parent
+               * left the child's own token behind, so the parent could never turn the filter
+               * back off. Partial and off both mean "select everything here"; on means "clear
+               * everything here".
+               */
+              onChange={() =>
+                selection === 'on'
+                  ? onApply({ remove: subtreeTokens(node) })
+                  : onApply({
+                      remove: subtreeTokens(node),
+                      add: folderTokensFor(node.path, hasChildren),
+                    })
+              }
             />
             <MiddleEllipsis text={node.segment} title={node.path} />
             <span

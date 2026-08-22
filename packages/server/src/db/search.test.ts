@@ -43,7 +43,8 @@ function seed(mocks: Mock[]): void {
 }
 
 function search(query: string, limit = 50, offset = 0) {
-  return searchCorpus(db, { profileId: 'p1', plan: plan(query), limit, offset })
+  const parsed = plan(query)
+  return { ...searchCorpus(db, { profileId: 'p1', plan: parsed, limit, offset }), plan: parsed }
 }
 
 const CORPUS = (): Mock[] => [
@@ -301,5 +302,110 @@ describe('getMock', () => {
 
   it('returns null for a key this profile does not have', () => {
     expect(getMock(db, 'p1', 'nope')).toBeNull()
+  })
+})
+
+describe('header matchers — the discriminator on a header-selected corpus', () => {
+  const HEADER_CORPUS = (): Mock[] => [
+    stub({
+      id: 'h1',
+      request: {
+        method: 'POST',
+        urlPath: '/accountlogin/v3',
+        headers: { 'X-Mock': { equalTo: 'anais-post-accountlogin-unparsable' } },
+      },
+      response: { status: 200 },
+    }),
+    stub({
+      id: 'h2',
+      request: {
+        method: 'POST',
+        urlPath: '/accountlogin/v3',
+        headers: { 'X-Mock': { equalTo: 'anais-post-accountlogin-wrong-access-code' } },
+      },
+      response: { status: 200 },
+    }),
+    stub({
+      id: 'h3',
+      request: {
+        method: 'POST',
+        urlPath: '/accountlogin/v3',
+        headers: { 'X-Tenant': { matches: 'acme.*' }, Accept: { contains: 'json' } },
+      },
+      response: { status: 200 },
+    }),
+    stub({ id: 'h4', request: { method: 'GET', urlPath: '/health' }, response: { status: 200 } }),
+  ]
+
+  beforeEach(() => seed(HEADER_CORPUS()))
+
+  it('stores each matcher with its name, operator, and value', () => {
+    const row = search('header:X-Mock=unparsable').items[0]!
+    expect(row.headers).toEqual([
+      { name: 'X-Mock', operator: 'equalTo', value: 'anais-post-accountlogin-unparsable' },
+    ])
+  })
+
+  it('keeps every matcher when a stub has several', () => {
+    const row = search('header:X-Tenant').items[0]!
+    expect(row.headers).toEqual([
+      { name: 'Accept', operator: 'contains', value: 'json' },
+      { name: 'X-Tenant', operator: 'matches', value: 'acme.*' },
+    ])
+  })
+
+  it('reports an empty list, not null, for a stub that matches on no header', () => {
+    expect(search('url:/health').items[0]!.headers).toEqual([])
+  })
+
+  it('finds stubs that match on a header at all', () => {
+    expect(search('header:X-Mock').total).toBe(2)
+    expect(search('header:X-Tenant').total).toBe(1)
+    expect(search('header:X-Absent').total).toBe(0)
+  })
+
+  it('matches the header name case-insensitively, as HTTP does', () => {
+    expect(search('header:x-mock').total).toBe(2)
+    expect(search('header:X-MOCK').total).toBe(2)
+  })
+
+  it('separates two stubs that differ only by header value', () => {
+    // The whole point: these two share method, path and status, so nothing else can tell them
+    // apart.
+    expect(search('header:X-Mock=unparsable').items.map((i) => i.clientKey)).toEqual(['h1'])
+    expect(search('header:X-Mock=wrong-access').items.map((i) => i.clientKey)).toEqual(['h2'])
+  })
+
+  it('supports a glob in the header value', () => {
+    expect(search('header:X-Mock=anais-*-unparsable').items.map((i) => i.clientKey)).toEqual(['h1'])
+  })
+
+  it('does not let a value match against a different header of the same stub', () => {
+    // `Accept: json` and `X-Tenant: acme.*` live on one stub; asking for X-Tenant=json must not
+    // match by leaking across matchers.
+    expect(search('header:X-Tenant=json').total).toBe(0)
+  })
+
+  it('finds a header value through plain free-text search too', () => {
+    const result = search('wrong-access-code')
+    expect(result.items.map((i) => i.clientKey)).toEqual(['h2'])
+    expect(result.textStrategy).toBe('fts')
+  })
+
+  it('does not let the stored operator name pollute free-text search', () => {
+    // `equalTo` is structure, not content: it must not be in the text index.
+    expect(search('equalTo').total).toBe(0)
+  })
+
+  it('facets header names so the sidebar can offer the discriminator', () => {
+    expect(search('').facets.header).toEqual([
+      { value: 'X-Mock', count: 2 },
+      { value: 'Accept', count: 1 },
+      { value: 'X-Tenant', count: 1 },
+    ])
+  })
+
+  it('needs no capability — header matchers come from the mirror', () => {
+    expect(search('header:X-Mock').plan?.rejected ?? []).toEqual([])
   })
 })

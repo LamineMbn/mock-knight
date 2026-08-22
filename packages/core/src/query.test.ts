@@ -15,11 +15,14 @@ const fullyCapable = {
 }
 
 describe('the grammar', () => {
-  it('has exactly the ten token types TECH-DESIGN §11 specifies', () => {
+  it('has exactly the token types the design specifies — ten from §11, plus header from A6', () => {
+    // This list is a guard, not a formality: the grammar is a published contract, so growing it
+    // is a documented amendment rather than an implementation detail.
     expect([...QUERY_FIELDS].sort()).toEqual([
       'body',
       'disabled',
       'folder',
+      'header',
       'method',
       'priority',
       'scenario',
@@ -215,5 +218,77 @@ describe('parseQuery — spans', () => {
     const plan = parseQuery(query, fullyCapable)
     expect(query.slice(plan.filters[0]!.span.start, plan.filters[0]!.span.end)).toBe('method:GET')
     expect(query.slice(plan.terms[0]!.span.start, plan.terms[0]!.span.end)).toBe('orders')
+  })
+})
+
+describe('parseQuery — header matchers', () => {
+  it('parses a bare header name as "this stub matches on that header"', () => {
+    expect(parseQuery('header:X-Mock', fullyCapable).filters[0]).toEqual({
+      field: 'header',
+      op: 'present',
+      name: 'x-mock',
+      value: null,
+      span: { start: 0, end: 13 },
+    })
+  })
+
+  it('parses name=value as a value match', () => {
+    expect(parseQuery('header:X-Mock=anais-post', fullyCapable).filters[0]).toEqual({
+      field: 'header',
+      op: 'contains',
+      name: 'x-mock',
+      value: 'anais-post',
+      span: { start: 0, end: 24 },
+    })
+  })
+
+  it('lower-cases the header name, because HTTP header names are case-insensitive', () => {
+    expect(parseQuery('header:X-MOCK=a', fullyCapable).filters[0]).toMatchObject({ name: 'x-mock' })
+    expect(parseQuery('header:x-mock=a', fullyCapable).filters[0]).toMatchObject({ name: 'x-mock' })
+  })
+
+  it('does not lower-case the value — header values are case-sensitive', () => {
+    expect(parseQuery('header:X-Mock=Anais', fullyCapable).filters[0]).toMatchObject({
+      value: 'Anais',
+    })
+  })
+
+  it('keeps a quoted value whole', () => {
+    expect(parseQuery('header:X-Mock="two words"', fullyCapable).filters[0]).toMatchObject({
+      value: 'two words',
+    })
+  })
+
+  it('reads a value containing = as part of the value, splitting on the first one only', () => {
+    expect(parseQuery('header:X-Sig=a=b', fullyCapable).filters[0]).toMatchObject({
+      name: 'x-sig',
+      value: 'a=b',
+    })
+  })
+
+  it('treats a wildcard in the value as a glob', () => {
+    expect(parseQuery('header:X-Mock=anais-*-unparsable', fullyCapable).filters[0]).toMatchObject({
+      op: 'glob',
+      value: 'anais-*-unparsable',
+    })
+  })
+
+  it('degrades to free text when the header name is empty', () => {
+    const plan = parseQuery('header:=value', fullyCapable)
+    expect(plan.filters).toEqual([])
+    expect(plan.terms[0]?.text).toBe('header:=value')
+  })
+
+  it('ORs several header tokens within the field', () => {
+    const plan = parseQuery('header:X-Mock=a header:X-Mock=b', fullyCapable)
+    expect(plan.groups).toEqual([
+      { field: 'header', filters: [expect.anything(), expect.anything()] },
+    ])
+  })
+
+  it('needs no capability — header matchers come from the mirrored corpus', () => {
+    const plan = parseQuery('header:X-Mock=a', withBackend())
+    expect(plan.rejected).toEqual([])
+    expect(plan.filters).toHaveLength(1)
   })
 })

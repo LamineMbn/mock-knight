@@ -22,7 +22,8 @@ import { MiddleEllipsis } from './primitives.js'
 export interface FacetPaneProps {
   facets: Facets | undefined
   active: ReadonlySet<string>
-  onToggle: (tokens: string[]) => void
+  /** Add and remove tokens in one edit, which a tri-state folder click needs. */
+  onApply: (change: { add?: string[]; remove?: string[] }) => void
   /** Owned by the screen so it survives the refetch that selecting a folder triggers. */
   expandedFolders: ReadonlySet<string>
   onExpandedFoldersChange: (next: ReadonlySet<string>) => void
@@ -53,13 +54,13 @@ function Group({
   buckets,
   tokenFor,
   active,
-  onToggle,
+  onApply,
 }: {
   title: string
   buckets: FacetBucket[]
   tokenFor: (bucket: FacetBucket) => string
   active: ReadonlySet<string>
-  onToggle: (tokens: string[]) => void
+  onApply: (change: { add?: string[]; remove?: string[] }) => void
 }) {
   if (buckets.length === 0) return null
   return (
@@ -87,7 +88,9 @@ function Group({
                 <input
                   type="checkbox"
                   checked={checked}
-                  onChange={() => onToggle([token])}
+                  onChange={() =>
+                    checked ? onApply({ remove: [token] }) : onApply({ add: [token] })
+                  }
                   style={{ accentColor: 'var(--mk-accent-solid)', margin: 0, flex: '0 0 auto' }}
                 />
                 <MiddleEllipsis text={bucket.value} />
@@ -109,7 +112,7 @@ function Group({
 export function FacetPane({
   facets,
   active,
-  onToggle,
+  onApply,
   expandedFolders,
   onExpandedFoldersChange,
 }: FacetPaneProps) {
@@ -128,7 +131,7 @@ export function FacetPane({
         background: 'var(--mk-bg-surface)',
       }}
     >
-      {facets.folder.length > 0 && (
+      {(facets.folder?.length ?? 0) > 0 && (
         <div
           style={{
             // The tree scrolls independently (design brief §6.2) and is capped, so a corpus
@@ -142,9 +145,9 @@ export function FacetPane({
         >
           <Section title="Folders">
             <FolderTree
-              buckets={facets.folder}
+              buckets={facets.folder ?? []}
               active={active}
-              onToggle={onToggle}
+              onApply={onApply}
               expanded={expandedFolders}
               onExpandedChange={onExpandedFoldersChange}
             />
@@ -155,31 +158,38 @@ export function FacetPane({
       <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '12px 10px' }}>
         <Group
           title="Method"
-          buckets={facets.method}
+          buckets={facets.method ?? []}
           tokenFor={(bucket) => `method:${bucket.value}`}
           active={active}
-          onToggle={onToggle}
+          onApply={onApply}
         />
         <Group
           title="Status"
-          buckets={facets.statusClass}
+          buckets={facets.statusClass ?? []}
           tokenFor={(bucket) => `status:${bucket.value}`}
           active={active}
-          onToggle={onToggle}
+          onApply={onApply}
         />
         <Group
           title="Scenario"
-          buckets={facets.scenario}
+          buckets={facets.scenario ?? []}
           tokenFor={(bucket) => `scenario:${bucket.value}`}
           active={active}
-          onToggle={onToggle}
+          onApply={onApply}
+        />
+        <Group
+          title="Matches on header"
+          buckets={facets.header ?? []}
+          tokenFor={(bucket) => `header:${bucket.value}`}
+          active={active}
+          onApply={onApply}
         />
         <Group
           title="Tag"
-          buckets={facets.tag}
+          buckets={facets.tag ?? []}
           tokenFor={(bucket) => `tag:${bucket.value}`}
           active={active}
-          onToggle={onToggle}
+          onApply={onApply}
         />
       </div>
     </nav>
