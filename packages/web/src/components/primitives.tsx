@@ -34,6 +34,10 @@ export function MethodChip({ method }: { method: string | null }) {
   return (
     <span
       className="mk-mono"
+      // A stable hook for tests. The chip sits inside a gridcell whose text is also the method
+      // name, so a text-based selector silently measures the wrapper and reports the chip as
+      // unstyled — which it did, twice.
+      data-method={label}
       style={{
         display: 'inline-flex',
         alignItems: 'center',

@@ -8,7 +8,7 @@
 
 @import 'tailwindcss';
 
-@theme {
+@theme static {
   --mk-bg-canvas: #f7f8fa;
   --mk-bg-surface: #ffffff;
   --mk-bg-raised: #ffffff;

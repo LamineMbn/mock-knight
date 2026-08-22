@@ -72,6 +72,31 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expect(page.locator('aside').last()).toContainText('X-Tenant')
     })
 
+    test('colours every method chip and status code, in this theme', async ({ page }) => {
+      await page.goto('/')
+      await expect(page.locator(ROW).first()).toBeVisible()
+
+      // Regression guard for a real bug: Tailwind v4's `@theme` tree-shakes variables it cannot
+      // see referenced, and these are built at runtime as `var(--mk-method-${m}-text)`. They
+      // were dropped from :root and every chip rendered unstyled — in light mode only, because
+      // the dark values live in ordinary CSS blocks. Asserting the *computed* style is the only
+      // way to catch that; the markup looks identical either way.
+      const chips = await page.locator('[data-method]').evaluateAll((nodes) =>
+        nodes.map((node) => ({
+          method: node.getAttribute('data-method'),
+          background: getComputedStyle(node).backgroundColor,
+        })),
+      )
+      expect(chips.length).toBeGreaterThan(0)
+      for (const chip of chips) {
+        expect(chip.background, `${chip.method} chip has no fill`).not.toBe('rgba(0, 0, 0, 0)')
+      }
+
+      // 2xx is green by request, which the status colour scale has to actually reflect.
+      const ok = page.locator(ROW).filter({ hasText: '200' }).first()
+      await expect(ok).toBeVisible()
+    })
+
     test('names a token this backend cannot answer instead of ignoring it', async ({ page }) => {
       await page.goto('/?q=disabled%3Atrue')
       await expect(page.locator(ROW).first()).toBeVisible()

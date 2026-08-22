@@ -223,7 +223,13 @@ def emit_css():
     lines.append('')
     lines.append('@import \'tailwindcss\';')
     lines.append('')
-    lines.append('@theme {')
+    # `@theme static`, not `@theme`. Tailwind v4 tree-shakes theme variables it cannot see
+    # referenced in the source, and several of ours are only ever built at runtime —
+    # `var(--mk-method-${method}-text)`, `var(--mk-profile-${colour})`. Tailwind never sees
+    # those names literally, so with a plain `@theme` it silently drops them from :root and the
+    # chips render unstyled. The dark values survive either way because they live in ordinary
+    # CSS blocks below, which is what made the bug look like "dark mode works, light doesn't".
+    lines.append('@theme static {')
     for name, value in LIGHT.items():
         lines.append(f'  --mk-{name}: {value};')
     for name, value in PROFILE_LIGHT.items():
