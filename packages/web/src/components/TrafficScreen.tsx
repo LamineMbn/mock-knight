@@ -59,6 +59,9 @@ function Row({
   }, [focused])
 
   const stripe = event.matched ? 'var(--mk-success-solid)' : 'var(--mk-danger-solid)'
+  // The glyph drawn *on* that disc. Dark mode's solids are light, so a fixed white cross
+  // disappeared against them; `on-solid` is whichever of the pair reads against the fill.
+  const onStripe = event.matched ? 'var(--mk-success-on-solid)' : 'var(--mk-danger-on-solid)'
   return (
     <tr
       ref={ref}
@@ -91,14 +94,14 @@ function Row({
               <path
                 d="M4.7 8.3l2.2 2.2 4.4-4.7"
                 fill="none"
-                stroke="#fff"
+                stroke={onStripe}
                 strokeWidth="1.8"
                 strokeLinecap="round"
               />
             ) : (
               <path
                 d="M5.5 5.5l5 5M10.5 5.5l-5 5"
-                stroke="#fff"
+                stroke={onStripe}
                 strokeWidth="1.8"
                 strokeLinecap="round"
               />

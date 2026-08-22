@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api.js'
-import type { Explanation, NearMiss, PredicateResult } from '../api.js'
+import type { NearMiss, PredicateResult } from '../api.js'
 import { Button, InferenceLabel, MethodChip, Skeleton } from './primitives.js'
 import { toCurl } from '../curl.js'
 import { CreateFromRequest } from './CreateFromRequest.js'
@@ -65,9 +65,11 @@ function OutcomeIcon({ outcome }: { outcome: PredicateResult['outcome'] }) {
     return (
       <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
         <circle cx="8" cy="8" r="7" fill="var(--mk-danger-solid)" />
+        {/* Not a fixed white: dark mode's danger-solid is a *light* red, so a white cross on
+            it was nearly invisible. `on-solid` is whichever of the pair reads against it. */}
         <path
           d="M5.5 5.5l5 5M10.5 5.5l-5 5"
-          stroke="#fff"
+          stroke="var(--mk-danger-on-solid)"
           strokeWidth="1.8"
           strokeLinecap="round"
         />
@@ -303,7 +305,7 @@ export function MatchExplainer({ profileId, eventId, baseUrl, onClose }: MatchEx
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgb(16 18 27 / 0.32)',
+        background: 'var(--mk-scrim)',
         display: 'grid',
         placeItems: 'center',
         padding: 32,
@@ -330,7 +332,7 @@ export function MatchExplainer({ profileId, eventId, baseUrl, onClose }: MatchEx
           background: 'var(--mk-bg-raised)',
           border: '1px solid var(--mk-border-strong)',
           borderRadius: 'var(--mk-radius-lg)',
-          boxShadow: '0 8px 32px rgb(16 18 27 / 0.14)',
+          boxShadow: 'var(--mk-shadow-modal)',
           overflow: 'hidden',
         }}
       >

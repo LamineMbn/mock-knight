@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api.js'
 import { Button, Chip, InferenceLabel, Skeleton } from './primitives.js'
@@ -63,7 +63,14 @@ export function CreateFromRequest({
 
   // Regenerating discards hand edits, which is the right trade: the controls above are the
   // reason to regenerate, and silently keeping stale text under a changed setting would lie.
-  useEffect(() => setEdited(null), [tightness, matchBody])
+  // Cleared during render, so the stale text is never committed under the new setting even for
+  // a frame.
+  const settings = `${tightness}:${String(matchBody)}`
+  const [shownSettings, setShownSettings] = useState(settings)
+  if (shownSettings !== settings) {
+    setShownSettings(settings)
+    setEdited(null)
+  }
 
   const create = useMutation({
     mutationFn: async () => {
@@ -94,7 +101,7 @@ export function CreateFromRequest({
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgb(16 18 27 / 0.32)',
+        background: 'var(--mk-scrim)',
         display: 'grid',
         placeItems: 'center',
         padding: 32,
@@ -110,7 +117,7 @@ export function CreateFromRequest({
           background: 'var(--mk-bg-raised)',
           border: '1px solid var(--mk-border-strong)',
           borderRadius: 'var(--mk-radius-lg)',
-          boxShadow: '0 8px 32px rgb(16 18 27 / 0.14)',
+          boxShadow: 'var(--mk-shadow-modal)',
           overflow: 'hidden',
         }}
       >

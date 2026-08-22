@@ -141,10 +141,17 @@ export function App() {
       setDraft(joined)
       setUrlState({ query: joined })
     },
-    [query, selectedKey, setUrlState],
+    [query, setUrlState],
   )
 
-  useEffect(() => setDraft(query), [query])
+  // The search box follows the URL — back/forward and a token pill both rewrite the query, and
+  // the input has to catch up. During render, not in an effect: an effect renders the old text
+  // against the new URL first, which reads as the box briefly ignoring a Back press.
+  const [shownQuery, setShownQuery] = useState(query)
+  if (shownQuery !== query) {
+    setShownQuery(query)
+    setDraft(query)
+  }
 
   if (profiles.isPending) return <Splash>Starting…</Splash>
 

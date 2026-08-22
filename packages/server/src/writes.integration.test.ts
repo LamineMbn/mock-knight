@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { contentHash } from '@mock-knight/core'
 import type { JsonObject } from '@mock-knight/core'
 import type { Database as Db } from 'better-sqlite3'
+import { readMappings } from './test-support.js'
 import { createApp } from './app.js'
 import { openDatabase } from './db/database.js'
 import { createProfile } from './profiles.js'
@@ -24,9 +25,19 @@ let registry: ConnectionRegistry
 let app: ReturnType<typeof createApp>
 let profileId: string
 
+/**
+ * A parsed BFF response, read by path.
+ *
+ * `any` on purpose, and only here: these tests walk into payloads from a dozen different routes
+ * and the alternative is a union of route shapes that has to be edited every time a route gains
+ * a field. Typing the *server* is what matters; this is the assertion side of a black-box test.
+ * The lint rule is off for test files for exactly this reason, not by oversight.
+ */
+type JsonBody = any
+
 const json = async (path: string, init?: RequestInit) => {
   const response = await app.request(path, init)
-  return { status: response.status, body: (await response.json()) as any }
+  return { status: response.status, body: (await response.json()) as JsonBody }
 }
 
 const post = (path: string, body: unknown) => ({
@@ -84,9 +95,9 @@ describe('update', () => {
     expect(result.status).toBe(200)
 
     // Read back from WireMock, not from our mirror: the mirror agreeing with us proves nothing.
-    const upstream = await fetch(`${WIREMOCK_URL}/__admin/mappings`).then((r) => r.json() as any)
-    const served = upstream.mappings.find((m: any) => m.name === 'customers list')
-    expect(served.response.status).toBe(503)
+    const upstream = await readMappings(WIREMOCK_URL)
+    const served = upstream.mappings.find((m) => m.name === 'customers list')
+    expect(served!.response!.status).toBe(503)
   })
 
   it('preserves fields the canonical model never modelled', async () => {
@@ -102,11 +113,11 @@ describe('update', () => {
     )
     expect(result.status).toBe(200)
 
-    const upstream = await fetch(`${WIREMOCK_URL}/__admin/mappings`).then((r) => r.json() as any)
-    const served = upstream.mappings.find((m: any) => m.request?.url === '/v1/carts/9')
+    const upstream = await readMappings(WIREMOCK_URL)
+    const served = upstream.mappings.find((m) => m.request?.url === '/v1/carts/9')
     // postServeActions is not in the canonical model. A write must not be able to delete it.
-    expect(served.postServeActions).toEqual([{ name: 'webhook', parameters: { url: 'http://x' } }])
-    expect(served.response.status).toBe(205)
+    expect(served!.postServeActions).toEqual([{ name: 'webhook', parameters: { url: 'http://x' } }])
+    expect(served!.response!.status).toBe(205)
   })
 
   it('refuses a stale write and hands back what the server now holds', async () => {
@@ -136,9 +147,9 @@ describe('update', () => {
     expect(result.body.currentHash).not.toBe(hash)
 
     // And the crucial part: the other writer's change is still there.
-    const upstream = await fetch(`${WIREMOCK_URL}/__admin/mappings`).then((r) => r.json() as any)
-    const served = upstream.mappings.find((m: any) => m.name === 'customers list')
-    expect(served.response.status).toBe(418)
+    const upstream = await readMappings(WIREMOCK_URL)
+    const served = upstream.mappings.find((m) => m.name === 'customers list')
+    expect(served!.response!.status).toBe(418)
   })
 
   it('lets the same edit through once it is rebased on the current version', async () => {
@@ -159,7 +170,7 @@ describe('update', () => {
     // Resolve by taking the server's version and applying the edit on top.
     const rebased = {
       ...(conflict.body.current as JsonObject),
-      response: { ...((conflict.body.current as any).response as JsonObject), status: 500 },
+      response: { ...(conflict.body.current!['response'] as JsonObject), status: 500 },
     }
     const retry = await json(
       `/api/${profileId}/mocks/${key}`,
@@ -205,8 +216,8 @@ describe('create and delete', () => {
     const ok = await json(`/api/${profileId}/mocks/${key}`, del({ baseHash: hash }))
     expect(ok.status).toBe(200)
 
-    const upstream = await fetch(`${WIREMOCK_URL}/__admin/mappings`).then((r) => r.json() as any)
-    expect(upstream.mappings.find((m: any) => m.name === 'customers list')).toBeUndefined()
+    const upstream = await readMappings(WIREMOCK_URL)
+    expect(upstream.mappings.find((m) => m.name === 'customers list')).toBeUndefined()
   })
 })
 

@@ -75,6 +75,7 @@ afterAll(async () => {
   if (directory !== undefined) rmSync(directory, { recursive: true, force: true })
 })
 
+// See writes.integration.test.ts for why `any` is the right call on the assertion side here.
 const json = async (path: string, init?: RequestInit): Promise<any> => {
   const response = await app.request(path, init)
   return { status: response.status, body: await response.json() }

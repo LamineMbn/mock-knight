@@ -103,7 +103,6 @@ describe('ingest', () => {
           })
           const budget = size <= 1_000 ? 1_500 : 4_000
           const headroom = Math.round((1 - elapsed / budget) * 100)
-          // eslint-disable-next-line no-console
           console.log(
             `  ingest ${size} ${bodyStrategy}: ${elapsed.toFixed(0)}ms of ${budget}ms — ${headroom}% left for fetch + render`,
           )
@@ -151,7 +150,6 @@ describe('search at the 5,000-stub fixture — PRD §12 p95 < 150ms', () => {
     }
     const p95 = percentile(timings, 0.95)
     const worst = Math.max(...timings)
-    // eslint-disable-next-line no-console
     console.log(
       `  search p95: ${p95.toFixed(1)}ms | worst: ${worst.toFixed(1)}ms | n=${timings.length}`,
     )
@@ -172,7 +170,6 @@ describe('search at the 5,000-stub fixture — PRD §12 p95 < 150ms', () => {
         })
       }),
     })).sort((a, b) => b.ms - a.ms)
-    // eslint-disable-next-line no-console
     console.log(
       `  slowest: ${slowest
         .slice(0, 3)
@@ -199,7 +196,6 @@ describe('search at the 5,000-stub fixture — PRD §12 p95 < 150ms', () => {
         offset: 4_900,
       })
     })
-    // eslint-disable-next-line no-console
     console.log(`  page 1: ${first.toFixed(1)}ms | page 99: ${deep.toFixed(1)}ms`)
     expect(deep).toBeLessThan(150)
   })
@@ -213,7 +209,6 @@ describe('index size', () => {
       harness.db.pragma('wal_checkpoint(TRUNCATE)')
       const bytes = statSync(harness.path).size
       const perStub = Math.round(bytes / 10_000)
-      // eslint-disable-next-line no-console
       console.log(`  db size at 10k: ${(bytes / 1024 / 1024).toFixed(1)}MB (${perStub}B/stub)`)
       // §18 flags FTS index size under `detail=full` as a risk; the 64KB body cap is the lever.
       // This is a tripwire, not a tuned target: a jump means the cap stopped working.

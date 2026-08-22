@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { composeAdminUrl } from './client.js'
+import { composeAdminUrl } from './admin-url.js'
 
 /**
  * A mock server behind a context path is completely ordinary — an ALB routing `/wcboo/*` to it,

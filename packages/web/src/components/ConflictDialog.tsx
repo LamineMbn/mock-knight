@@ -130,7 +130,7 @@ export function ConflictDialog({
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgb(16 18 27 / 0.32)',
+        background: 'var(--mk-scrim)',
         display: 'grid',
         placeItems: 'center',
         padding: 32,
@@ -146,7 +146,7 @@ export function ConflictDialog({
           background: 'var(--mk-bg-raised)',
           border: '1px solid var(--mk-border-strong)',
           borderRadius: 'var(--mk-radius-lg)',
-          boxShadow: '0 8px 32px rgb(16 18 27 / 0.14)',
+          boxShadow: 'var(--mk-shadow-modal)',
           overflow: 'hidden',
         }}
       >

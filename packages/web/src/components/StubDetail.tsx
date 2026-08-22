@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../api.js'
 import { describeStanding } from '@mock-knight/core/types'
@@ -62,11 +62,20 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
 
   // Selecting a different stub abandons an untouched draft; a touched one is kept until the
   // user resolves it, so switching rows cannot silently discard typing.
-  useEffect(() => {
+  //
+  // Adjusted during render rather than in an effect (react.dev, "You Might Not Need an
+  // Effect"). An effect would commit the *previous* stub's draft against the new stub's id
+  // first and correct it on a second pass — one wasted render, and a frame in which the pane
+  // shows one stub's edits under another stub's heading. A `key` on this component would also
+  // work but resets the active tab, so clicking through rows would throw you back to Overview
+  // every time.
+  const [shownKey, setShownKey] = useState(clientKey)
+  if (shownKey !== clientKey) {
+    setShownKey(clientKey)
     setDraft(null)
     setConflict(null)
     setError(null)
-  }, [clientKey])
+  }
 
   const dirty = draft !== null && draft !== loadedText
 

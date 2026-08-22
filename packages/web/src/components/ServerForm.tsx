@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { composeAdminUrl } from '@mock-knight/core/types'
 import type { NewProfile, Profile } from '../api.js'
 import { Button } from './primitives.js'
 
@@ -44,16 +45,18 @@ export function ServerForm({ existing, pending, error, onSubmit, onCancel }: Ser
 
   // Shown live, because the composed URL is the thing that is actually wrong when a context
   // path is missing, and it is not obvious from the two fields that produce it.
-  let preview = ''
-  try {
-    const url = new URL(baseUrl)
-    const context = url.pathname.replace(/\/+$/, '')
-    const raw = (adminPath.trim() === '' ? '/__admin' : adminPath.trim()).replace(/\/+$/, '')
-    const suffix = raw === '' ? '' : raw.startsWith('/') ? raw : `/${raw}`
-    preview = `${url.origin}${context}${suffix}`
-  } catch {
-    preview = ''
-  }
+  //
+  // The *same* function the transport calls, not a second implementation of it. A preview
+  // computed separately can drift from where the request actually goes, and it would drift on
+  // precisely the input this exists to catch. Empty while the base URL is still half-typed and
+  // does not parse.
+  const preview = (() => {
+    try {
+      return composeAdminUrl(baseUrl, adminPath.trim() === '' ? null : adminPath)
+    } catch {
+      return ''
+    }
+  })()
 
   const submit = () => {
     let resolved = name.trim()

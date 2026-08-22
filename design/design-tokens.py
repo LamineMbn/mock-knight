@@ -131,6 +131,27 @@ DARK = {
 }
 
 # Profile / environment badge colours: must be distinct from semantics AND from each other.
+# Elevation — design brief §3.3. Not colours, so they sit outside the contrast checker: these
+# are whole `box-shadow` and scrim values, and the two themes do genuinely different things
+# with them rather than swapping one hex for another.
+#
+# Light builds depth with drop shadows. Dark cannot: a drop shadow on a near-black surface is
+# invisible, so elevation there is a lighter surface plus a 1px inset highlight along the top
+# edge, which is the only thing separating a raised edge from the panel behind it. Components
+# used to hardcode the *light* values in both themes, which meant dark mode drew shadows that
+# did nothing and a scrim half as deep as the brief calls for.
+ELEVATION_LIGHT = {
+    "shadow-popover": "0 1px 2px rgb(16 18 27 / .06), 0 2px 8px rgb(16 18 27 / .08)",
+    "shadow-modal":   "0 8px 32px rgb(16 18 27 / .14)",
+    "scrim":          "rgb(16 18 27 / .32)",
+}
+ELEVATION_DARK = {
+    "shadow-popover": "inset 0 1px 0 rgb(255 255 255 / .04)",
+    "shadow-modal":   "inset 0 1px 0 rgb(255 255 255 / .04)",
+    # Deeper than light, because the panel above it is not much brighter than the page behind.
+    "scrim":          "rgb(0 0 0 / .60)",
+}
+
 PROFILE_LIGHT = {"slate":"#5B6478","indigo":"#5B5BD6","cyan":"#0B7A9B","violet":"#7A3EA1",
                  "rose":"#B4295C","olive":"#5F7A1E"}
 PROFILE_DARK  = {"slate":"#98A0B4","indigo":"#9A9AF5","cyan":"#4FC3E8","violet":"#C79BE8",
@@ -234,6 +255,8 @@ def emit_css():
         lines.append(f'  --mk-{name}: {value};')
     for name, value in PROFILE_LIGHT.items():
         lines.append(f'  --mk-profile-{name}: {value};')
+    for name, value in ELEVATION_LIGHT.items():
+        lines.append(f'  --mk-{name}: {value};')
     lines.append('}')
     lines.append('')
 
@@ -242,6 +265,8 @@ def emit_css():
         dark.append(f'  --mk-{name}: {value};')
     for name, value in PROFILE_DARK.items():
         dark.append(f'  --mk-profile-{name}: {value};')
+    for name, value in ELEVATION_DARK.items():
+        dark.append(f'  --mk-{name}: {value};')
     body = chr(10).join(dark)
 
     lines.append('/* Dark, following the OS — unless an explicit light choice overrides it. */')

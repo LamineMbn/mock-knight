@@ -1,5 +1,5 @@
 import { Agent, request } from 'undici'
-import { AdapterHostNotAllowedError, AdapterHttpError } from '@mock-knight/core'
+import { AdapterHostNotAllowedError, AdapterHttpError, composeAdminUrl } from '@mock-knight/core'
 import type { ConnectionConfig, Json, ResolvedAuth } from '@mock-knight/core'
 
 /**
@@ -13,7 +13,6 @@ import type { ConnectionConfig, Json, ResolvedAuth } from '@mock-knight/core'
  * whatever network it can see (TECH-DESIGN §13).
  */
 
-export const DEFAULT_ADMIN_PATH = '/__admin'
 const DEFAULT_TIMEOUT_MS = 10_000
 
 /**
@@ -30,23 +29,10 @@ const DEFAULT_TIMEOUT_MS = 10_000
 const USER_AGENT = 'mock-knight'
 
 /**
- * Where the admin API lives, given a base URL and an admin path.
- *
- * The admin path is **appended to** the base URL, including any context path it carries. This
- * used to resolve the two as URLs, which meant an absolute admin path silently discarded the
- * context: `https://host/wcboo` + `/__admin` became `https://host/__admin`, and the tool then
- * reported whatever the load balancer said about a path nobody had asked for. A server behind a
- * context path is completely ordinary, so losing it was never acceptable.
- *
- * An empty admin path is allowed, for a server whose admin API is the base URL itself.
+ * Re-exported so the adapter's own surface stays complete; the implementation moved to `core`
+ * because the Servers form needs the identical answer to preview it (see admin-url.ts).
  */
-export function composeAdminUrl(baseUrl: string, adminPath?: string | null): string {
-  const base = new URL(baseUrl)
-  const context = base.pathname.replace(/\/+$/, '')
-  const raw = (adminPath ?? DEFAULT_ADMIN_PATH).trim().replace(/\/+$/, '')
-  const suffix = raw === '' ? '' : raw.startsWith('/') ? raw : `/${raw}`
-  return `${base.origin}${context}${suffix}`
-}
+export { DEFAULT_ADMIN_PATH, composeAdminUrl } from '@mock-knight/core'
 
 export interface WireMockResponse<T> {
   status: number

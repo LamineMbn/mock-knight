@@ -98,7 +98,7 @@ export function ProfileSwitcher({
             borderRadius: 'var(--mk-radius-md)',
             background: 'var(--mk-bg-raised)',
             border: '1px solid var(--mk-border-default)',
-            boxShadow: '0 1px 2px rgb(16 18 27 / .06), 0 2px 8px rgb(16 18 27 / .08)',
+            boxShadow: 'var(--mk-shadow-popover)',
           }}
         >
           {profiles.map((profile) => (

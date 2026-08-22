@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { WireMockAdapter } from '@mock-knight/adapter-wiremock'
 import type { LoggedRequest, MockBackendAdapter } from '@mock-knight/core'
 import { seedWireMock } from './fixtures/dev-seed.js'
+import { readScenarios } from './test-support.js'
 
 /**
  * The match explainer against a real WireMock, which is the only tier that can prove it.
@@ -297,9 +298,7 @@ describe('scenarios', () => {
       body: JSON.stringify({ state: 'ordered' }),
     })
     expect(set.status).toBe(200)
-    expect(
-      ((await (await fetch(`${WIREMOCK_URL}/__admin/scenarios`)).json()) as any).scenarios[0].state,
-    ).toBe('ordered')
+    expect((await readScenarios(WIREMOCK_URL)).scenarios[0]?.state).toBe('ordered')
 
     // An empty body resets that one scenario — the same route, per FR-STATE-2.
     await instance.request(`/api/${id}/scenarios/checkout/state`, {
@@ -307,9 +306,7 @@ describe('scenarios', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ state: null }),
     })
-    expect(
-      ((await (await fetch(`${WIREMOCK_URL}/__admin/scenarios`)).json()) as any).scenarios[0].state,
-    ).toBe('Started')
+    expect((await readScenarios(WIREMOCK_URL)).scenarios[0]?.state).toBe('Started')
 
     const audit = (await (await instance.request(`/api/${id}/audit`)).json()) as {
       entries: { summary: string }[]
