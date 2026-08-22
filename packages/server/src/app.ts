@@ -19,7 +19,7 @@ import {
   listProfiles,
   profileInputSchema,
 } from './profiles.js'
-import type { ConnectionRegistry, RuntimeMode } from './runtime.js'
+import type { Connection, ConnectionRegistry, RuntimeMode } from './runtime.js'
 
 /**
  * The BFF's HTTP surface — TECH-DESIGN §9.
@@ -75,6 +75,45 @@ const writeBodySchema = z.object({
 
 const createBodySchema = z.object({ raw: z.record(z.string(), z.any()) })
 const deleteBodySchema = z.object({ baseHash: z.string().min(1) })
+
+/**
+ * The destructive list. Adding a route here is what makes it destructive — there is no prefix
+ * or naming convention doing that work implicitly.
+ */
+const DESTRUCTIVE: Record<
+  string,
+  {
+    action: 'reset' | 'bulk'
+    summary: string
+    available: (connection: Connection) => boolean
+    perform: (connection: Connection, db: Db, profileId: string) => Promise<void>
+  }
+> = {
+  'reset-stubs': {
+    action: 'reset',
+    summary: 'reset every stub on the server',
+    available: (connection) => connection.capabilities.has('corpus.reset'),
+    perform: async (connection, db, profileId) => {
+      await connection.adapter.resetAll()
+      db.prepare(`DELETE FROM mock WHERE profile_id = ?`).run(profileId)
+    },
+  },
+  'clear-journal': {
+    action: 'bulk',
+    summary: 'cleared the request journal',
+    available: (connection) => connection.adapter.clearJournal !== undefined,
+    perform: async (connection, db, profileId) => {
+      await connection.adapter.clearJournal?.()
+      db.prepare(`DELETE FROM serve_event WHERE profile_id = ?`).run(profileId)
+      // Our window has to move with theirs, or "unused since…" starts quoting a time whose
+      // events we have just thrown away.
+      db.prepare(
+        `UPDATE journal_window SET earliest_at = NULL, reset_count = reset_count + 1
+         WHERE profile_id = ?`,
+      ).run(profileId)
+    },
+  },
+}
 
 const scenarioStateSchema = z.object({ state: z.string().nullable().default(null) })
 const confirmSchema = z.object({ confirm: z.string() })
@@ -668,6 +707,52 @@ export function createApp(options: AppOptions) {
         summary: 'reset every scenario',
       })
       return c.json({ reset: true })
+    })
+
+    /**
+     * Destructive operations — PRD §9.6, TECH-DESIGN §9.
+     *
+     * Defined by a **list, not a URL prefix**: each one names itself here rather than inheriting
+     * danger from where it sits in the route tree. Each requires the profile name typed back,
+     * re-validated server-side because the dialog is a convenience and this is the gate, and
+     * each is absent — 404, not 403 — on a protected profile.
+     */
+    .post('/api/:p/danger/:operation', async (c) => {
+      const profileId = c.req.param('p')
+      const operation = c.req.param('operation')
+      const profile = getProfile(db, profileId)
+      if (profile === null || profile.readOnly || profile.protected) {
+        return c.json({ error: 'not_found' }, 404)
+      }
+      const connection = registry.get(profileId)
+      if (connection === null) return c.json({ error: 'not_connected' }, 409)
+
+      const run = DESTRUCTIVE[operation]
+      if (run === undefined) return c.json({ error: 'not_found' }, 404)
+      if (!run.available(connection)) return c.json({ error: 'not_found' }, 404)
+
+      const parsed = confirmSchema.safeParse(await c.req.json().catch(() => ({})))
+      if (!parsed.success || parsed.data.confirm !== profile.name) {
+        return c.json(
+          {
+            error: 'confirmation_required',
+            message: `Type the profile name (${profile.name}) to confirm.`,
+          },
+          400,
+        )
+      }
+
+      await run.perform(connection, db, profileId)
+      recordAudit(db, {
+        profileId,
+        actor,
+        action: run.action,
+        clientKey: null,
+        before: null,
+        after: null,
+        summary: run.summary,
+      })
+      return c.json({ done: true })
     })
 
     .post('/api/:p/refresh', async (c) => {

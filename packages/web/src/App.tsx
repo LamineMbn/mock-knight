@@ -8,6 +8,9 @@ import { FacetPane } from './components/FacetPane.js'
 import { StubDetail } from './components/StubDetail.js'
 import { TrafficScreen } from './components/TrafficScreen.js'
 import { ScenariosScreen } from './components/ScenariosScreen.js'
+import { ProfilesScreen } from './components/ProfilesScreen.js'
+import { ProfileSwitcher } from './components/ProfileSwitcher.js'
+import { FirstRun } from './components/FirstRun.js'
 import { Button, Chip } from './components/primitives.js'
 
 /**
@@ -19,12 +22,22 @@ import { Button, Chip } from './components/primitives.js'
 
 const PAGE_SIZE = 100
 
-export type Screen = 'corpus' | 'traffic' | 'scenarios'
+export type Screen = 'corpus' | 'traffic' | 'scenarios' | 'profiles'
+
+const SCREENS: Screen[] = ['corpus', 'traffic', 'scenarios', 'profiles']
 
 interface UrlState {
   screen: Screen
   query: string
   selectedKey: string | null
+  /**
+   * Which environment this view is of.
+   *
+   * In the URL rather than in a store because a pasted link has to reproduce the *whole* view,
+   * and "the stub that's broken" (FR-UX-3) means nothing without saying which server it is
+   * broken on.
+   */
+  profileId: string | null
 }
 
 function useUrlState(): [UrlState, (next: Partial<UrlState>) => void] {
@@ -38,20 +51,17 @@ function useUrlState(): [UrlState, (next: Partial<UrlState>) => void] {
   }, [])
 
   const current: UrlState = {
-    screen:
-      params.get('screen') === 'traffic'
-        ? 'traffic'
-        : params.get('screen') === 'scenarios'
-          ? 'scenarios'
-          : 'corpus',
+    screen: (SCREENS.find((name) => name === params.get('screen')) ?? 'corpus') as Screen,
     query: params.get('q') ?? '',
     selectedKey: params.get('stub'),
+    profileId: params.get('profile'),
   }
 
   const update = useCallback(
     (patch: Partial<UrlState>) => {
       const merged = { ...current, ...patch }
       const next = new URLSearchParams()
+      if (merged.profileId !== null) next.set('profile', merged.profileId)
       if (merged.screen !== 'corpus') next.set('screen', merged.screen)
       if (merged.query !== '') next.set('q', merged.query)
       if (merged.selectedKey !== null) next.set('stub', merged.selectedKey)
@@ -60,7 +70,7 @@ function useUrlState(): [UrlState, (next: Partial<UrlState>) => void] {
       setParams(next)
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [current.screen, current.query, current.selectedKey],
+    [current.screen, current.query, current.selectedKey, current.profileId],
   )
 
   return [current, update]
@@ -68,12 +78,15 @@ function useUrlState(): [UrlState, (next: Partial<UrlState>) => void] {
 
 export function App() {
   const queryClient = useQueryClient()
-  const [{ screen, query, selectedKey }, setUrlState] = useUrlState()
+  const [{ screen, query, selectedKey, profileId }, setUrlState] = useUrlState()
   const [draft, setDraft] = useState(query)
   const [expandedFolders, setExpandedFolders] = useState<ReadonlySet<string>>(new Set())
 
   const profiles = useQuery({ queryKey: ['profiles'], queryFn: api.profiles })
-  const profile: Profile | undefined = profiles.data?.profiles[0]
+  const all = useMemo(() => profiles.data?.profiles ?? [], [profiles.data])
+  // Fall back rather than blank the screen: a link to a profile that has since been removed
+  // should land somewhere useful, not on an error.
+  const profile: Profile | undefined = all.find((p) => p.id === profileId) ?? all[0]
 
   const mirror = useQuery({
     queryKey: ['mirror', profile?.id],
@@ -135,20 +148,9 @@ export function App() {
 
   if (profiles.isPending) return <Splash>Starting…</Splash>
 
-  if (profile === undefined) {
-    // First run, no profile — design brief §6.11.
-    return (
-      <Splash>
-        <strong style={{ display: 'block', fontSize: 20, marginBottom: 8 }}>
-          No mock server connected.
-        </strong>
-        Start Mock Knight with a URL to connect one:
-        <pre className="mk-mono" style={{ marginTop: 12, fontSize: 12 }}>
-          npx mock-knight --url http://localhost:8080
-        </pre>
-      </Splash>
-    )
-  }
+  // First run, no profile — design brief §6.11. A setup card, not an instruction to go and
+  // restart the process in a terminal.
+  if (profile === undefined) return <FirstRun onAdded={(id) => setUrlState({ profileId: id })} />
 
   return (
     <div
@@ -170,11 +172,25 @@ export function App() {
         refreshing={refresh.isPending}
         screen={screen}
         onScreen={(next) => setUrlState({ screen: next })}
+        profiles={all}
+        onSelectProfile={(id) =>
+          // Switching environment abandons the current query and selection: a stub key from one
+          // server means nothing on another, and carrying it over would show a confident 404.
+          setUrlState({ profileId: id, query: '', selectedKey: null })
+        }
       />
 
       {screen === 'traffic' ? (
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           <TrafficScreen profileId={profile.id} baseUrl={profile.baseUrl} />
+        </div>
+      ) : screen === 'profiles' ? (
+        <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+          <ProfilesScreen
+            profiles={all}
+            active={profile}
+            onSelect={(id) => setUrlState({ profileId: id, query: '', selectedKey: null })}
+          />
         </div>
       ) : screen === 'scenarios' ? (
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
@@ -327,6 +343,8 @@ function TopBar({
   refreshing,
   screen,
   onScreen,
+  profiles,
+  onSelectProfile,
 }: {
   profile: Profile
   version: string | null
@@ -336,6 +354,8 @@ function TopBar({
   refreshing: boolean
   screen: Screen
   onScreen: (next: Screen) => void
+  profiles: Profile[]
+  onSelectProfile: (id: string) => void
 }) {
   return (
     <header
@@ -366,22 +386,14 @@ function TopBar({
       />
       <span style={{ fontWeight: 600, letterSpacing: '-0.01em' }}>Mock Knight</span>
 
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-        <span
-          aria-hidden="true"
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: 9999,
-            background: connected ? `var(--mk-profile-${profile.colour})` : 'transparent',
-            border: `2px solid var(--mk-profile-${profile.colour})`,
-          }}
+      <span style={{ marginLeft: 8 }}>
+        <ProfileSwitcher
+          profiles={profiles}
+          active={profile}
+          connected={connected}
+          onSelect={onSelectProfile}
+          onManage={() => onScreen('profiles')}
         />
-        {/* Colour is never the only signal: the profile name is always visible beside the dot. */}
-        <span style={{ fontWeight: 500 }}>{profile.name}</span>
-        {profile.protected && <Chip tone="warning">protected</Chip>}
-        {profile.readOnly && <Chip>read-only</Chip>}
-        {!connected && <Chip tone="warning">disconnected</Chip>}
       </span>
 
       <nav style={{ marginLeft: 16, display: 'flex', gap: 4 }} aria-label="Screens">
@@ -392,6 +404,7 @@ function TopBar({
             ['corpus', 'Corpus'],
             ['traffic', 'Traffic'],
             ['scenarios', 'Scenarios'],
+            ['profiles', 'Servers'],
           ] as const
         ).map(([value, label]) => (
           <button

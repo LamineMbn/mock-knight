@@ -1,0 +1,98 @@
+import { expect, test } from '@playwright/test'
+import { WIREMOCK, resetToSeed } from './seed.js'
+
+/**
+ * Connection management — PRD FR-CONN-1..5, design brief §6.9 and §6.11.
+ *
+ * The claim under test is the product's positioning: Mock Knight can point at several
+ * environments at once, which the WireMock GUI forks structurally cannot. That is only true if
+ * a second server can be added and switched to from the UI.
+ */
+
+test.beforeEach(async ({ page }) => {
+  await resetToSeed(page)
+})
+
+/**
+ * Keep only the original profile, so runs stay independent.
+ *
+ * Keyed on creation order rather than URL: the profiles these tests add point at the *same*
+ * WireMock, so a URL-based filter cleans up nothing and the switcher fills with duplicates.
+ */
+test.afterEach(async ({ page }) => {
+  const listed = (await (await page.request.get('/api/profiles')).json()) as {
+    profiles: { id: string; createdAt: string }[]
+  }
+  const [oldest] = [...listed.profiles].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  for (const profile of listed.profiles) {
+    if (profile.id !== oldest?.id) await page.request.delete(`/api/profiles/${profile.id}`)
+  }
+})
+
+test('the active environment is always named, not just coloured', async ({ page }) => {
+  await page.goto('/')
+  // §6.1: colour is an accelerant, never the signal. The same destructive button means very
+  // different things on localhost and on staging.
+  const badge = page.getByRole('button', { name: /Profile: / })
+  await expect(badge).toBeVisible()
+  await expect(badge).toContainText('localhost:18099')
+})
+
+test('a second server can be added and switched to from the UI', async ({ page }) => {
+  await page.goto('/?screen=profiles')
+
+  await page.getByLabel('Base URL').fill(WIREMOCK)
+  await page.getByLabel('Name').fill('second view')
+  await page.getByRole('button', { name: 'Add and connect' }).click()
+
+  // Switching carries the profile in the URL, so a pasted link reproduces the whole view
+  // including *which server* it is of.
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('profile'), { timeout: 10_000 })
+    .not.toBeNull()
+  await expect(page.getByRole('button', { name: /Profile: / })).toContainText('second view')
+
+  await page.getByRole('button', { name: /Profile: / }).click()
+  await page.getByRole('option', { name: 'localhost:18099', exact: true }).click()
+  await expect(page.getByRole('button', { name: /Profile: / })).toContainText('localhost:18099')
+})
+
+test('the capability report explains what is off, not just that it is', async ({ page }) => {
+  await page.goto('/?screen=profiles')
+  const table = page.getByRole('table')
+  await expect(table).toBeVisible()
+
+  // WireMock Java has no disabled flag; the report has to say what that costs.
+  await expect(table).toContainText('mock.enableDisable')
+  await expect(table).toContainText('no disabled flag')
+  // And which gate decided it — the backend, or this runtime mode.
+  await expect(table).toContainText('this server')
+
+  await page.getByRole('button', { name: 'Show everything' }).click()
+  await expect(table).toContainText('corpus.list')
+})
+
+test('the danger zone is absent on a protected profile, not merely disabled', async ({ page }) => {
+  await page.goto('/?screen=profiles')
+  // Unprotected: it is there.
+  await expect(page.getByText('Danger zone')).toBeVisible()
+
+  await page.getByLabel('Base URL').fill(WIREMOCK)
+  await page.getByLabel('Name').fill('locked')
+  await page.getByRole('checkbox').first().check()
+  await page.getByRole('button', { name: 'Add and connect' }).click()
+  await expect(page.getByRole('button', { name: /Profile: / })).toContainText('locked')
+
+  // Protected: gone entirely (FR-CONN-5) — there is no in-session override to find.
+  await expect(page.getByText('Danger zone')).toHaveCount(0)
+})
+
+test('a destructive operation needs the profile name typed back', async ({ page }) => {
+  await page.goto('/?screen=profiles')
+  await page.getByRole('button', { name: /Clear the request journal/ }).click()
+
+  const confirm = page.getByRole('button', { name: 'Clear the request journal', exact: true })
+  await expect(confirm).toBeDisabled()
+  await page.getByLabel(/Type the profile name to confirm/).fill('localhost:18099')
+  await expect(confirm).toBeEnabled()
+})

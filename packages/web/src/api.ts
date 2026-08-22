@@ -69,6 +69,18 @@ export interface Profile {
   colour: string
   protected: boolean
   readOnly: boolean
+  adapter: string
+  adminPath: string | null
+  capabilities: string[] | null
+  createdAt: string
+}
+
+export interface NewProfile {
+  name: string
+  baseUrl: string
+  colour: string
+  protected: boolean
+  readOnly: boolean
 }
 
 export interface MirrorStatus {
@@ -194,6 +206,25 @@ export const api = {
     call<CorpusPage>(
       `/api/${profileId}/mocks?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}`,
     ),
+  createProfile: (profile: NewProfile) =>
+    call<{ profile: Profile }>('/api/profiles', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...profile, adapter: 'wiremock' }),
+    }),
+  deleteProfile: (profileId: string) =>
+    call<{ deleted: true }>(`/api/profiles/${profileId}`, { method: 'DELETE' }),
+  connect: (profileId: string) =>
+    call<{ connected: boolean; version: string | null; adminUrl: string; capabilities: string[] }>(
+      `/api/profiles/${profileId}/connect`,
+      { method: 'POST' },
+    ),
+  danger: (profileId: string, operation: string, confirm: string) =>
+    call<{ done: true }>(`/api/${profileId}/danger/${operation}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ confirm }),
+    }),
   scenarios: (profileId: string) =>
     call<{ scenarios: ScenarioAnalysis[]; canSetState: boolean; canResetAll: boolean }>(
       `/api/${profileId}/scenarios`,
