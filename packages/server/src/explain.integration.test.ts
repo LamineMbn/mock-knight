@@ -140,3 +140,82 @@ describe('the journal', () => {
     expect(unmatched.every((e) => !e.matched)).toBe(true)
   })
 })
+
+describe('the BFF routes behind the screen', () => {
+  it('serves the traffic log with its window attached', async () => {
+    const { createApp } = await import('./app.js')
+    const { openDatabase } = await import('./db/database.js')
+    const { createProfile } = await import('./profiles.js')
+    const { ConnectionRegistry } = await import('./runtime.js')
+
+    const db = openDatabase(':memory:')
+    const registry = new ConnectionRegistry(db, 'local')
+    const app = createApp({ db, registry, mode: 'local', version: 'test' })
+    const profile = createProfile(db, {
+      name: 'explain',
+      adapter: 'wiremock',
+      baseUrl: WIREMOCK_URL,
+      adminPath: null,
+      colour: 'indigo',
+      protected: false,
+      readOnly: false,
+      mappingsDir: null,
+      authKind: 'none',
+      authRef: null,
+      correlationHeader: null,
+      redactHeaders: [],
+    })
+    await app.request(`/api/profiles/${profile.id}/connect`, { method: 'POST' })
+
+    await fetch(`${WIREMOCK_URL}/__admin/requests`, { method: 'DELETE' })
+    await fetch(`${WIREMOCK_URL}/v1/orders`, {
+      method: 'POST',
+      headers: { 'X-Tenant': 'acme-corp', 'content-type': 'application/json' },
+      body: '{"sku":"AX-91"}',
+    })
+
+    const events = await app.request(`/api/${profile.id}/events`)
+    const page = (await events.json()) as {
+      items: { id: number; matched: boolean; url: string }[]
+      window: { earliestAt: string | null; bounded: boolean }
+    }
+    expect(page.items.length).toBeGreaterThan(0)
+    // A journal-derived view must never travel without the window it is derived from.
+    expect(page.window.bounded).toBe(true)
+    expect(page.window.earliestAt).not.toBeNull()
+
+    const unmatched = page.items.find((e) => !e.matched)
+    expect(unmatched).toBeDefined()
+
+    const explained = await app.request(`/api/${profile.id}/explain`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ eventId: unmatched!.id }),
+    })
+    const result = (await explained.json()) as {
+      nearMisses: {
+        stubName: string | null
+        mismatchCount: number
+        predicateProvenance: string
+        predicates: {
+          field: string
+          outcome: string
+          expected: string | null
+          actual: string | null
+        }[]
+      }[]
+    }
+    expect(result.nearMisses.length).toBeGreaterThan(0)
+    const closest = result.nearMisses[0]!
+    expect(closest.stubName).toBe('orders create 500')
+    expect(closest.predicates.filter((p) => p.outcome === 'fail')[0]).toMatchObject({
+      field: 'headers.X-Tenant',
+      expected: 'acme',
+      actual: 'acme-corp',
+    })
+    expect(closest.predicateProvenance).toBe('inferred')
+
+    await registry.closeAll()
+    db.close()
+  })
+})

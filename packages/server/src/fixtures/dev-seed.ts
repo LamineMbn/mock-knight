@@ -60,4 +60,11 @@ export async function seedWireMock(baseUrl: string): Promise<void> {
     }),
   })
   if (!response.ok) throw new Error(`Seeding ${baseUrl} failed with ${response.status}`)
+
+  // Importing mappings does **not** reset scenario state, and the seed contains a stateful stub.
+  // Without this, one matched request advances `checkout` to `ordered` and every later run finds
+  // that stub no longer matches — a suite that passes once and then fails for reasons nothing in
+  // the test can see. (Which is precisely the bug this product exists to make visible.)
+  const reset = await fetch(`${baseUrl}/__admin/scenarios/reset`, { method: 'POST' })
+  if (!reset.ok) throw new Error(`Resetting scenarios on ${baseUrl} failed with ${reset.status}`)
 }

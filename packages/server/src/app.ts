@@ -1,10 +1,11 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { AdapterHttpError, AdapterHostNotAllowedError, parseQuery } from '@mock-knight/core'
-import type { Mock } from '@mock-knight/core'
+import type { LoggedRequest, Mock, NearMiss } from '@mock-knight/core'
 import type { Database as Db } from 'better-sqlite3'
 import { mirrorStatus, replaceCorpus } from './db/mirror.js'
 import { getMock, searchCorpus } from './db/search.js'
+import { getServeEventRaw, listServeEvents, recordServeEvents } from './db/journal.js'
 import {
   createProfile,
   deleteProfile,
@@ -42,6 +43,58 @@ const listQuerySchema = z.object({
 
 /** Fetch the whole corpus a page at a time, so one huge response cannot stall the process. */
 const INGEST_PAGE_SIZE = 500
+/** How much of the upstream journal to pull per request. Its journal is bounded anyway. */
+const JOURNAL_POLL_LIMIT = 200
+/** design brief §6.4 shows three candidates; more is noise, and near-miss cost grows with them. */
+const MAX_CANDIDATES = 5
+
+const eventsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  offset: z.coerce.number().int().min(0).default(0),
+  matched: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === 'true')),
+  correlation: z.string().optional(),
+})
+
+const explainBodySchema = z.object({
+  eventId: z.number().int().optional(),
+  request: z
+    .object({
+      method: z.string(),
+      url: z.string(),
+      headers: z.record(z.string(), z.union([z.string(), z.array(z.string())])).default({}),
+      body: z.string().nullable().default(null),
+    })
+    .optional(),
+})
+
+const EMPTY_REQUEST: LoggedRequest = {
+  method: 'GET',
+  url: '/',
+  absoluteUrl: null,
+  clientIp: null,
+  headers: {},
+  cookies: {},
+  queryParameters: {},
+  body: null,
+  bodyTruncated: false,
+}
+
+/** Rebuild a logged request from the verbatim upstream event we stored. */
+function readRequestFromEvent(raw: unknown): LoggedRequest {
+  const event = raw as { request?: Record<string, unknown> }
+  const source = event.request ?? {}
+  return {
+    ...EMPTY_REQUEST,
+    method: typeof source['method'] === 'string' ? source['method'] : 'GET',
+    url: typeof source['url'] === 'string' ? source['url'] : '/',
+    absoluteUrl: typeof source['absoluteUrl'] === 'string' ? source['absoluteUrl'] : null,
+    headers: (source['headers'] ?? {}) as LoggedRequest['headers'],
+    body: typeof source['body'] === 'string' ? source['body'] : null,
+  }
+}
 
 export function createApp(options: AppOptions) {
   const { db, registry, mode } = options
@@ -152,6 +205,92 @@ export function createApp(options: AppOptions) {
         ...mirrorStatus(db, profileId, new Date()),
         connected: connection !== null,
         version: connection?.version ?? null,
+      })
+    })
+
+    /**
+     * The traffic log. Pulls the upstream journal first so the view is current, then serves
+     * from the mirror — polling is the only option WireMock offers (`journal.stream` is off).
+     */
+    .get('/api/:p/events', async (c) => {
+      const profileId = c.req.param('p')
+      const profile = getProfile(db, profileId)
+      if (profile === null) return c.json({ error: 'not_found' }, 404)
+
+      const connection = registry.get(profileId)
+      if (connection === null) return c.json({ error: 'not_connected' }, 409)
+      // Capability off ⇒ the route does not exist for this profile.
+      if (connection.adapter.listServeEvents === undefined)
+        return c.json({ error: 'not_found' }, 404)
+
+      const parsed = eventsQuerySchema.safeParse(c.req.query())
+      if (!parsed.success)
+        return c.json({ error: 'invalid_query', issues: parsed.error.issues }, 400)
+
+      const upstream = await connection.adapter.listServeEvents({ limit: JOURNAL_POLL_LIMIT })
+      recordServeEvents(db, profileId, upstream.items, { redactHeaders: profile.redactHeaders })
+
+      const page = listServeEvents(db, profileId, {
+        limit: parsed.data.limit,
+        offset: parsed.data.offset,
+        ...(parsed.data.matched === undefined ? {} : { matched: parsed.data.matched }),
+        ...(parsed.data.correlation === undefined ? {} : { correlation: parsed.data.correlation }),
+      })
+      return c.json({
+        ...page,
+        // Never let a journal-derived claim travel without its window (design brief §7.4).
+        window: { earliestAt: page.earliestAt, bounded: true },
+      })
+    })
+
+    /**
+     * Why didn't this match? — design brief §6.4.
+     *
+     * Takes either a stored serve event or a request supplied by hand, so the same route backs
+     * both the click-through from the traffic log and the "test a request" direction.
+     */
+    .post('/api/:p/explain', async (c) => {
+      const profileId = c.req.param('p')
+      if (getProfile(db, profileId) === null) return c.json({ error: 'not_found' }, 404)
+
+      const connection = registry.get(profileId)
+      if (connection === null) return c.json({ error: 'not_connected' }, 409)
+
+      const parsed = explainBodySchema.safeParse(await c.req.json())
+      if (!parsed.success)
+        return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400)
+
+      let request: LoggedRequest
+      if (parsed.data.eventId !== undefined) {
+        const raw = getServeEventRaw(db, profileId, parsed.data.eventId)
+        if (raw === null) return c.json({ error: 'not_found' }, 404)
+        request = readRequestFromEvent(raw)
+      } else if (parsed.data.request !== undefined) {
+        request = { ...EMPTY_REQUEST, ...parsed.data.request }
+      } else {
+        return c.json({ error: 'invalid_body', message: 'Give either eventId or request.' }, 400)
+      }
+
+      if (connection.adapter.nearMissesForRequest === undefined) {
+        // The backend cannot rank candidates. FR-TRAF-3's third branch — Mock Knight's own
+        // matcher model over the mirror — is not built yet, so say so rather than return an
+        // empty list that reads as "nothing was close".
+        return c.json(
+          {
+            error: 'not_supported',
+            message:
+              'This server cannot rank near misses, and Mock Knight cannot yet compute ' +
+              'candidates itself. The match explainer is unavailable for this profile.',
+          },
+          404,
+        )
+      }
+
+      const nearMisses: NearMiss[] = await connection.adapter.nearMissesForRequest(request)
+      return c.json({
+        request,
+        nearMisses: nearMisses.slice(0, MAX_CANDIDATES),
+        candidatesConsidered: nearMisses.length,
       })
     })
 
