@@ -78,6 +78,14 @@ export interface SearchRequest {
   plan: QueryPlan
   limit: number
   offset: number
+  /**
+   * The set of stubs the *server* says are unused, when it can tell us (FR-FIND-8).
+   *
+   * `null` means we have no server answer and must fall back to joining our own mirrored
+   * journal — a weaker claim, because that journal only holds what we happened to poll. The
+   * two are kept distinct rather than merged so the response can say which one answered.
+   */
+  unusedKeys?: readonly string[] | null
 }
 
 const LIKE_ESCAPE = '\\'
@@ -107,7 +115,10 @@ interface Conditions {
   usedLike: boolean
 }
 
-function filterToSql(filter: QueryFilter): { sql: string; params: unknown[] } {
+function filterToSql(
+  filter: QueryFilter,
+  unusedKeys: readonly string[] | null | undefined,
+): { sql: string; params: unknown[] } {
   switch (filter.field) {
     case 'method':
       return { sql: 'm.method = ?', params: [filter.value] }
@@ -146,7 +157,16 @@ function filterToSql(filter: QueryFilter): { sql: string; params: unknown[] } {
       // Handled through the FTS index, not here — a LIKE scan over 5k body excerpts of up to
       // 64KB each would miss the 150ms search budget by a wide margin.
       return { sql: '1=1', params: [] }
-    case 'unused':
+    case 'unused': {
+      if (unusedKeys != null) {
+        // The server computed this; prefer it over our journal-derived guess.
+        if (unusedKeys.length === 0) return { sql: filter.value ? '0=1' : '1=1', params: [] }
+        const holes = unusedKeys.map(() => '?').join(',')
+        return {
+          sql: `m.client_key ${filter.value ? 'IN' : 'NOT IN'} (${holes})`,
+          params: [...unusedKeys],
+        }
+      }
       return {
         sql: filter.value
           ? `NOT EXISTS (SELECT 1 FROM serve_event e
@@ -155,6 +175,7 @@ function filterToSql(filter: QueryFilter): { sql: string; params: unknown[] } {
                      WHERE e.profile_id = m.profile_id AND e.matched_key = m.client_key)`,
         params: [],
       }
+    }
     case 'disabled':
       return { sql: 'm.enabled = ?', params: [filter.value ? 0 : 1] }
     case 'header': {
@@ -208,7 +229,7 @@ function buildConditions(request: SearchRequest, excludeField?: string): Conditi
 
     const parts: string[] = []
     for (const filter of group.filters) {
-      const compiled = filterToSql(filter)
+      const compiled = filterToSql(filter, request.unusedKeys)
       parts.push(`(${compiled.sql})`)
       params.push(...compiled.params)
     }

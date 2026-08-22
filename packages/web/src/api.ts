@@ -57,6 +57,8 @@ export interface CorpusPage {
   textStrategy: 'none' | 'fts' | 'like' | 'mixed'
   bodyIndexTruncated: boolean
   plan: QueryPlan
+  /** Present only when the query asked about unused stubs; carries the qualifier it needs. */
+  unused: { provenance: 'server' | 'inferred'; earliestAt: string | null; bounded: boolean } | null
 }
 
 export interface Profile {

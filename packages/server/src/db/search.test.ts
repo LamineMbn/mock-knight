@@ -409,3 +409,59 @@ describe('header matchers — the discriminator on a header-selected corpus', ()
     expect(search('header:X-Mock').plan?.rejected ?? []).toEqual([])
   })
 })
+
+describe('unused stubs — a bounded truth, and which boundary applies', () => {
+  beforeEach(() => {
+    seed(CORPUS())
+    db.prepare(
+      `INSERT INTO serve_event (profile_id, upstream_id, at, matched, matched_key, raw)
+       VALUES ('p1','u1','2026-08-22T09:14:00Z',1,'a','{}')`,
+    ).run()
+  })
+
+  it('derives unused stubs from the mirrored journal when that is all we have', () => {
+    expect(
+      search('unused:true')
+        .items.map((i) => i.clientKey)
+        .sort(),
+    ).toEqual(['b', 'c'])
+    expect(search('unused:false').items.map((i) => i.clientKey)).toEqual(['a'])
+  })
+
+  it('prefers the server’s answer over our own when it is supplied', () => {
+    // The server says only `c` is unused. Our journal would have said `b` and `c`; the server
+    // knows about traffic from before we started polling, so its answer wins.
+    const result = searchCorpus(db, {
+      profileId: 'p1',
+      plan: plan('unused:true'),
+      limit: 50,
+      offset: 0,
+      unusedKeys: ['c'],
+    })
+    expect(result.items.map((i) => i.clientKey)).toEqual(['c'])
+  })
+
+  it('inverts correctly against the server’s answer', () => {
+    const result = searchCorpus(db, {
+      profileId: 'p1',
+      plan: plan('unused:false'),
+      limit: 50,
+      offset: 0,
+      unusedKeys: ['c'],
+    })
+    expect(result.items.map((i) => i.clientKey).sort()).toEqual(['a', 'b'])
+  })
+
+  it('handles the server reporting nothing unused without matching everything', () => {
+    // An empty IN () list is a SQL syntax error, and the naive fallback of dropping the clause
+    // would turn "nothing is unused" into "everything matches".
+    const result = searchCorpus(db, {
+      profileId: 'p1',
+      plan: plan('unused:true'),
+      limit: 50,
+      offset: 0,
+      unusedKeys: [],
+    })
+    expect(result.total).toBe(0)
+  })
+})

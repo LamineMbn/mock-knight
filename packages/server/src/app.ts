@@ -82,6 +82,14 @@ const EMPTY_REQUEST: LoggedRequest = {
   bodyTruncated: false,
 }
 
+/** How far back our mirrored journal reaches; null when we have never polled it. */
+function journalWindowOf(db: Db, profileId: string): string | null {
+  const row = db
+    .prepare(`SELECT earliest_at FROM journal_window WHERE profile_id = ?`)
+    .get(profileId) as { earliest_at: string | null } | undefined
+  return row?.earliest_at ?? null
+}
+
 /** Rebuild a logged request from the verbatim upstream event we stored. */
 function readRequestFromEvent(raw: unknown): LoggedRequest {
   const event = raw as { request?: Record<string, unknown> }
@@ -167,7 +175,7 @@ export function createApp(options: AppOptions) {
       })
     })
 
-    .get('/api/:p/mocks', (c) => {
+    .get('/api/:p/mocks', async (c) => {
       const profileId = c.req.param('p')
       if (getProfile(db, profileId) === null) return c.json({ error: 'not_found' }, 404)
 
@@ -180,16 +188,47 @@ export function createApp(options: AppOptions) {
       const plan = parseQuery(parsed.data.q, {
         capabilities: connection?.capabilities ?? new Set(),
       })
+
+      // `unused:` is a **bounded truth** either way, but not equally bounded. Where the server
+      // can compute it (WireMock ≥3.13), its answer wins and we say so; otherwise we join our
+      // own mirrored journal, which only holds what we happened to poll — a weaker claim that
+      // has to be labelled differently (FR-FIND-8, TECH-DESIGN §6.4).
+      const wantsUnused = plan.groups.some((group) => group.field === 'unused')
+      let unusedKeys: string[] | null = null
+      let unusedProvenance: 'server' | 'inferred' | null = null
+      if (wantsUnused) {
+        if (connection?.adapter.findUnusedMocks !== undefined) {
+          unusedKeys = (await connection.adapter.findUnusedMocks()).map((mock) => mock.clientKey)
+          unusedProvenance = 'server'
+        } else {
+          unusedProvenance = 'inferred'
+        }
+      }
+
       const result = searchCorpus(db, {
         profileId,
         plan,
         limit: parsed.data.limit,
         offset: parsed.data.offset,
+        unusedKeys,
       })
       // The plan travels back with the results so the search box can render exactly what was
       // applied — including the tokens it had to reject, which is what makes an empty result
       // set explicable rather than mysterious.
-      return c.json({ ...result, plan })
+      return c.json({
+        ...result,
+        plan,
+        // Present only when the query asked about unused stubs, so the UI can attach the
+        // qualifier the requirement insists on rather than printing a bare "unused".
+        unused:
+          unusedProvenance === null
+            ? null
+            : {
+                provenance: unusedProvenance,
+                earliestAt: journalWindowOf(db, profileId),
+                bounded: true,
+              },
+      })
     })
 
     .get('/api/:p/mocks/:key', (c) => {

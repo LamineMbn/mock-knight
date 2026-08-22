@@ -260,6 +260,27 @@ export function App() {
                   ? ` · ${corpus.data.items.length} shown`
                   : ''}
               </span>
+              {corpus.data?.unused != null && (
+                /**
+                 * FR-FIND-8 makes this wording a requirement, not a caveat. The journal is
+                 * bounded and resettable, so "unused" can only ever mean "nothing we can see
+                 * used it" — and which boundary applies depends on who answered.
+                 */
+                <Chip
+                  tone="warning"
+                  title={
+                    corpus.data.unused.provenance === 'server'
+                      ? 'The mock server computed this from its own request journal, which is finite and resets when the server restarts.'
+                      : 'Mock Knight derived this by joining the corpus against the traffic it has polled. It cannot see requests served before it connected.'
+                  }
+                >
+                  {corpus.data.unused.provenance === 'server'
+                    ? 'unused per the server’s journal'
+                    : corpus.data.unused.earliestAt === null
+                      ? 'unused — but no traffic has been observed yet'
+                      : `unused since ${new Date(corpus.data.unused.earliestAt).toLocaleTimeString()}`}
+                </Chip>
+              )}
               {corpus.data?.bodyIndexTruncated === true && (
                 <Chip
                   tone="warning"

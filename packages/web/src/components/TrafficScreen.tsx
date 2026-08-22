@@ -213,6 +213,7 @@ export function TrafficScreen({ profileId, baseUrl }: { profileId: string; baseU
         <MatchExplainer
           profileId={profileId}
           eventId={explaining}
+          baseUrl={baseUrl}
           onClose={() => setExplaining(null)}
         />
       )}

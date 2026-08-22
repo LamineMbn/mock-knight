@@ -1,28 +1,15 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api.js'
-import type { NearMiss, PredicateResult } from '../api.js'
+import type { Explanation, NearMiss, PredicateResult } from '../api.js'
 import { Button, InferenceLabel, MethodChip, Skeleton } from './primitives.js'
-
-/**
- * "Why didn't this match?" — design brief §6.4, the screen the product is judged on.
- *
- * The rules that make it work, and which are easy to undo by accident:
- *
- *  1. **The plain sentence comes first.** Most visits end at that line; the table is for the
- *     times it isn't enough. So it is the hero, not a caption above a grid.
- *  2. **Only failures get colour.** Passing rows are neutral with a *grey* check, never green.
- *     In a table of forty predicates, colouring the thirty-eight that passed communicates
- *     nothing and buries the two that did not.
- *  3. **Diff the values inline.** The differing part of the actual value is highlighted, because
- *     `acme` vs `acme-corp` should not require the reader to compare two strings by eye.
- *  4. **Rank with a bar, not a number.** `0.0121` means nothing; "1 mismatch" means everything.
- *  5. **Candidate 1 is expanded, the rest are not.** One decision, not three.
- */
+import { toCurl } from '../curl.js'
 
 export interface MatchExplainerProps {
   profileId: string
   eventId: number
+  /** The mock server's own base URL, so the copied curl actually points somewhere. */
+  baseUrl: string
   onClose: () => void
 }
 
@@ -297,7 +284,8 @@ function Candidate({
   )
 }
 
-export function MatchExplainer({ profileId, eventId, onClose }: MatchExplainerProps) {
+export function MatchExplainer({ profileId, eventId, baseUrl, onClose }: MatchExplainerProps) {
+  const [copied, setCopied] = useState(false)
   const query = useQuery({
     queryKey: ['explain', profileId, eventId],
     queryFn: () => api.explain(profileId, eventId),
@@ -353,6 +341,21 @@ export function MatchExplainer({ profileId, eventId, onClose }: MatchExplainerPr
                 {query.data.request.url}
               </span>
             </>
+          )}
+          {query.data !== undefined && (
+            <Button
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(toCurl(query.data.request, baseUrl))
+                  .then(() => {
+                    setCopied(true)
+                    window.setTimeout(() => setCopied(false), 1600)
+                  })
+                  .catch(() => setCopied(false))
+              }}
+            >
+              {copied ? 'Copied' : 'Copy as curl'}
+            </Button>
           )}
           <Button variant="ghost" onClick={onClose}>
             Close
