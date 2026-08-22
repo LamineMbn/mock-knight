@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto'
 import type {
+  JournalQuery,
+  LoggedRequest,
+  NearMiss,
+  RequestMatcher,
+  ServeEvent,
   CapabilityBit,
   CapabilityProvenance,
   ConnectionConfig,
@@ -12,6 +17,7 @@ import type {
 } from '@mock-knight/core'
 import { WireMockClient } from './client.js'
 import { toCanonical } from './mapping.js'
+import { toNearMiss, toServeEvent } from './journal.js'
 
 /**
  * The WireMock (Java) adapter — endpoint map in PRD Appendix A.
@@ -92,6 +98,7 @@ export class WireMockAdapter implements MockBackendAdapter {
   readonly displayName = 'WireMock (Java)'
 
   private client: WireMockClient | null = null
+  private correlationHeader: string | null = null
   private granted = new Set<CapabilityBit>()
   private provenance: Record<string, CapabilityProvenance> = {}
 
@@ -103,6 +110,7 @@ export class WireMockAdapter implements MockBackendAdapter {
   async connect(config: ConnectionConfig): Promise<ConnectionInfo> {
     const client = new WireMockClient(config)
     this.client = client
+    this.correlationHeader = config.correlationHeader ?? null
 
     const versionText = await this.readVersion(client)
     const version = parseVersion(versionText)
@@ -244,6 +252,77 @@ export class WireMockAdapter implements MockBackendAdapter {
     await this.transport.json('POST', '/mappings/reset')
   }
 
+  // ------------------------------------------------------------------- traffic
+
+  async listServeEvents(query: JournalQuery = {}): Promise<Page<ServeEvent>> {
+    const params = new URLSearchParams()
+    if (query.limit !== undefined) params.set('limit', String(query.limit))
+    if (query.since !== undefined) params.set('since', query.since)
+    const suffix = params.size > 0 ? `?${params.toString()}` : ''
+
+    const { body } = await this.transport.json<JsonObject>('GET', `/requests${suffix}`)
+    const events = Array.isArray(body['requests']) ? body['requests'] : []
+    const meta = body['meta']
+    const total =
+      meta !== null && typeof meta === 'object' && !Array.isArray(meta)
+        ? Number((meta as JsonObject)['total'] ?? events.length)
+        : events.length
+
+    return {
+      items: events.filter(isJsonObject).map((e) => toServeEvent(e, this.correlationHeader)),
+      total,
+      limit: query.limit ?? events.length,
+      offset: query.offset ?? 0,
+    }
+  }
+
+  async listUnmatched(): Promise<ServeEvent[]> {
+    const { body } = await this.transport.json<JsonObject>('GET', '/requests/unmatched')
+    const events = Array.isArray(body['requests']) ? body['requests'] : []
+    return events.filter(isJsonObject).map((e) => toServeEvent(e, this.correlationHeader))
+  }
+
+  async clearJournal(): Promise<void> {
+    await this.transport.json('DELETE', '/requests')
+  }
+
+  /**
+   * Candidates for a request that did not match — the data behind design brief §6.4.
+   *
+   * Sorted by the server's distance so the closest comes first; the screen expands only that
+   * one, because one decision beats three.
+   */
+  async nearMissesForRequest(request: LoggedRequest): Promise<NearMiss[]> {
+    const { body } = await this.transport.json<JsonObject>('POST', '/near-misses/request', {
+      body: {
+        url: request.url,
+        absoluteUrl: request.absoluteUrl ?? request.url,
+        method: request.method,
+        headers: request.headers as unknown as Json,
+        cookies: request.cookies as unknown as Json,
+        body: request.body ?? '',
+      },
+    })
+    return readNearMisses(body)
+  }
+
+  /** The reverse direction (FR-TRAF-4): which logged requests came close to *this* matcher. */
+  async nearMissesForMatcher(matcher: RequestMatcher): Promise<NearMiss[]> {
+    const pattern: JsonObject = {}
+    if (matcher.method !== null) pattern['method'] = matcher.method
+    if (matcher.url !== null) pattern[matcher.url.kind] = matcher.url.value
+    const { body } = await this.transport.json<JsonObject>('POST', '/near-misses/request-pattern', {
+      body: pattern,
+    })
+    return readNearMisses(body)
+  }
+
+  async findUnusedMocks(): Promise<Mock[]> {
+    const { body } = await this.transport.json<JsonObject>('GET', '/mappings/unmatched')
+    const mappings = Array.isArray(body['mappings']) ? body['mappings'] : []
+    return mappings.filter(isJsonObject).map(toCanonical)
+  }
+
   async close(): Promise<void> {
     await this.client?.close()
     this.client = null
@@ -263,4 +342,16 @@ export function fingerprintFor(adminUrl: string, version: string | null): string
     .update(`${adminUrl} ${version ?? 'unknown'}`)
     .digest('hex')
     .slice(0, 32)
+}
+
+function isJsonObject(value: Json): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function readNearMisses(body: JsonObject): NearMiss[] {
+  const raw = Array.isArray(body['nearMisses']) ? body['nearMisses'] : []
+  return raw
+    .filter(isJsonObject)
+    .map(toNearMiss)
+    .sort((a, b) => a.distance - b.distance)
 }

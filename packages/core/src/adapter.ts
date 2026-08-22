@@ -46,6 +46,8 @@ export interface ConnectionConfig {
   readonly timeoutMs?: number
   /** Host allowlist from config; when present every request is checked against it. */
   readonly allowedHosts?: readonly string[]
+  /** Header that groups one test run's traffic together (FR-TRAF-8). */
+  readonly correlationHeader?: string | null
 }
 
 export interface ConnectionInfo {

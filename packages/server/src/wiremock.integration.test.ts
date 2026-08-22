@@ -7,6 +7,7 @@ import { openDatabase } from './db/database.js'
 import { createProfile } from './profiles.js'
 import { ConnectionRegistry } from './runtime.js'
 import { createApp } from './app.js'
+import { DEV_SEED, seedWireMock } from './fixtures/dev-seed.js'
 
 /**
  * End-to-end against a real WireMock, not a fake.
@@ -27,43 +28,6 @@ let registry: ConnectionRegistry
 let app: ReturnType<typeof createApp>
 let profileId: string
 
-const SEED = [
-  {
-    name: 'orders create 500',
-    priority: 3,
-    scenarioName: 'checkout',
-    requiredScenarioState: 'Started',
-    newScenarioState: 'ordered',
-    metadata: { 'mock-knight': { folder: ['orders'], tags: ['legacy'] } },
-    request: {
-      method: 'POST',
-      urlPath: '/v1/orders',
-      headers: { 'X-Tenant': { equalTo: 'acme' } },
-    },
-    response: { status: 500, jsonBody: { error: 'insufficient funds' } },
-  },
-  {
-    name: 'orders read',
-    request: { method: 'GET', urlPathPattern: '/v1/orders/[0-9]+' },
-    response: { status: 200, body: '{"id":1}', headers: { 'Content-Type': 'application/json' } },
-  },
-  {
-    name: 'customers list',
-    request: { method: 'GET', urlPath: '/v1/customers' },
-    response: { status: 404, body: 'not found', fixedDelayMilliseconds: 50 },
-  },
-  {
-    name: 'payments proxy',
-    request: { method: 'ANY', urlPattern: '/v1/payments/.*' },
-    response: { proxyBaseUrl: 'http://upstream.example' },
-  },
-  {
-    request: { method: 'DELETE', url: '/v1/carts/9' },
-    response: { status: 204 },
-    postServeActions: [{ name: 'webhook', parameters: { url: 'http://x' } }],
-  },
-]
-
 async function admin(method: string, path: string, body?: unknown): Promise<Response> {
   return fetch(`${WIREMOCK_URL}/__admin${path}`, {
     method,
@@ -83,10 +47,7 @@ beforeAll(async () => {
 
   // This suite owns the server it talks to: it replaces the corpus wholesale. Point it only at
   // a throwaway instance, never at a shared one.
-  await admin('POST', '/mappings/import', {
-    mappings: SEED,
-    importOptions: { duplicatePolicy: 'OVERWRITE', deleteAllNotInImport: true },
-  })
+  await seedWireMock(WIREMOCK_URL)
 
   directory = mkdtempSync(join(tmpdir(), 'mock-knight-int-'))
   db = openDatabase(join(directory, 'state.db'))
@@ -154,13 +115,13 @@ describe('refresh', () => {
   it('ingests the whole corpus into the mirror', async () => {
     const { status, body } = await json(`/api/${profileId}/refresh`, { method: 'POST' })
     expect(status).toBe(200)
-    expect(body.inserted).toBe(SEED.length)
-    expect(body.count).toBe(SEED.length)
+    expect(body.inserted).toBe(DEV_SEED.length)
+    expect(body.count).toBe(DEV_SEED.length)
   })
 
   it('reports the mirror’s age so the UI can mark it stale', async () => {
     const { body } = await json(`/api/${profileId}/mirror`)
-    expect(body.count).toBe(SEED.length)
+    expect(body.count).toBe(DEV_SEED.length)
     expect(body.ageSeconds).toBeGreaterThanOrEqual(0)
     expect(body.connected).toBe(true)
   })
@@ -169,7 +130,7 @@ describe('refresh', () => {
 describe('the corpus screen’s query', () => {
   it('lists stubs with the columns the row renders', async () => {
     const { body } = await json(`/api/${profileId}/mocks`)
-    expect(body.total).toBe(SEED.length)
+    expect(body.total).toBe(DEV_SEED.length)
     const orders = body.items.find((i: { name: string }) => i.name === 'orders create 500')
     expect(orders).toMatchObject({
       method: 'POST',
@@ -218,7 +179,7 @@ describe('the corpus screen’s query', () => {
     // silently does nothing is worse than an error.
     expect(body.plan.rejected).toHaveLength(1)
     expect(body.plan.rejected[0].capability).toBe('mock.enableDisable')
-    expect(body.total).toBe(SEED.length)
+    expect(body.total).toBe(DEV_SEED.length)
   })
 
   it('serves a stub’s verbatim raw payload, including fields we do not model', async () => {
@@ -250,6 +211,6 @@ describe('what the round trip proves', () => {
     const response = await admin('GET', '/mappings?limit=1')
     const body = (await response.json()) as { mappings: unknown[]; meta: { total: number } }
     expect(body.mappings).toHaveLength(1)
-    expect(body.meta.total).toBe(SEED.length)
+    expect(body.meta.total).toBe(DEV_SEED.length)
   })
 })
