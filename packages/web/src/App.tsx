@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api.js'
 import type { Profile } from './api.js'
 import type { QueryPlan } from '@mock-knight/core/types'
@@ -43,6 +43,7 @@ export function App() {
   const queryClient = useQueryClient()
   const [query, selectedKey, setUrlState] = useUrlState()
   const [draft, setDraft] = useState(query)
+  const [expandedFolders, setExpandedFolders] = useState<ReadonlySet<string>>(new Set())
 
   const profiles = useQuery({ queryKey: ['profiles'], queryFn: api.profiles })
   const profile: Profile | undefined = profiles.data?.profiles[0]
@@ -57,6 +58,9 @@ export function App() {
     queryKey: ['corpus', profile?.id, query],
     queryFn: () => api.corpus(profile!.id, query, PAGE_SIZE, 0),
     enabled: profile !== undefined,
+    // Hold the previous page while the next one loads. Without this the whole middle of the
+    // screen — facets included — unmounts on every keystroke and every facet click.
+    placeholderData: keepPreviousData,
   })
 
   const refresh = useMutation({
@@ -67,19 +71,30 @@ export function App() {
     },
   })
 
-  const activeFacetTokens = useMemo(() => {
-    const tokens = new Set<string>()
-    for (const filter of corpus.data?.plan.filters ?? []) {
-      tokens.add(`${filter.field}:${String(filter.value)}`)
-    }
-    return tokens
-  }, [corpus.data])
+  /**
+   * Which facet tokens are on, read from the URL rather than from the server's echoed plan.
+   *
+   * The plan would be more authoritative, but it arrives a round-trip late, so a checkbox
+   * ticked by the user would sit unticked until the fetch returned. A control that lags the
+   * click is worse than one that is briefly optimistic — and the plan still has the last word
+   * on anything it *rejected*, which renders as a warning pill.
+   */
+  const activeFacetTokens = useMemo(
+    () => new Set(query.split(/\s+/).filter((part) => part.includes(':'))),
+    [query],
+  )
 
-  const toggleFacet = (token: string) => {
+  /**
+   * Toggle a facet by rewriting the query string, so the URL stays the single source of truth
+   * for what is filtered. Takes a *set* of tokens because selecting a folder branch needs two:
+   * one for stubs filed directly in it, one glob for everything beneath.
+   */
+  const toggleFacet = (tokens: string[]) => {
     const present = query.split(/\s+/).filter((part) => part !== '')
-    const next = present.includes(token)
-      ? present.filter((part) => part !== token)
-      : [...present, token]
+    const allPresent = tokens.every((token) => present.includes(token))
+    const next = allPresent
+      ? present.filter((part) => !tokens.includes(part))
+      : [...present.filter((part) => !tokens.includes(part)), ...tokens]
     const joined = next.join(' ')
     setDraft(joined)
     setUrlState(joined, selectedKey)
@@ -125,7 +140,13 @@ export function App() {
       />
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <FacetPane facets={corpus.data?.facets} active={activeFacetTokens} onToggle={toggleFacet} />
+        <FacetPane
+          facets={corpus.data?.facets}
+          active={activeFacetTokens}
+          onToggle={toggleFacet}
+          expandedFolders={expandedFolders}
+          onExpandedFoldersChange={setExpandedFolders}
+        />
 
         <main
           style={{

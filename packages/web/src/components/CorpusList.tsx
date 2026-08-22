@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { CSSProperties } from 'react'
 import type { MockListItem } from '../api.js'
-import { Chip, MethodChip, MiddleTruncate, Skeleton, StatusCode } from './primitives.js'
+import { Chip, MethodChip, MiddleEllipsis, Skeleton, StatusCode } from './primitives.js'
 
 /**
  * The stub list — design brief §6.2.
@@ -178,7 +178,7 @@ export function CorpusList({
                     className="mk-mono"
                     style={{ ...cellStyle(COLUMNS[1]!), fontSize: 12 }}
                   >
-                    <MiddleTruncate text={item.url?.value ?? item.name ?? '—'} />
+                    <MiddleEllipsis text={item.url?.value ?? item.name ?? '—'} tailChars={16} />
                     {item.isProxy && (
                       <Chip tone="neutral" title="Proxies to another server">
                         proxy
@@ -201,7 +201,7 @@ export function CorpusList({
                   <span role="gridcell" style={cellStyle(COLUMNS[3]!)}>
                     {item.scenario !== null && (
                       <Chip tone="accent" title={`Scenario: ${item.scenario}`}>
-                        <MiddleTruncate text={item.scenario} max={12} />
+                        <MiddleEllipsis text={item.scenario} tailChars={5} />
                       </Chip>
                     )}
                   </span>

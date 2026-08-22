@@ -66,16 +66,43 @@ export function StatusCode({ status }: { status: number | null }) {
 }
 
 /**
- * Truncate in the middle, not the end. The tail of a URL is usually what distinguishes it —
- * `/v1/orders/{id}/cancel` and `/v1/orders/{id}/refund` are identical for 20 characters.
+ * Truncate in the middle, not the end — design brief §3.2.
+ *
+ * The tail of a path is usually what distinguishes it: `/v1/orders/{id}/cancel` and
+ * `/v1/orders/{id}/refund` are identical for twenty characters, and `order-spi-hs-acrs-v1`
+ * differs from `order-spi-hs-tars-v1` only in the middle.
+ *
+ * Done with CSS rather than by counting characters, for two reasons. It adapts to the actual
+ * space — a resizable pane and a proportional typeface make any character count wrong at most
+ * widths — and the **full string stays in the DOM**, so screen readers read the whole path and
+ * a copy-paste yields something real, rather than a string with a `…` baked into it.
  */
-export function MiddleTruncate({ text, max = 52 }: { text: string; max?: number }) {
-  if (text.length <= max) return <>{text}</>
-  const head = Math.ceil((max - 1) / 2)
-  const tail = Math.floor((max - 1) / 2)
+export function MiddleEllipsis({
+  text,
+  tailChars = 7,
+  title,
+}: {
+  text: string
+  /** How much of the end to protect from truncation. */
+  tailChars?: number
+  title?: string
+}) {
+  const label = title ?? text
+  if (text.length <= tailChars + 2) {
+    return (
+      <span title={label} style={{ whiteSpace: 'nowrap', flex: '0 1 auto', minWidth: 0 }}>
+        {text}
+      </span>
+    )
+  }
+  const head = text.slice(0, text.length - tailChars)
+  const tail = text.slice(text.length - tailChars)
   return (
-    <span title={text}>
-      {text.slice(0, head)}…{text.slice(text.length - tail)}
+    <span title={label} style={{ display: 'flex', flex: '1 1 auto', minWidth: 0 }}>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {head}
+      </span>
+      <span style={{ whiteSpace: 'nowrap' }}>{tail}</span>
     </span>
   )
 }
