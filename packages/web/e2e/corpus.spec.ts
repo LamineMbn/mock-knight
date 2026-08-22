@@ -92,9 +92,36 @@ for (const colorScheme of ['light', 'dark'] as const) {
         expect(chip.background, `${chip.method} chip has no fill`).not.toBe('rgba(0, 0, 0, 0)')
       }
 
-      // 2xx is green by request, which the status colour scale has to actually reflect.
-      const ok = page.locator(ROW).filter({ hasText: '200' }).first()
-      await expect(ok).toBeVisible()
+      // The facet sidebar draws the same chip, so a plain-text POST never sits beside a green
+      // one. Scoped explicitly, because the list-wide selector above would pass while the
+      // sidebar rendered bare text.
+      const sidebar = page.locator('nav[aria-label="Filters"]')
+      const sidebarChips = await sidebar.locator('[data-method]').evaluateAll((nodes) =>
+        nodes.map((node) => ({
+          method: node.getAttribute('data-method'),
+          background: getComputedStyle(node).backgroundColor,
+        })),
+      )
+      expect(sidebarChips.length).toBeGreaterThan(0)
+      for (const chip of sidebarChips) {
+        expect(chip.background, `sidebar ${chip.method} chip has no fill`).not.toBe(
+          'rgba(0, 0, 0, 0)',
+        )
+      }
+
+      // Status classes take their colour from the same scale as an individual code, so `5xx`
+      // in the sidebar and a `500` in the list agree.
+      const classes = await sidebar.locator('[data-status-class]').evaluateAll((nodes) =>
+        nodes.map((node) => ({
+          value: node.getAttribute('data-status-class'),
+          color: getComputedStyle(node).color,
+        })),
+      )
+      expect(classes.length).toBeGreaterThan(0)
+      const inherited = await sidebar.evaluate((node) => getComputedStyle(node).color)
+      for (const entry of classes) {
+        expect(entry.color, `${entry.value} is not coloured`).not.toBe(inherited)
+      }
     })
 
     test('names a token this backend cannot answer instead of ignoring it', async ({ page }) => {

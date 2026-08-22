@@ -1,6 +1,6 @@
 import type { FacetBucket, Facets } from '../api.js'
 import { FolderTree } from './FolderTree.js'
-import { MiddleEllipsis } from './primitives.js'
+import { MethodChip, MiddleEllipsis, StatusClass } from './primitives.js'
 
 /**
  * The facet sidebar — design brief §6.2.
@@ -55,12 +55,19 @@ function Group({
   tokenFor,
   active,
   onApply,
+  renderLabel,
 }: {
   title: string
   buckets: FacetBucket[]
   tokenFor: (bucket: FacetBucket) => string
   active: ReadonlySet<string>
   onApply: (change: { add?: string[]; remove?: string[] }) => void
+  /**
+   * Draw the value as the rest of the app draws it. A method in the sidebar should be the same
+   * chip it is in the list — a plain-text `POST` beside a green `POST` chip reads as two
+   * different things.
+   */
+  renderLabel?: (bucket: FacetBucket) => React.ReactNode
 }) {
   if (buckets.length === 0) return null
   return (
@@ -93,7 +100,13 @@ function Group({
                   }
                   style={{ accentColor: 'var(--mk-accent-solid)', margin: 0, flex: '0 0 auto' }}
                 />
-                <MiddleEllipsis text={bucket.value} />
+                {renderLabel === undefined ? (
+                  <MiddleEllipsis text={bucket.value} />
+                ) : (
+                  <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
+                    {renderLabel(bucket)}
+                  </span>
+                )}
                 <span
                   className="mk-tabular"
                   style={{ flex: '0 0 auto', color: 'var(--mk-text-tertiary)', fontSize: 12 }}
@@ -162,6 +175,7 @@ export function FacetPane({
           tokenFor={(bucket) => `method:${bucket.value}`}
           active={active}
           onApply={onApply}
+          renderLabel={(bucket) => <MethodChip method={bucket.value} />}
         />
         <Group
           title="Status"
@@ -169,6 +183,7 @@ export function FacetPane({
           tokenFor={(bucket) => `status:${bucket.value}`}
           active={active}
           onApply={onApply}
+          renderLabel={(bucket) => <StatusClass value={bucket.value} />}
         />
         <Group
           title="Scenario"

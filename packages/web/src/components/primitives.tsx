@@ -67,21 +67,46 @@ export function MethodChip({ method }: { method: string | null }) {
  * red UNMATCHED stripe. Match state stays legible because it is triple-encoded — stripe, filled
  * icon, and a text label — so the signal survives; but the two hues no longer mean one thing.
  */
+/**
+ * One definition of the status scale, so a code in the list, the detail pane, the traffic log,
+ * and the facet sidebar can never disagree about what colour a 404 is.
+ */
+export function statusColour(status: number): string {
+  if (status >= 500) return 'var(--mk-danger-text)'
+  if (status >= 400) return 'var(--mk-warning-text)'
+  if (status >= 300) return 'var(--mk-accent-text)'
+  if (status >= 200) return 'var(--mk-success-text)'
+  return 'var(--mk-text-primary)'
+}
+
 export function StatusCode({ status }: { status: number | null }) {
   if (status === null) return <span style={{ color: 'var(--mk-text-tertiary)' }}>—</span>
-  const token =
-    status >= 500
-      ? 'var(--mk-danger-text)'
-      : status >= 400
-        ? 'var(--mk-warning-text)'
-        : status >= 300
-          ? 'var(--mk-accent-text)'
-          : status >= 200
-            ? 'var(--mk-success-text)'
-            : 'var(--mk-text-primary)'
   return (
-    <span className="mk-tabular" style={{ color: token, fontWeight: 500 }}>
+    <span
+      className="mk-tabular"
+      data-status={status}
+      style={{ color: statusColour(status), fontWeight: 500 }}
+    >
       {status}
+    </span>
+  )
+}
+
+/**
+ * A status *class* — `2xx`, `4xx` — as the facet sidebar lists them. Coloured from the same
+ * scale as an individual code, so ticking `5xx` and reading a 500 in the list are visibly the
+ * same idea.
+ */
+export function StatusClass({ value }: { value: string }) {
+  const leading = Number(value[0])
+  const colour = Number.isFinite(leading) ? statusColour(leading * 100) : 'var(--mk-text-primary)'
+  return (
+    <span
+      className="mk-tabular"
+      data-status-class={value}
+      style={{ color: colour, fontWeight: 500 }}
+    >
+      {value}
     </span>
   )
 }
