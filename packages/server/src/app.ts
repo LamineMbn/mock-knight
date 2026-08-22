@@ -6,6 +6,10 @@ import type { Database as Db } from 'better-sqlite3'
 import { mirrorStatus, replaceCorpus } from './db/mirror.js'
 import { getMock, searchCorpus } from './db/search.js'
 import { getServeEventRaw, listServeEvents, recordServeEvents } from './db/journal.js'
+import { listAudit } from './db/audit.js'
+import { createMock, deleteMock, updateMock } from './writes.js'
+import type { WriteContext } from './writes.js'
+import { resolveActor } from './identity.js'
 import {
   createProfile,
   deleteProfile,
@@ -33,6 +37,8 @@ export interface AppOptions {
   registry: ConnectionRegistry
   mode: RuntimeMode
   version: string
+  /** Overridable so tests do not depend on the machine's git config. */
+  actor?: string
 }
 
 const listQuerySchema = z.object({
@@ -58,6 +64,16 @@ const eventsQuerySchema = z.object({
   correlation: z.string().optional(),
 })
 
+const writeBodySchema = z.object({
+  /** The full vendor document. Edited directly, so nothing is reconstructed from our model. */
+  raw: z.record(z.string(), z.any()),
+  /** What the caller believed it was editing. The whole safety mechanism hangs off this. */
+  baseHash: z.string().min(1),
+})
+
+const createBodySchema = z.object({ raw: z.record(z.string(), z.any()) })
+const deleteBodySchema = z.object({ baseHash: z.string().min(1) })
+
 const explainBodySchema = z.object({
   eventId: z.number().int().optional(),
   request: z
@@ -80,6 +96,44 @@ const EMPTY_REQUEST: LoggedRequest = {
   queryParameters: {},
   body: null,
   bodyTruncated: false,
+}
+
+/**
+ * Turn a write outcome into a response.
+ *
+ * A conflict is a **409 carrying the server's current document**, not a bare error: the client
+ * already holds the base and its own edit, so this is the third input the three-way merge needs
+ * and withholding it would force another round trip through a moving target.
+ */
+function writeResponse(
+  c: { json: (body: unknown, status?: 200 | 201 | 404 | 409 | 422) => Response },
+  outcome:
+    | Awaited<ReturnType<typeof updateMock>>
+    | Awaited<ReturnType<typeof createMock>>
+    | Awaited<ReturnType<typeof deleteMock>>,
+  okStatus: 200 | 201 = 200,
+): Response {
+  if (outcome.ok) return c.json({ mock: outcome.value }, okStatus)
+  if (outcome.reason === 'conflict') {
+    return c.json(
+      {
+        error: 'conflict',
+        message: outcome.summary,
+        current: outcome.current,
+        currentHash: outcome.currentHash,
+        baseHash: outcome.baseHash,
+      },
+      409,
+    )
+  }
+  if (outcome.reason === 'not_found') return c.json({ error: 'not_found' }, 404)
+  return c.json(
+    {
+      error: 'unsupported',
+      message: 'This backend does not support that operation on a single stub.',
+    },
+    404,
+  )
 }
 
 /** How far back our mirrored journal reaches; null when we have never polled it. */
@@ -106,6 +160,27 @@ function readRequestFromEvent(raw: unknown): LoggedRequest {
 
 export function createApp(options: AppOptions) {
   const { db, registry, mode } = options
+  // Resolved once: shelling out to git on every write would be absurd, and the answer cannot
+  // change while the process runs.
+  const actor = options.actor ?? resolveActor(mode)
+
+  /**
+   * Everything a write needs, or the reason it must not happen.
+   *
+   * A read-only profile returns 404 rather than 403 on purpose: the route does not exist for
+   * that profile, which is exactly what the UI models when it declines to draw a Save button
+   * (design brief §7.1 — never a control that fails).
+   */
+  const writeContext = (
+    profileId: string,
+  ): { context: WriteContext } | { error: 'not_found' | 'not_connected' } => {
+    const profile = getProfile(db, profileId)
+    if (profile === null) return { error: 'not_found' }
+    if (profile.readOnly) return { error: 'not_found' }
+    const connection = registry.get(profileId)
+    if (connection === null) return { error: 'not_connected' }
+    return { context: { db, profile, connection, actor } }
+  }
 
   const app = new Hono()
     .onError((error, c) => {
@@ -330,6 +405,91 @@ export function createApp(options: AppOptions) {
         request,
         nearMisses: nearMisses.slice(0, MAX_CANDIDATES),
         candidatesConsidered: nearMisses.length,
+      })
+    })
+
+    /** Replace a stub's vendor document. The conflict check lives in `writes.ts`. */
+    .put('/api/:p/mocks/:key', async (c) => {
+      const resolved = writeContext(c.req.param('p'))
+      if ('error' in resolved) {
+        return c.json({ error: resolved.error }, resolved.error === 'not_found' ? 404 : 409)
+      }
+      const parsed = writeBodySchema.safeParse(await c.req.json())
+      if (!parsed.success)
+        return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400)
+
+      const existing = getMock(db, c.req.param('p'), c.req.param('key'))
+      if (existing === null) return c.json({ error: 'not_found' }, 404)
+      if (existing.serverId === null) {
+        return c.json(
+          {
+            error: 'no_server_id',
+            message:
+              'This backend assigns no stable id, so a single stub cannot be addressed for ' +
+              'update. Editing is whole-document on such backends.',
+          },
+          404,
+        )
+      }
+
+      const outcome = await updateMock(resolved.context, {
+        clientKey: c.req.param('key'),
+        serverId: existing.serverId,
+        raw: parsed.data.raw,
+        baseHash: parsed.data.baseHash,
+      })
+      return writeResponse(c, outcome)
+    })
+
+    .post('/api/:p/mocks', async (c) => {
+      const resolved = writeContext(c.req.param('p'))
+      if ('error' in resolved) {
+        return c.json({ error: resolved.error }, resolved.error === 'not_found' ? 404 : 409)
+      }
+      const parsed = createBodySchema.safeParse(await c.req.json())
+      if (!parsed.success)
+        return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400)
+      return writeResponse(c, await createMock(resolved.context, parsed.data.raw), 201)
+    })
+
+    .delete('/api/:p/mocks/:key', async (c) => {
+      const resolved = writeContext(c.req.param('p'))
+      if ('error' in resolved) {
+        return c.json({ error: resolved.error }, resolved.error === 'not_found' ? 404 : 409)
+      }
+      const parsed = deleteBodySchema.safeParse(await c.req.json().catch(() => ({})))
+      if (!parsed.success)
+        return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400)
+
+      const existing = getMock(db, c.req.param('p'), c.req.param('key'))
+      if (existing === null || existing.serverId === null)
+        return c.json({ error: 'not_found' }, 404)
+
+      return writeResponse(
+        c,
+        await deleteMock(resolved.context, {
+          clientKey: c.req.param('key'),
+          serverId: existing.serverId,
+          baseHash: parsed.data.baseHash,
+        }),
+      )
+    })
+
+    /** The local audit trail (FR-EDIT-8), scoped to one stub when asked. */
+    .get('/api/:p/audit', (c) => {
+      const profileId = c.req.param('p')
+      if (getProfile(db, profileId) === null) return c.json({ error: 'not_found' }, 404)
+      const clientKey = c.req.query('key')
+      return c.json({
+        entries: listAudit(db, profileId, {
+          limit: Number(c.req.query('limit') ?? 100),
+          ...(clientKey === undefined ? {} : { clientKey }),
+        }),
+        // The UI is required to repeat this; it is not a footnote.
+        scope:
+          mode === 'local'
+            ? 'Changes made through Mock Knight on this machine.'
+            : 'Changes made through this Mock Knight instance.',
       })
     })
 

@@ -93,6 +93,18 @@ export interface MockBackendAdapter {
   /** Valid only after `connect`; results are probed, not inferred from a version string. */
   capabilities(): ReadonlySet<CapabilityBit>
 
+  /**
+   * Interpret a vendor document as a draft.
+   *
+   * Required, not optional: an adapter that can read its backend's format already does this,
+   * and the write path needs it. When a user edits raw JSON, `raw` is the authoritative
+   * document and the canonical fields must be **derived from it** — passing canonical fields
+   * from some older version alongside a new `raw` makes `toVendor` patch the edit straight back
+   * out, silently. Asking the adapter closes that hole without teaching the write service any
+   * one backend's schema.
+   */
+  interpret(raw: JsonObject): MockDraft
+
   // Corpus — the only near-universal primitives (PRD Appendix B).
   listMocks(q?: { limit?: number; offset?: number }): Promise<Page<Mock>>
   replaceAll(mocks: readonly Mock[]): Promise<void>

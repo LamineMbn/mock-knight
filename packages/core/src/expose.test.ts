@@ -9,6 +9,7 @@ const implementation = {
   displayName: 'Test',
   connect: async () => ({ backendId: 'test', version: '1', fingerprint: 'f', adminUrl: 'u' }),
   capabilities: () => new Set(),
+  interpret: () => ({}) as never,
   listMocks: async () => ({ items: [], total: 0, limit: 50, offset: 0 }),
   replaceAll: async () => {},
   resetAll: async () => {},
@@ -27,6 +28,9 @@ describe('exposeCapableAdapter', () => {
     expect(typeof exposed.listMocks).toBe('function')
     expect(typeof exposed.replaceAll).toBe('function')
     expect(typeof exposed.resetAll).toBe('function')
+    // `interpret` is not capability-gated: reading its own vendor format is something every
+    // adapter can do, and the write path needs it before it knows whether a write is allowed.
+    expect(typeof exposed.interpret).toBe('function')
   })
 
   it('makes an unsupported method absent rather than present and throwing', () => {

@@ -200,6 +200,25 @@ export function replaceCorpus(
   return { inserted: mocks.length, profileId, fetchedAt }
 }
 
+/**
+ * Refresh a single stub after we wrote it, rather than re-ingesting the corpus.
+ *
+ * The FTS index is external-content, so the row has to be removed from it explicitly before the
+ * replacement is indexed — an `INSERT` alone leaves the old terms searchable and the stub turns
+ * up under text it no longer contains.
+ */
+export function replaceOne(db: Db, profileId: string, mock: Mock, fetchedAt: string): void {
+  const insert = db.prepare(INSERT_MOCK)
+  db.transaction(() => {
+    db.prepare(`DELETE FROM mock WHERE profile_id = ? AND client_key = ?`).run(
+      profileId,
+      mock.clientKey,
+    )
+    insert.run(toRow(profileId, mock, fetchedAt))
+    db.exec(`INSERT INTO mock_fts(mock_fts) VALUES('rebuild')`)
+  })()
+}
+
 export interface MirrorStatus {
   readonly profileId: string
   readonly count: number

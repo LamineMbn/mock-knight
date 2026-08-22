@@ -17,11 +17,12 @@
     "test": "vitest run --root ../.."
   },
   "dependencies": {
-    "@mock-knight/core": "workspace:*",
-    "@mock-knight/adapter-wiremock": "workspace:*",
     "@hono/node-server": "^1.13.7",
+    "@mock-knight/adapter-wiremock": "workspace:*",
+    "@mock-knight/core": "workspace:*",
     "better-sqlite3": "^13.0.0",
     "hono": "^4.10.0",
+    "microdiff": "^1.6.0",
     "pino": "^9.5.0",
     "zod": "^4.0.0"
   },

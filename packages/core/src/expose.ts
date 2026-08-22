@@ -22,6 +22,7 @@ export function exposeCapableAdapter(
     displayName: implementation.displayName,
     connect: implementation.connect.bind(implementation),
     capabilities: () => capabilities,
+    interpret: implementation.interpret.bind(implementation),
     listMocks: implementation.listMocks.bind(implementation),
     replaceAll: implementation.replaceAll.bind(implementation),
     resetAll: implementation.resetAll.bind(implementation),

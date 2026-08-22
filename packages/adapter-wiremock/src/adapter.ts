@@ -13,11 +13,12 @@ import type {
   Json,
   JsonObject,
   Mock,
+  MockDraft,
   MockBackendAdapter,
   Page,
 } from '@mock-knight/core'
 import { WireMockClient } from './client.js'
-import { toCanonical } from './mapping.js'
+import { toCanonical, toVendor } from './mapping.js'
 import { toNearMiss, toServeEvent } from './journal.js'
 
 /**
@@ -316,6 +317,56 @@ export class WireMockAdapter implements MockBackendAdapter {
       body: pattern,
     })
     return readNearMisses(body, await this.readScenarioStates())
+  }
+
+  interpret(raw: JsonObject): MockDraft {
+    const {
+      id: _id,
+      clientKey: _key,
+      contentHash: _hash,
+      folderSource: _src,
+      ...draft
+    } = toCanonical(raw)
+    return draft
+  }
+
+  // -------------------------------------------------------------------- writes
+
+  /**
+   * WireMock replaces a mapping wholesale on `PUT`, so what we send is the entire document.
+   * That is exactly why `toVendor` patches the retained `raw` instead of rebuilding it: any
+   * field we failed to model would otherwise be dropped by the write itself, silently.
+   *
+   * Verified against 3.13.1: the id survives a PUT, an unknown id is a 404, and an unrecognised
+   * top-level property is a **422** — which is why `enabled` is never sent.
+   */
+  async updateMock(id: string, draft: MockDraft): Promise<Mock> {
+    const vendor = toVendor({ ...draft, id, clientKey: id, folderSource: 'none', contentHash: '' })
+    const { body } = await this.transport.json<JsonObject>(
+      'PUT',
+      `/mappings/${encodeURIComponent(id)}`,
+      { body: vendor },
+    )
+    return toCanonical(body)
+  }
+
+  async createMock(draft: MockDraft): Promise<Mock> {
+    const vendor = toVendor({
+      ...draft,
+      id: null,
+      clientKey: '',
+      folderSource: 'none',
+      contentHash: '',
+    })
+    // The server assigns the id, so anything we were carrying is stale and must not be sent.
+    delete vendor['id']
+    delete vendor['uuid']
+    const { body } = await this.transport.json<JsonObject>('POST', '/mappings', { body: vendor })
+    return toCanonical(body)
+  }
+
+  async deleteMock(id: string): Promise<void> {
+    await this.transport.json('DELETE', `/mappings/${encodeURIComponent(id)}`)
   }
 
   async listScenarios(): Promise<Scenario[]> {
