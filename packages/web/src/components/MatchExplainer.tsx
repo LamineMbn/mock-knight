@@ -4,6 +4,7 @@ import { api } from '../api.js'
 import type { Explanation, NearMiss, PredicateResult } from '../api.js'
 import { Button, InferenceLabel, MethodChip, Skeleton } from './primitives.js'
 import { toCurl } from '../curl.js'
+import { CreateFromRequest } from './CreateFromRequest.js'
 
 export interface MatchExplainerProps {
   profileId: string
@@ -286,6 +287,7 @@ function Candidate({
 
 export function MatchExplainer({ profileId, eventId, baseUrl, onClose }: MatchExplainerProps) {
   const [copied, setCopied] = useState(false)
+  const [creating, setCreating] = useState(false)
   const query = useQuery({
     queryKey: ['explain', profileId, eventId],
     queryFn: () => api.explain(profileId, eventId),
@@ -307,10 +309,19 @@ export function MatchExplainer({ profileId, eventId, baseUrl, onClose }: MatchEx
         padding: 32,
         zIndex: 50,
       }}
-      onClick={onClose}
+      /**
+       * Only a click on the backdrop itself closes this.
+       *
+       * `onClick={onClose}` closes on *bubbled* clicks too, which meant every click inside the
+       * create-stub dialog rendered below tore this one down under it. Comparing target to
+       * currentTarget is the fix; a stopPropagation wrapper only protects children that happen
+       * to sit inside it.
+       */
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
     >
       <div
-        onClick={(event) => event.stopPropagation()}
         style={{
           width: 'min(1040px, 100%)',
           maxHeight: '86vh',
@@ -341,6 +352,15 @@ export function MatchExplainer({ profileId, eventId, baseUrl, onClose }: MatchEx
                 {query.data.request.url}
               </span>
             </>
+          )}
+          {query.data !== undefined && (
+            /**
+             * The primary exit (design brief §6.4 rule 7). Most sessions end in "create a stub
+             * from this", so it is the emphasised action rather than one of three equals.
+             */
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              Create stub from this request
+            </Button>
           )}
           {query.data !== undefined && (
             <Button
@@ -448,6 +468,17 @@ export function MatchExplainer({ profileId, eventId, baseUrl, onClose }: MatchEx
           )}
         </div>
       </div>
+      {creating && (
+        <CreateFromRequest
+          profileId={profileId}
+          eventId={eventId}
+          onClose={() => setCreating(false)}
+          onCreated={() => {
+            setCreating(false)
+            onClose()
+          }}
+        />
+      )}
     </div>
   )
 }

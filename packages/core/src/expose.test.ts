@@ -10,6 +10,7 @@ const implementation = {
   connect: async () => ({ backendId: 'test', version: '1', fingerprint: 'f', adminUrl: 'u' }),
   capabilities: () => new Set(),
   interpret: () => ({}) as never,
+  render: () => ({}),
   listMocks: async () => ({ items: [], total: 0, limit: 50, offset: 0 }),
   replaceAll: async () => {},
   resetAll: async () => {},

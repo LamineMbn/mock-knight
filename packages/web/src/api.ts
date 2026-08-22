@@ -204,6 +204,21 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ eventId }),
     }),
+  stubFromRequest: (
+    profileId: string,
+    body: { eventId: number; tightness: string; matchBody: boolean },
+  ) =>
+    call<{ raw: Record<string, unknown>; notes: string[] }>(`/api/${profileId}/stub-from-request`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  createMock: (profileId: string, raw: unknown) =>
+    call<{ mock: MockListItem }>(`/api/${profileId}/mocks`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ raw }),
+    }),
   updateMock: (profileId: string, clientKey: string, raw: unknown, baseHash: string) =>
     call<{ mock: MockListItem & { raw: unknown } }>(
       `/api/${profileId}/mocks/${encodeURIComponent(clientKey)}`,

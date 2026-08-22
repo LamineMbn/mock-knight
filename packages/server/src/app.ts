@@ -10,6 +10,7 @@ import { listAudit } from './db/audit.js'
 import { createMock, deleteMock, updateMock } from './writes.js'
 import type { WriteContext } from './writes.js'
 import { resolveActor } from './identity.js'
+import { MATCHER_TIGHTNESS, stubFromRequest } from '@mock-knight/core'
 import {
   createProfile,
   deleteProfile,
@@ -73,6 +74,21 @@ const writeBodySchema = z.object({
 
 const createBodySchema = z.object({ raw: z.record(z.string(), z.any()) })
 const deleteBodySchema = z.object({ baseHash: z.string().min(1) })
+
+const fromRequestSchema = z.object({
+  eventId: z.number().int().optional(),
+  request: z
+    .object({
+      method: z.string(),
+      url: z.string(),
+      headers: z.record(z.string(), z.union([z.string(), z.array(z.string())])).default({}),
+      body: z.string().nullable().default(null),
+    })
+    .optional(),
+  tightness: z.enum(MATCHER_TIGHTNESS).default('method-and-path'),
+  matchBody: z.boolean().default(false),
+  responseStatus: z.number().int().optional(),
+})
 
 const explainBodySchema = z.object({
   eventId: z.number().int().optional(),
@@ -491,6 +507,44 @@ export function createApp(options: AppOptions) {
             ? 'Changes made through Mock Knight on this machine.'
             : 'Changes made through this Mock Knight instance.',
       })
+    })
+
+    /**
+     * Compose a stub from a captured request — FR-TRAF-5. Renders only; nothing is written.
+     *
+     * Separate from the create route on purpose: every choice this makes is a guess about
+     * intent, so the document and the reasoning are shown for review before anything reaches
+     * the server.
+     */
+    .post('/api/:p/stub-from-request', async (c) => {
+      const profileId = c.req.param('p')
+      if (getProfile(db, profileId) === null) return c.json({ error: 'not_found' }, 404)
+      const connection = registry.get(profileId)
+      if (connection === null) return c.json({ error: 'not_connected' }, 409)
+
+      const parsed = fromRequestSchema.safeParse(await c.req.json())
+      if (!parsed.success)
+        return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400)
+
+      let request: LoggedRequest
+      if (parsed.data.eventId !== undefined) {
+        const raw = getServeEventRaw(db, profileId, parsed.data.eventId)
+        if (raw === null) return c.json({ error: 'not_found' }, 404)
+        request = readRequestFromEvent(raw)
+      } else if (parsed.data.request !== undefined) {
+        request = { ...EMPTY_REQUEST, ...parsed.data.request }
+      } else {
+        return c.json({ error: 'invalid_body', message: 'Give either eventId or request.' }, 400)
+      }
+
+      const generated = stubFromRequest(request, {
+        tightness: parsed.data.tightness,
+        matchBody: parsed.data.matchBody,
+        ...(parsed.data.responseStatus === undefined
+          ? {}
+          : { responseStatus: parsed.data.responseStatus }),
+      })
+      return c.json({ raw: connection.adapter.render(generated.draft), notes: generated.notes })
     })
 
     .post('/api/:p/refresh', async (c) => {

@@ -133,3 +133,87 @@ test('deleting needs the stub named back', async ({ page }) => {
 
   await expect.poll(async () => customers(await mappings()), { timeout: 5000 }).toBeUndefined()
 })
+
+test('a stub created from an unmatched request makes that request match', async ({ page }) => {
+  // The loop this closes: a request fails, the explainer says why, and the fix is one dialog
+  // away. Success is not "a stub appeared" — it is that replaying the request now matches.
+  await fetch(`${WIREMOCK}/__admin/requests`, { method: 'DELETE' })
+  await fetch(`${WIREMOCK}/v1/somewhere-new`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-Mock': 'brand-new-case' },
+    body: '{"hello":"world"}',
+  })
+
+  await page.goto('/?screen=traffic')
+  const row = page.locator('tbody tr').filter({ hasText: '/v1/somewhere-new' }).first()
+  await row.getByRole('button', { name: 'Why?' }).click()
+
+  const explainer = page.getByRole('dialog', { name: "Why didn't this match?" })
+  await expect(explainer).toBeVisible()
+  await explainer.getByRole('button', { name: 'Create stub from this request' }).click()
+
+  const create = page.getByRole('dialog', { name: 'Create a stub from this request' })
+  await expect(create).toBeVisible()
+
+  // Every choice is shown with its consequence rather than buried in a default.
+  await expect(create).toContainText('Matches any call to this path with this method.')
+  await expect(create).toContainText('composed by Mock Knight')
+
+  const generated = create.getByLabel('Generated stub')
+  await expect(generated).toHaveValue(/somewhere-new/)
+  // A placeholder body the author is meant to replace, not a fabricated response.
+  await expect(generated).toHaveValue(/TODO/)
+
+  await create.getByRole('button', { name: 'Create stub' }).click()
+  await expect(create).toHaveCount(0, { timeout: 8000 })
+
+  // The proof: replay the request and it is served rather than rejected.
+  await expect
+    .poll(
+      async () => {
+        const response = await fetch(`${WIREMOCK}/v1/somewhere-new`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{"hello":"world"}',
+        })
+        return response.status
+      },
+      { timeout: 8000 },
+    )
+    .toBe(200)
+})
+
+test('the tightest setting pins the discriminating header but never a credential', async ({
+  page,
+}) => {
+  await fetch(`${WIREMOCK}/__admin/requests`, { method: 'DELETE' })
+  await fetch(`${WIREMOCK}/v1/secured`, {
+    method: 'GET',
+    headers: { 'X-Mock': 'the-discriminator', Authorization: 'Bearer super-secret' },
+  })
+
+  await page.goto('/?screen=traffic')
+  await page
+    .locator('tbody tr')
+    .filter({ hasText: '/v1/secured' })
+    .first()
+    .getByRole('button', { name: 'Why?' })
+    .click()
+  await page
+    .getByRole('dialog', { name: "Why didn't this match?" })
+    .getByRole('button', { name: 'Create stub from this request' })
+    .click()
+
+  const create = page.getByRole('dialog', { name: 'Create a stub from this request' })
+  await create.getByRole('button', { name: 'Exact' }).click()
+
+  // Changing a setting must not tear the dialog down. It did: the explainer behind it closed on
+  // *bubbled* clicks, so every control in here dismissed the thing it was rendered inside.
+  await expect(create).toBeVisible()
+
+  const generated = create.getByLabel('Generated stub')
+  await expect(generated).toHaveValue(/the-discriminator/)
+  // A token must never be copied into a stub, and the reason is stated rather than silent.
+  await expect(generated).not.toHaveValue(/super-secret/)
+  await expect(create).toContainText('credential')
+})

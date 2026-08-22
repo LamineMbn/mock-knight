@@ -330,6 +330,12 @@ export class WireMockAdapter implements MockBackendAdapter {
     return draft
   }
 
+  render(draft: MockDraft): JsonObject {
+    // `toVendor` patches a retained document; with an empty one every canonical field differs
+    // from "absent" and is therefore written, which is exactly how a fresh stub is built.
+    return toVendor({ ...draft, id: null, clientKey: '', folderSource: 'none', contentHash: '' })
+  }
+
   // -------------------------------------------------------------------- writes
 
   /**

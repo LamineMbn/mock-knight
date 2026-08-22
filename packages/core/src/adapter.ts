@@ -105,6 +105,14 @@ export interface MockBackendAdapter {
    */
   interpret(raw: JsonObject): MockDraft
 
+  /**
+   * The mirror of `interpret`: render a draft as a vendor document.
+   *
+   * Needed wherever a stub is *composed* rather than edited — creating one from a captured
+   * request, for instance — so the UI can show exactly what will be written before it is.
+   */
+  render(draft: MockDraft): JsonObject
+
   // Corpus — the only near-universal primitives (PRD Appendix B).
   listMocks(q?: { limit?: number; offset?: number }): Promise<Page<Mock>>
   replaceAll(mocks: readonly Mock[]): Promise<void>
