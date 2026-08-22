@@ -4,6 +4,7 @@ import type {
   LoggedRequest,
   NearMiss,
   RequestMatcher,
+  Scenario,
   ServeEvent,
   CapabilityBit,
   CapabilityProvenance,
@@ -303,7 +304,7 @@ export class WireMockAdapter implements MockBackendAdapter {
         body: request.body ?? '',
       },
     })
-    return readNearMisses(body)
+    return readNearMisses(body, await this.readScenarioStates())
   }
 
   /** The reverse direction (FR-TRAF-4): which logged requests came close to *this* matcher. */
@@ -314,7 +315,36 @@ export class WireMockAdapter implements MockBackendAdapter {
     const { body } = await this.transport.json<JsonObject>('POST', '/near-misses/request-pattern', {
       body: pattern,
     })
-    return readNearMisses(body)
+    return readNearMisses(body, await this.readScenarioStates())
+  }
+
+  async listScenarios(): Promise<Scenario[]> {
+    const { body } = await this.transport.json<JsonObject>('GET', '/scenarios')
+    const raw = Array.isArray(body['scenarios']) ? body['scenarios'] : []
+    return raw.filter(isJsonObject).map((entry) => ({
+      name: typeof entry['name'] === 'string' ? entry['name'] : '',
+      currentState: typeof entry['state'] === 'string' ? entry['state'] : '',
+      possibleStates: Array.isArray(entry['possibleStates'])
+        ? entry['possibleStates'].filter((v): v is string => typeof v === 'string')
+        : [],
+    }))
+  }
+
+  /**
+   * Current state per scenario, read fresh for each explanation.
+   *
+   * Not cached: scenario state is exactly what changes between the request that failed and the
+   * moment someone asks why, and a stale answer here would produce a confidently wrong row in
+   * the one screen that must not have one. Failure is swallowed so the explainer degrades to
+   * "unknown" for that row rather than losing the whole explanation.
+   */
+  private async readScenarioStates(): Promise<Record<string, string>> {
+    try {
+      const scenarios = await this.listScenarios()
+      return Object.fromEntries(scenarios.map((s) => [s.name, s.currentState]))
+    } catch {
+      return {}
+    }
   }
 
   async findUnusedMocks(): Promise<Mock[]> {
@@ -339,7 +369,7 @@ export class WireMockAdapter implements MockBackendAdapter {
  */
 export function fingerprintFor(adminUrl: string, version: string | null): string {
   return createHash('sha256')
-    .update(`${adminUrl} ${version ?? 'unknown'}`)
+    .update(`${adminUrl} ${version ?? 'unknown'}`)
     .digest('hex')
     .slice(0, 32)
 }
@@ -348,10 +378,13 @@ function isJsonObject(value: Json): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function readNearMisses(body: JsonObject): NearMiss[] {
+function readNearMisses(
+  body: JsonObject,
+  scenarioStates: Readonly<Record<string, string>> = {},
+): NearMiss[] {
   const raw = Array.isArray(body['nearMisses']) ? body['nearMisses'] : []
   return raw
     .filter(isJsonObject)
-    .map(toNearMiss)
+    .map((entry) => toNearMiss(entry, scenarioStates))
     .sort((a, b) => a.distance - b.distance)
 }

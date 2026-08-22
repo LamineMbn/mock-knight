@@ -304,3 +304,49 @@ describe('the summary the callout is written from', () => {
     expect(result.summary).toBe('Differs on 3 predicates: method, headers.X-Tenant, body')
   })
 })
+
+describe('scenario state — the failure with no other symptom', () => {
+  const binding = { scenario: 'checkout', requiredState: 'Started', newState: 'ordered' }
+
+  it('passes when the scenario is in the required state', () => {
+    const result = explainMatch(matcher(), request(), {
+      state: binding,
+      scenarioStates: { checkout: 'Started' },
+    })
+    expect(find(result.predicates, 'scenario.checkout')).toMatchObject({
+      outcome: 'pass',
+      expected: 'Started',
+      actual: 'Started',
+    })
+  })
+
+  it('fails, and says so in the callout, when the scenario has moved on', () => {
+    const result = explainMatch(matcher(), request(), {
+      state: binding,
+      scenarioStates: { checkout: 'ordered' },
+    })
+    expect(find(result.predicates, 'scenario.checkout')).toMatchObject({
+      outcome: 'fail',
+      expected: 'Started',
+      actual: 'ordered',
+    })
+    // Without this sentence the screen reports "every predicate matches" and helps nobody.
+    expect(result.summary).toBe(
+      'Closest stub is waiting on scenario “checkout”: it needs state “Started”, but the scenario is in “ordered”.',
+    )
+  })
+
+  it('says unknown rather than guessing when the current state was not read', () => {
+    const result = explainMatch(matcher(), request(), { state: binding })
+    expect(find(result.predicates, 'scenario.checkout')?.outcome).toBe('unknown')
+    expect(result.mismatchCount).toBe(0)
+  })
+
+  it('adds no row for a stub with no state requirement', () => {
+    const stateless = explainMatch(matcher(), request(), {
+      state: { scenario: 'checkout', requiredState: null, newState: 'ordered' },
+      scenarioStates: { checkout: 'ordered' },
+    })
+    expect(stateless.predicates.some((p) => p.field.startsWith('scenario.'))).toBe(false)
+  })
+})

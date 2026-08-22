@@ -168,6 +168,10 @@ describe('the BFF routes behind the screen', () => {
     await app.request(`/api/profiles/${profile.id}/connect`, { method: 'POST' })
 
     await fetch(`${WIREMOCK_URL}/__admin/requests`, { method: 'DELETE' })
+    // Reset scenario state first, so the *only* thing wrong with the request below is the
+    // header. Without this an earlier test has already advanced `checkout` to `ordered` and the
+    // explanation correctly reports two failures instead of one.
+    await fetch(`${WIREMOCK_URL}/__admin/scenarios/reset`, { method: 'POST' })
     await fetch(`${WIREMOCK_URL}/v1/orders`, {
       method: 'POST',
       headers: { 'X-Tenant': 'acme-corp', 'content-type': 'application/json' },
@@ -208,10 +212,18 @@ describe('the BFF routes behind the screen', () => {
     expect(result.nearMisses.length).toBeGreaterThan(0)
     const closest = result.nearMisses[0]!
     expect(closest.stubName).toBe('orders create 500')
-    expect(closest.predicates.filter((p) => p.outcome === 'fail')[0]).toMatchObject({
-      field: 'headers.X-Tenant',
-      expected: 'acme',
-      actual: 'acme-corp',
+    expect(closest.predicates.filter((p) => p.outcome === 'fail')).toEqual([
+      expect.objectContaining({
+        field: 'headers.X-Tenant',
+        expected: 'acme',
+        actual: 'acme-corp',
+      }),
+    ])
+    // The scenario is in the state the stub needs, and the row says so rather than being absent.
+    expect(closest.predicates.find((p) => p.field === 'scenario.checkout')).toMatchObject({
+      outcome: 'pass',
+      expected: 'Started',
+      actual: 'Started',
     })
     expect(closest.predicateProvenance).toBe('inferred')
 

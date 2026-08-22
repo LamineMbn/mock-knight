@@ -6,12 +6,22 @@ import type { CSSProperties, ReactNode } from 'react'
  * and a component that hardcodes one can never follow.
  */
 
+/**
+ * Hue per method, following Insomnia so the mapping is one a developer already knows.
+ *
+ * Every pair is contrast-checked in `design/design-tokens.py`; change a value there and
+ * regenerate, never here. Anything unlisted (TRACE, CONNECT, a custom verb, WireMock's ANY)
+ * falls through to the neutral chip rather than borrowing a colour that means something else.
+ */
 const METHOD_TOKENS: Record<string, string> = {
   GET: 'get',
   POST: 'post',
   PUT: 'put',
   PATCH: 'patch',
   DELETE: 'delete',
+  HEAD: 'head',
+  OPTIONS: 'options',
+  QUERY: 'query',
 }
 
 /**
@@ -47,6 +57,11 @@ export function MethodChip({ method }: { method: string | null }) {
 /**
  * Status codes are coloured text with no chip — the numeral is already its own label, so an
  * icon would be redundant and a chip would compete with the method chip beside it.
+ *
+ * 2xx is green by explicit request. Note the trade this makes: design brief §3.1 reserved
+ * green and red for matched/unmatched, and on the Traffic screen a green 200 now sits beside a
+ * red UNMATCHED stripe. Match state stays legible because it is triple-encoded — stripe, filled
+ * icon, and a text label — so the signal survives; but the two hues no longer mean one thing.
  */
 export function StatusCode({ status }: { status: number | null }) {
   if (status === null) return <span style={{ color: 'var(--mk-text-tertiary)' }}>—</span>
@@ -57,7 +72,9 @@ export function StatusCode({ status }: { status: number | null }) {
         ? 'var(--mk-warning-text)'
         : status >= 300
           ? 'var(--mk-accent-text)'
-          : 'var(--mk-text-primary)'
+          : status >= 200
+            ? 'var(--mk-success-text)'
+            : 'var(--mk-text-primary)'
   return (
     <span className="mk-tabular" style={{ color: token, fontWeight: 500 }}>
       {status}

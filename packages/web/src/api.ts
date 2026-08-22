@@ -86,6 +86,59 @@ export interface CapabilityRow {
   whenOff: string
 }
 
+export interface PredicateResult {
+  field: string
+  outcome: 'pass' | 'fail' | 'unknown'
+  expected: string | null
+  actual: string | null
+  operator: string | null
+  note: string | null
+}
+
+export interface NearMiss {
+  clientKey: string | null
+  stubName: string | null
+  distance: number
+  mismatchCount: number
+  unknownCount: number
+  predicates: PredicateResult[]
+  /** Where the candidate and its ranking came from. */
+  provenance: 'server' | 'inferred'
+  /** Where the per-field table came from — different, and shown differently. */
+  predicateProvenance: 'server' | 'inferred'
+}
+
+export interface ServeEventRow {
+  id: number
+  upstreamId: string
+  at: string
+  matched: boolean
+  matchedClientKey: string | null
+  method: string | null
+  url: string | null
+  status: number | null
+  correlation: string | null
+}
+
+export interface JournalPage {
+  items: ServeEventRow[]
+  total: number
+  earliestAt: string | null
+  /** The journal is finite and resettable; conclusions drawn from it carry this. */
+  window: { earliestAt: string | null; bounded: boolean }
+}
+
+export interface Explanation {
+  request: {
+    method: string
+    url: string
+    headers: Record<string, string | string[]>
+    body: string | null
+  }
+  nearMisses: NearMiss[]
+  candidatesConsidered: number
+}
+
 /** Carries the upstream detail so the UI can put it behind a copyable disclosure. */
 export class ApiError extends Error {
   constructor(
@@ -117,6 +170,17 @@ export const api = {
     call<CorpusPage>(
       `/api/${profileId}/mocks?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}`,
     ),
+  events: (profileId: string, matched: 'all' | 'matched' | 'unmatched', limit = 200) =>
+    call<JournalPage>(
+      `/api/${profileId}/events?limit=${limit}` +
+        (matched === 'all' ? '' : `&matched=${matched === 'matched'}`),
+    ),
+  explain: (profileId: string, eventId: number) =>
+    call<Explanation>(`/api/${profileId}/explain`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ eventId }),
+    }),
   mock: (profileId: string, clientKey: string) =>
     call<{ mock: MockListItem & { raw: unknown } }>(
       `/api/${profileId}/mocks/${encodeURIComponent(clientKey)}`,

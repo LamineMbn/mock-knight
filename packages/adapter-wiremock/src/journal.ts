@@ -118,7 +118,10 @@ export function toServeEvent(raw: JsonObject, correlationHeader: string | null):
  * `distance` is passed through untouched and rendered as a bar rather than a number — 0.0121
  * means nothing to a developer, "one mismatch" does (design brief §6.4 rule 4).
  */
-export function toNearMiss(raw: JsonObject): NearMiss {
+export function toNearMiss(
+  raw: JsonObject,
+  scenarioStates: Readonly<Record<string, string>> = {},
+): NearMiss {
   const stubRaw = raw['stubMapping']
   const stub = isObject(stubRaw) ? toCanonical(stubRaw) : null
   const request = toLoggedRequest(asObject(raw['request']))
@@ -128,7 +131,7 @@ export function toNearMiss(raw: JsonObject): NearMiss {
   const explanation =
     stub === null
       ? { predicates: [], mismatchCount: 0, unknownCount: 0 }
-      : explainMatch(stub.request, request)
+      : explainMatch(stub.request, request, { state: stub.state, scenarioStates })
 
   return {
     clientKey: stub?.clientKey ?? null,

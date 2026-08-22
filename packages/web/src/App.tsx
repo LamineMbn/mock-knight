@@ -6,6 +6,7 @@ import type { QueryPlan } from '@mock-knight/core/types'
 import { CorpusList } from './components/CorpusList.js'
 import { FacetPane } from './components/FacetPane.js'
 import { StubDetail } from './components/StubDetail.js'
+import { TrafficScreen } from './components/TrafficScreen.js'
 import { Button, Chip } from './components/primitives.js'
 
 /**
@@ -17,7 +18,15 @@ import { Button, Chip } from './components/primitives.js'
 
 const PAGE_SIZE = 100
 
-function useUrlState(): [string, string | null, (query: string, key: string | null) => void] {
+export type Screen = 'corpus' | 'traffic'
+
+interface UrlState {
+  screen: Screen
+  query: string
+  selectedKey: string | null
+}
+
+function useUrlState(): [UrlState, (next: Partial<UrlState>) => void] {
   const read = () => new URLSearchParams(window.location.search)
   const [params, setParams] = useState(read)
 
@@ -27,21 +36,33 @@ function useUrlState(): [string, string | null, (query: string, key: string | nu
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
-  const update = useCallback((query: string, key: string | null) => {
-    const next = new URLSearchParams()
-    if (query !== '') next.set('q', query)
-    if (key !== null) next.set('stub', key)
-    const search = next.toString()
-    window.history.replaceState(null, '', search === '' ? window.location.pathname : `?${search}`)
-    setParams(next)
-  }, [])
+  const current: UrlState = {
+    screen: params.get('screen') === 'traffic' ? 'traffic' : 'corpus',
+    query: params.get('q') ?? '',
+    selectedKey: params.get('stub'),
+  }
 
-  return [params.get('q') ?? '', params.get('stub'), update]
+  const update = useCallback(
+    (patch: Partial<UrlState>) => {
+      const merged = { ...current, ...patch }
+      const next = new URLSearchParams()
+      if (merged.screen !== 'corpus') next.set('screen', merged.screen)
+      if (merged.query !== '') next.set('q', merged.query)
+      if (merged.selectedKey !== null) next.set('stub', merged.selectedKey)
+      const search = next.toString()
+      window.history.replaceState(null, '', search === '' ? window.location.pathname : `?${search}`)
+      setParams(next)
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [current.screen, current.query, current.selectedKey],
+  )
+
+  return [current, update]
 }
 
 export function App() {
   const queryClient = useQueryClient()
-  const [query, selectedKey, setUrlState] = useUrlState()
+  const [{ screen, query, selectedKey }, setUrlState] = useUrlState()
   const [draft, setDraft] = useState(query)
   const [expandedFolders, setExpandedFolders] = useState<ReadonlySet<string>>(new Set())
 
@@ -99,7 +120,7 @@ export function App() {
       const next = [...present.filter((part) => !dropped.has(part)), ...add]
       const joined = next.join(' ')
       setDraft(joined)
-      setUrlState(joined, selectedKey)
+      setUrlState({ query: joined })
     },
     [query, selectedKey, setUrlState],
   )
@@ -141,110 +162,118 @@ export function App() {
         count={mirror.data?.count ?? 0}
         onRefresh={() => refresh.mutate()}
         refreshing={refresh.isPending}
+        screen={screen}
+        onScreen={(next) => setUrlState({ screen: next })}
       />
 
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <FacetPane
-          facets={corpus.data?.facets}
-          active={activeFacetTokens}
-          onApply={applyFacetTokens}
-          expandedFolders={expandedFolders}
-          onExpandedFoldersChange={setExpandedFolders}
-        />
-
-        <main
-          style={{
-            flex: 1,
-            minWidth: 480,
-            display: 'flex',
-            flexDirection: 'column',
-            background: 'var(--mk-bg-surface)',
-          }}
-        >
-          <form
-            onSubmit={(event) => {
-              event.preventDefault()
-              setUrlState(draft, selectedKey)
-            }}
-            style={{ padding: 8, borderBottom: '1px solid var(--mk-border-default)' }}
-          >
-            <input
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="Search paths and bodies, or filter: method:POST status:5xx scenario:checkout"
-              aria-label="Search stubs"
-              style={{
-                width: '100%',
-                height: 30,
-                padding: '0 10px',
-                fontSize: 13,
-                fontFamily: 'inherit',
-                color: 'var(--mk-text-primary)',
-                background: 'var(--mk-bg-surface)',
-                border: '1px solid var(--mk-border-strong)',
-                borderRadius: 'var(--mk-radius-sm)',
-              }}
-            />
-            <QueryPlanPills plan={corpus.data?.plan} strategy={corpus.data?.textStrategy} />
-          </form>
-
-          <CorpusList
-            items={corpus.data?.items ?? []}
-            total={corpus.data?.total ?? 0}
-            showHeaderColumn={(corpus.data?.facets.header?.length ?? 0) > 0}
-            selectedKey={selectedKey}
-            onSelect={(key) => setUrlState(query, key === selectedKey ? null : key)}
-            loading={corpus.isPending}
-            emptyMessage={
-              query === '' ? (
-                <>
-                  <strong style={{ display: 'block', fontSize: 16, marginBottom: 6 }}>
-                    This server has no stubs yet.
-                  </strong>
-                  Nothing has been mirrored from {profile.baseUrl}.
-                </>
-              ) : (
-                <>
-                  <strong style={{ display: 'block', fontSize: 16, marginBottom: 6 }}>
-                    Nothing matched that search.
-                  </strong>
-                  Try removing a filter.
-                </>
-              )
-            }
+      {screen === 'traffic' ? (
+        <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+          <TrafficScreen profileId={profile.id} baseUrl={profile.baseUrl} />
+        </div>
+      ) : (
+        <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+          <FacetPane
+            facets={corpus.data?.facets}
+            active={activeFacetTokens}
+            onApply={applyFacetTokens}
+            expandedFolders={expandedFolders}
+            onExpandedFoldersChange={setExpandedFolders}
           />
 
-          <footer
+          <main
             style={{
-              height: 28,
+              flex: 1,
+              minWidth: 480,
               display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              padding: '0 10px',
-              borderTop: '1px solid var(--mk-border-default)',
-              fontSize: 12,
-              color: 'var(--mk-text-tertiary)',
+              flexDirection: 'column',
+              background: 'var(--mk-bg-surface)',
             }}
           >
-            <span className="mk-tabular">
-              {corpus.data?.total ?? 0} stubs
-              {corpus.data !== undefined && corpus.data.total > corpus.data.items.length
-                ? ` · ${corpus.data.items.length} shown`
-                : ''}
-            </span>
-            {corpus.data?.bodyIndexTruncated === true && (
-              <Chip
-                tone="warning"
-                title="Some response bodies were too large to index in full, so a body: search may be incomplete."
-              >
-                partial body index
-              </Chip>
-            )}
-          </footer>
-        </main>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                setUrlState({ query: draft })
+              }}
+              style={{ padding: 8, borderBottom: '1px solid var(--mk-border-default)' }}
+            >
+              <input
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder="Search paths and bodies, or filter: method:POST status:5xx scenario:checkout"
+                aria-label="Search stubs"
+                style={{
+                  width: '100%',
+                  height: 30,
+                  padding: '0 10px',
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                  color: 'var(--mk-text-primary)',
+                  background: 'var(--mk-bg-surface)',
+                  border: '1px solid var(--mk-border-strong)',
+                  borderRadius: 'var(--mk-radius-sm)',
+                }}
+              />
+              <QueryPlanPills plan={corpus.data?.plan} strategy={corpus.data?.textStrategy} />
+            </form>
 
-        <StubDetail profileId={profile.id} clientKey={selectedKey} />
-      </div>
+            <CorpusList
+              items={corpus.data?.items ?? []}
+              total={corpus.data?.total ?? 0}
+              showHeaderColumn={(corpus.data?.facets.header?.length ?? 0) > 0}
+              selectedKey={selectedKey}
+              onSelect={(key) => setUrlState({ selectedKey: key === selectedKey ? null : key })}
+              loading={corpus.isPending}
+              emptyMessage={
+                query === '' ? (
+                  <>
+                    <strong style={{ display: 'block', fontSize: 16, marginBottom: 6 }}>
+                      This server has no stubs yet.
+                    </strong>
+                    Nothing has been mirrored from {profile.baseUrl}.
+                  </>
+                ) : (
+                  <>
+                    <strong style={{ display: 'block', fontSize: 16, marginBottom: 6 }}>
+                      Nothing matched that search.
+                    </strong>
+                    Try removing a filter.
+                  </>
+                )
+              }
+            />
+
+            <footer
+              style={{
+                height: 28,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '0 10px',
+                borderTop: '1px solid var(--mk-border-default)',
+                fontSize: 12,
+                color: 'var(--mk-text-tertiary)',
+              }}
+            >
+              <span className="mk-tabular">
+                {corpus.data?.total ?? 0} stubs
+                {corpus.data !== undefined && corpus.data.total > corpus.data.items.length
+                  ? ` · ${corpus.data.items.length} shown`
+                  : ''}
+              </span>
+              {corpus.data?.bodyIndexTruncated === true && (
+                <Chip
+                  tone="warning"
+                  title="Some response bodies were too large to index in full, so a body: search may be incomplete."
+                >
+                  partial body index
+                </Chip>
+              )}
+            </footer>
+          </main>
+
+          <StubDetail profileId={profile.id} clientKey={selectedKey} />
+        </div>
+      )}
     </div>
   )
 }
@@ -256,6 +285,8 @@ function TopBar({
   count,
   onRefresh,
   refreshing,
+  screen,
+  onScreen,
 }: {
   profile: Profile
   version: string | null
@@ -263,6 +294,8 @@ function TopBar({
   count: number
   onRefresh: () => void
   refreshing: boolean
+  screen: Screen
+  onScreen: (next: Screen) => void
 }) {
   return (
     <header
@@ -312,19 +345,32 @@ function TopBar({
       </span>
 
       <nav style={{ marginLeft: 16, display: 'flex', gap: 4 }} aria-label="Screens">
-        {/* Only Corpus exists yet. The other three destinations are deliberately not drawn:
+        {/* Two of the four destinations exist. Scenarios and Sync are deliberately not drawn:
             a nav item that goes nowhere is a control that fails. */}
-        <span
-          aria-current="page"
-          style={{
-            padding: '4px 8px',
-            borderRadius: 'var(--mk-radius-sm)',
-            background: 'var(--mk-bg-emphasis)',
-            color: 'var(--mk-text-primary)',
-          }}
-        >
-          Corpus
-        </span>
+        {(
+          [
+            ['corpus', 'Corpus'],
+            ['traffic', 'Traffic'],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-current={screen === value ? 'page' : undefined}
+            onClick={() => onScreen(value)}
+            style={{
+              padding: '4px 8px',
+              font: 'inherit',
+              cursor: 'pointer',
+              border: 'none',
+              borderRadius: 'var(--mk-radius-sm)',
+              background: screen === value ? 'var(--mk-bg-emphasis)' : 'transparent',
+              color: screen === value ? 'var(--mk-text-primary)' : 'var(--mk-text-secondary)',
+            }}
+          >
+            {label}
+          </button>
+        ))}
       </nav>
 
       <span style={{ flex: 1 }} />

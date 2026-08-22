@@ -46,12 +46,18 @@ LIGHT = {
   "warning-bg":       "#FEF4E4",
   "warning-border":   "#EEC98C",
   # http methods (chip text on chip bg)
-  "method-get-text":    "#0B6E8C", "method-get-bg":    "#E3F4F9",
-  "method-post-text":   "#0F7A46", "method-post-bg":   "#E6F6ED",
-  "method-put-text":    "#8A5200", "method-put-bg":    "#FEF4E4",
-  "method-patch-text":  "#7A3EA1", "method-patch-bg":  "#F6EDFB",
-  "method-delete-text": "#C0272D", "method-delete-bg": "#FDECEC",
-  "method-other-text":  "#4A5065", "method-other-bg":  "#F1F2F6",
+  # HTTP method chips follow Insomnia's hue assignment so the mapping is already familiar:
+  # GET purple, POST green, PUT orange, PATCH yellow, DELETE red, HEAD/OPTIONS blue, QUERY
+  # magenta. Every pair below is still held to 4.5:1 against its own chip fill.
+  "method-get-text":     "#6E3BA8", "method-get-bg":     "#F4EDFB",
+  "method-post-text":    "#0F7A46", "method-post-bg":    "#E6F6ED",
+  "method-put-text":     "#9A4E14", "method-put-bg":     "#FDF0E6",
+  "method-patch-text":   "#7A5B00", "method-patch-bg":   "#FBF3D9",
+  "method-delete-text":  "#C0272D", "method-delete-bg":  "#FDECEC",
+  "method-head-text":    "#0B6E8C", "method-head-bg":    "#E3F4F9",
+  "method-options-text": "#1F5FBF", "method-options-bg": "#E9F0FE",
+  "method-query-text":   "#A62A72", "method-query-bg":   "#FDECF6",
+  "method-other-text":   "#4A5065", "method-other-bg":   "#F1F2F6",
   # code / json syntax
   "code-key":         "#2B4EC4",
   "code-string":      "#0F7A46",
@@ -103,12 +109,15 @@ DARK = {
   "warning-indicator":"#E8A93A",
   "warning-bg":       "#2A1F0A",
   "warning-border":   "#6B4A15",
-  "method-get-text":    "#57C7E8", "method-get-bg":    "#0D2630",
-  "method-post-text":   "#4FCF88", "method-post-bg":   "#0E2A1C",
-  "method-put-text":    "#F2B44A", "method-put-bg":    "#2A1F0A",
-  "method-patch-text":  "#C79BE8", "method-patch-bg":  "#241831",
-  "method-delete-text": "#FF8080", "method-delete-bg": "#2C1315",
-  "method-other-text":  "#A9AFC0", "method-other-bg":  "#1E212C",
+  "method-get-text":     "#C79BE8", "method-get-bg":     "#241831",
+  "method-post-text":    "#4FCF88", "method-post-bg":    "#0E2A1C",
+  "method-put-text":     "#F0A868", "method-put-bg":     "#2E1D10",
+  "method-patch-text":   "#E8C64A", "method-patch-bg":   "#2A2408",
+  "method-delete-text":  "#FF8080", "method-delete-bg":  "#2C1315",
+  "method-head-text":    "#57C7E8", "method-head-bg":    "#0D2630",
+  "method-options-text": "#8FB0FF", "method-options-bg": "#101C33",
+  "method-query-text":   "#F58AD0", "method-query-bg":   "#2E1024",
+  "method-other-text":   "#A9AFC0", "method-other-bg":   "#1E212C",
   "code-key":         "#8FB0FF",
   "code-string":      "#7DD8A0",
   "code-number":      "#E8A87C",
@@ -169,7 +178,7 @@ def checks(T):
         out.append((f"label on {k}-solid", T[f"{k}-on-solid"], T[f"{k}-solid"],
                     contrast(T[f"{k}-on-solid"],T[f"{k}-solid"]), 4.5))
     # method chips: text on own tint
-    for m in ["get","post","put","patch","delete","other"]:
+    for m in ["get","post","put","patch","delete","head","options","query","other"]:
         out.append((f"method {m.upper()} chip", T[f"method-{m}-text"], T[f"method-{m}-bg"],
                     contrast(T[f"method-{m}-text"],T[f"method-{m}-bg"]), 4.5))
     # semantic text on its own subtle bg (badges)

@@ -5,6 +5,7 @@ import type {
   PredicateOutcome,
   PredicateResult,
   RequestMatcher,
+  StateBinding,
 } from './model.js'
 
 /**
@@ -25,6 +26,20 @@ import type {
  *
  * Browser-safe: no `node:` imports.
  */
+
+/**
+ * Everything about a stub beyond its request matcher that decides whether it serves.
+ *
+ * Scenario state belongs here because it is the failure with no other symptom: the matcher
+ * matches, the request looks right, and the stub still does not fire because a previous request
+ * moved the scenario on. Without this row the screen says "every predicate matches" and leaves
+ * the developer exactly where they started — which is the situation the product exists to end.
+ */
+export interface MatchContext {
+  readonly state?: StateBinding | null
+  /** Current state per scenario name, as read from the server. Absent ⇒ we cannot judge. */
+  readonly scenarioStates?: Readonly<Record<string, string>>
+}
 
 export interface MatchExplanation {
   readonly predicates: readonly PredicateResult[]
@@ -306,14 +321,38 @@ function summarise(predicates: readonly PredicateResult[]): string {
     if (only.field.startsWith('queryParameters.')) {
       return `Closest stub differs on one query parameter: ${only.field.slice('queryParameters.'.length)}`
     }
+    if (only.field.startsWith('scenario.')) {
+      return `Closest stub is waiting on scenario “${only.field.slice('scenario.'.length)}”: it needs state “${only.expected ?? '?'}”, but the scenario is in “${only.actual ?? 'unknown'}”.`
+    }
     if (only.field.startsWith('body')) return 'Closest stub differs on the request body.'
     return `Closest stub differs on the ${only.field}.`
   }
   return `Differs on ${failures.length} predicates: ${failures.map((f) => f.field).join(', ')}`
 }
 
-export function explainMatch(matcher: RequestMatcher, request: LoggedRequest): MatchExplanation {
+export function explainMatch(
+  matcher: RequestMatcher,
+  request: LoggedRequest,
+  context: MatchContext = {},
+): MatchExplanation {
   const predicates: PredicateResult[] = []
+
+  const state = context.state ?? null
+  if (state !== null && state.requiredState !== null) {
+    const current = context.scenarioStates?.[state.scenario]
+    predicates.push({
+      field: `scenario.${state.scenario}`,
+      outcome:
+        current === undefined ? 'unknown' : current === state.requiredState ? 'pass' : 'fail',
+      operator: 'requiredScenarioState',
+      expected: state.requiredState,
+      actual: current ?? null,
+      note:
+        current === undefined
+          ? 'Mock Knight could not read this scenario’s current state from the server.'
+          : null,
+    })
+  }
 
   if (matcher.method !== null) {
     predicates.push({
