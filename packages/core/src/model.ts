@@ -179,13 +179,27 @@ export const loggedResponseSchema = z.object({
 })
 export type LoggedResponse = z.infer<typeof loggedResponseSchema>
 
+/**
+ * Three outcomes, not two.
+ *
+ * `unknown` is the honest answer for a matcher we cannot evaluate — an operator we do not
+ * implement, a JSONPath too complex for our reader, a regex whose Java semantics differ from
+ * JavaScript's. Collapsing that into `pass` would quietly assert something false in the one
+ * screen whose whole job is telling a developer the truth about why a request did not match.
+ */
+export const PREDICATE_OUTCOMES = ['pass', 'fail', 'unknown'] as const
+export const predicateOutcomeSchema = z.enum(PREDICATE_OUTCOMES)
+export type PredicateOutcome = (typeof PREDICATE_OUTCOMES)[number]
+
 export const predicateResultSchema = z.object({
   /** Dotted field path: `url`, `method`, `headers.x-tenant`, `body`. Drives the §6.4 table. */
   field: z.string(),
-  passed: z.boolean(),
+  outcome: predicateOutcomeSchema,
   expected: z.string().nullable().default(null),
   actual: z.string().nullable().default(null),
   operator: z.string().nullable().default(null),
+  /** Why we could not decide. Present only when `outcome` is `unknown`. */
+  note: z.string().nullable().default(null),
 })
 export type PredicateResult = z.infer<typeof predicateResultSchema>
 
@@ -204,8 +218,22 @@ export const nearMissSchema = z.object({
   /** 0 = identical. Rendered as a bar, never as a number (design brief §6.4 rule 4). */
   distance: z.number(),
   mismatchCount: z.number().int().nonnegative(),
+  /** How many predicates we could not evaluate — surfaced, never hidden. */
+  unknownCount: z.number().int().nonnegative().default(0),
   predicates: z.array(predicateResultSchema),
+  /**
+   * Where the *candidate and its ranking* came from. On WireMock this is `server`: it selects
+   * the near misses and scores the distance.
+   */
   provenance: provenanceSchema,
+  /**
+   * Where the *per-field table* came from — separately, because on WireMock they differ.
+   * `matchResult` carries only a scalar distance; `diffDescriptions` is empty in every response
+   * observed (§17.20), so the field-by-field breakdown is always Mock Knight's own work even
+   * when the ranking beside it is the server's. One provenance flag for both would have to lie
+   * about one of them.
+   */
+  predicateProvenance: provenanceSchema,
 })
 export type NearMiss = z.infer<typeof nearMissSchema>
 
