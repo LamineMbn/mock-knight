@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { resetToSeed } from './seed.js'
+import { WIREMOCK, resetToSeed } from './seed.js'
 
 /**
  * End-to-end against the real stack: CLI → SQLite mirror → BFF → SPA, with a real WireMock
@@ -139,3 +139,94 @@ for (const colorScheme of ['light', 'dark'] as const) {
     })
   })
 }
+
+/**
+ * Priority standing — FR-FIND-7.
+ *
+ * The corpus this is for has several stubs on one method and path, told apart by a request
+ * header, with `priority` deciding which one actually answers. In a flat list that is invisible:
+ * the stub you are reading may never be reached and nothing on the row says so.
+ *
+ * These stubs are added on top of the shared seed rather than into it, so the counts every
+ * other spec asserts stay where they were.
+ */
+const CONTENDERS = [
+  {
+    name: 'rates gold',
+    priority: 1,
+    request: { method: 'GET', urlPath: '/v1/rates', headers: { 'X-Tier': { equalTo: 'gold' } } },
+    response: { status: 200, body: 'gold' },
+  },
+  {
+    name: 'rates standard',
+    priority: 3,
+    request: { method: 'GET', urlPath: '/v1/rates', headers: { 'X-Tier': { equalTo: 'std' } } },
+    response: { status: 200, body: 'std' },
+  },
+  // No priority at all — judged at the default 5, so it loses to both of the above.
+  {
+    name: 'rates fallback',
+    request: { method: 'GET', urlPath: '/v1/rates' },
+    response: { status: 200, body: 'fallback' },
+  },
+]
+
+async function seedContenders(page: import('@playwright/test').Page) {
+  for (const mapping of CONTENDERS) {
+    const created = await fetch(`${WIREMOCK}/__admin/mappings`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(mapping),
+    })
+    if (!created.ok) throw new Error(`Seeding a contender failed with ${created.status}`)
+  }
+  const profiles = (await (await page.request.get('/api/profiles')).json()) as {
+    profiles: { id: string }[]
+  }
+  await page.request.post(`/api/${profiles.profiles[0]!.id}/refresh`)
+}
+
+test.describe('priority standing', () => {
+  test('shows which stub on a path actually answers, and which are shadowed', async ({ page }) => {
+    await seedContenders(page)
+    await page.goto('/?q=%2Fv1%2Frates')
+    await expect(page.locator(ROW)).toHaveCount(3)
+
+    const labels = await page
+      .locator(`${ROW} [role="gridcell"][aria-label^="Priority"]`)
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label')))
+
+    // The winner is named as such, not merely left unflagged.
+    expect(labels).toContainEqual(expect.stringContaining('Priority 1'))
+    expect(labels.find((l) => l?.startsWith('Priority 1'))).toContain('Answers first')
+
+    // The loser says how many beat it, and by how the default got there.
+    const last = labels.find((l) => l?.startsWith('Priority 5'))
+    expect(last).toContain('by default')
+    expect(last).toContain('Shadowed by 2 higher-priority stubs')
+
+    // The middle one is shadowed by exactly one.
+    expect(labels.find((l) => l?.startsWith('Priority 3'))).toContain(
+      'Shadowed by 1 higher-priority stub',
+    )
+  })
+
+  test('says nothing on a stub with no contenders', async ({ page }) => {
+    await page.goto('/?q=%2Fv1%2Fcustomers')
+    const cell = page.locator(`${ROW} [role="gridcell"][aria-label^="Priority"]`).first()
+    // A flag on every row would mean nothing; silence here is what makes the flag readable.
+    await expect(cell).toHaveAttribute('aria-label', 'Priority 5 by default')
+    await expect(cell.getByText(/of \d/)).toHaveCount(0)
+  })
+
+  test('the standing is the corpus, not the current search', async ({ page }) => {
+    await seedContenders(page)
+    // Filtering down to the shadowed stub alone must not make it look uncontested: a warning
+    // that vanishes when you look straight at it is worse than no warning.
+    await page.goto('/?q=fallback')
+    await expect(page.locator(ROW)).toHaveCount(1)
+    await expect(
+      page.locator(`${ROW} [role="gridcell"][aria-label^="Priority"]`).first(),
+    ).toHaveAttribute('aria-label', /Shadowed by 2 higher-priority stubs/)
+  })
+})

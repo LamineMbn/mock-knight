@@ -2,7 +2,15 @@ import { useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { CSSProperties } from 'react'
 import type { MockListItem } from '../api.js'
-import { Chip, MethodChip, MiddleEllipsis, Skeleton, StatusCode } from './primitives.js'
+import {
+  Chip,
+  MethodChip,
+  MiddleEllipsis,
+  PriorityCell,
+  Skeleton,
+  StatusCode,
+  priorityLabel,
+} from './primitives.js'
 
 /**
  * The stub list — design brief §6.2.
@@ -45,9 +53,27 @@ function columnsFor(showHeader: boolean): Column[] {
     { key: 'path', label: 'Path', width: 'flex' },
     ...(showHeader ? [{ key: 'header', label: 'Header', width: 240 } as Column] : []),
     { key: 'status', label: 'Status', width: 56 },
+    { key: 'priority', label: 'Priority', width: 104 },
     { key: 'scenario', label: 'Scenario', width: 112 },
     { key: 'served', label: 'Last served', width: 96 },
   ]
+}
+
+/**
+ * Look a column up by name.
+ *
+ * The cells used to index this array positionally, which meant the Header column being
+ * conditional had every later cell written as `COLUMNS[showHeaderColumn ? 4 : 3]`. Adding a
+ * column renumbered all of them, and getting one wrong misaligns a cell from its header
+ * silently — the row still renders, just under the wrong heading.
+ */
+function columnLookup(columns: Column[]): (key: string) => Column {
+  const byKey = new Map(columns.map((column) => [column.key, column]))
+  return (key) => {
+    const found = byKey.get(key)
+    if (found === undefined) throw new Error(`No such column: ${key}`)
+    return found
+  }
 }
 
 function cellStyle(column: Column): CSSProperties {
@@ -109,6 +135,7 @@ export function CorpusList({
   showHeaderColumn,
 }: CorpusListProps) {
   const COLUMNS = columnsFor(showHeaderColumn)
+  const col = columnLookup(COLUMNS)
   const scrollRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
     count: items.length,
@@ -207,13 +234,13 @@ export function CorpusList({
                     cursor: 'pointer',
                   }}
                 >
-                  <span role="gridcell" style={cellStyle(COLUMNS[0]!)}>
+                  <span role="gridcell" style={cellStyle(col('method'))}>
                     <MethodChip method={item.method} />
                   </span>
                   <span
                     role="gridcell"
                     className="mk-mono"
-                    style={{ ...cellStyle(COLUMNS[1]!), fontSize: 12 }}
+                    style={{ ...cellStyle(col('path')), fontSize: 12 }}
                   >
                     <MiddleEllipsis text={item.url?.value ?? item.name ?? '—'} tailChars={16} />
                     {item.isProxy && (
@@ -236,15 +263,22 @@ export function CorpusList({
                     <span
                       role="gridcell"
                       className="mk-mono"
-                      style={{ ...cellStyle(COLUMNS[2]!), fontSize: 12 }}
+                      style={{ ...cellStyle(col('header')), fontSize: 12 }}
                     >
                       <HeaderCell headers={item.headers} />
                     </span>
                   )}
-                  <span role="gridcell" style={cellStyle(COLUMNS[showHeaderColumn ? 3 : 2]!)}>
+                  <span role="gridcell" style={cellStyle(col('status'))}>
                     <StatusCode status={item.status} />
                   </span>
-                  <span role="gridcell" style={cellStyle(COLUMNS[showHeaderColumn ? 4 : 3]!)}>
+                  <span
+                    role="gridcell"
+                    style={cellStyle(col('priority'))}
+                    aria-label={priorityLabel(item.standing)}
+                  >
+                    <PriorityCell standing={item.standing} />
+                  </span>
+                  <span role="gridcell" style={cellStyle(col('scenario'))}>
                     {item.scenario !== null && (
                       <Chip tone="accent" title={`Scenario: ${item.scenario}`}>
                         <MiddleEllipsis text={item.scenario} tailChars={5} />
@@ -255,7 +289,7 @@ export function CorpusList({
                     role="gridcell"
                     className="mk-tabular"
                     style={{
-                      ...cellStyle(COLUMNS[showHeaderColumn ? 5 : 4]!),
+                      ...cellStyle(col('served')),
                       color: 'var(--mk-text-tertiary)',
                       fontSize: 12,
                     }}

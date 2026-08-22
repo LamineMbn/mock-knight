@@ -1,4 +1,4 @@
-import type { QueryPlan, ScenarioAnalysis } from '@mock-knight/core/types'
+import type { PriorityStanding, QueryPlan, ScenarioAnalysis } from '@mock-knight/core/types'
 export type { ScenarioAnalysis }
 
 /**
@@ -30,6 +30,11 @@ export interface MockListItem {
   bodyTruncated: boolean
   lastServedAt: string | null
   contentHash: string
+  /**
+   * Which stub wins when several match the same method and path (FR-FIND-7). Mock Knight's own
+   * inference over the full corpus, not something the server reported — render it as such.
+   */
+  standing: PriorityStanding
 }
 
 export interface FacetBucket {

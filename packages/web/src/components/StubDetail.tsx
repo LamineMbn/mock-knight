@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../api.js'
+import { describeStanding } from '@mock-knight/core/types'
 import type { JsonObject } from '@mock-knight/core/types'
-import { Button, Chip, InferenceLabel, MethodChip, Skeleton, StatusCode } from './primitives.js'
+import {
+  Button,
+  Chip,
+  InferenceLabel,
+  MethodChip,
+  PriorityCell,
+  Skeleton,
+  StatusCode,
+} from './primitives.js'
 import { ConflictDialog } from './ConflictDialog.js'
 
 /**
@@ -279,12 +288,17 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
               <StatusCode status={mock.status} />
             </Row>
             <Row label="Priority">
-              {mock.priority === null ? (
-                <Muted>default</Muted>
-              ) : (
-                <span className="mk-tabular">{mock.priority}</span>
-              )}
+              {/* The same cell the list uses, so "1 of 3" means one thing in both places. The
+                  detail pane is where someone lands after spotting the flag in the row. */}
+              <PriorityCell standing={mock.standing} />
             </Row>
+            {describeStanding(mock.standing) !== null && (
+              <Row label="">
+                <InferenceLabel title="Mock Knight compares stubs that share a URL matcher and whose methods can overlap. Stubs that overlap by pattern alone are not detected.">
+                  {describeStanding(mock.standing)}
+                </InferenceLabel>
+              </Row>
+            )}
             <Row label="Scenario">
               {mock.scenario === null ? (
                 <Muted>none</Muted>

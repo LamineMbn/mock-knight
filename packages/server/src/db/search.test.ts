@@ -465,3 +465,96 @@ describe('unused stubs — a bounded truth, and which boundary applies', () => {
     expect(result.total).toBe(0)
   })
 })
+
+describe('priority standing (FR-FIND-7)', () => {
+  const contenders = (): Mock[] => [
+    // Three stubs on one method and path, picked between by request header — the shape a team
+    // that selects mocks by header actually has.
+    stub({
+      id: 'p-1',
+      request: { method: 'GET', urlPath: '/v1/rates', headers: { 'X-Tier': { equalTo: 'gold' } } },
+      top: { name: 'gold', priority: 1 },
+    }),
+    stub({
+      id: 'p-2',
+      request: { method: 'GET', urlPath: '/v1/rates', headers: { 'X-Tier': { equalTo: 'std' } } },
+      top: { name: 'standard', priority: 3 },
+    }),
+    stub({
+      id: 'p-3',
+      request: { method: 'GET', urlPath: '/v1/rates' },
+      top: { name: 'fallback' },
+    }),
+    // Same path, different method: not a contender.
+    stub({ id: 'p-4', request: { method: 'POST', urlPath: '/v1/rates' }, top: { name: 'post' } }),
+    // Different path entirely.
+    stub({ id: 'p-5', request: { method: 'GET', urlPath: '/v1/other' }, top: { name: 'other' } }),
+  ]
+
+  const byName = (query = '') => {
+    const found = search(query, 100)
+    return new Map(found.items.map((item) => [item.name, item.standing]))
+  }
+
+  it('ranks stubs that share a method and path, and leaves the others alone', () => {
+    seed(contenders())
+    const s = byName()
+
+    expect(s.get('gold')).toMatchObject({ priority: 1, explicit: true, contenders: 3, ahead: 0 })
+    expect(s.get('standard')).toMatchObject({ priority: 3, contenders: 3, ahead: 1 })
+    // No priority set, so judged at the default — and it loses to both.
+    expect(s.get('fallback')).toMatchObject({
+      priority: 5,
+      explicit: false,
+      contenders: 3,
+      ahead: 2,
+    })
+
+    // A different method on the same path is not a contender, nor is a different path.
+    expect(s.get('post')).toMatchObject({ contenders: 1, ahead: 0 })
+    expect(s.get('other')).toMatchObject({ contenders: 1, ahead: 0 })
+  })
+
+  it('counts a method-less stub as contending with every method on its path', () => {
+    seed([
+      // No `method` at all: WireMock matches any verb, so it really does compete with both.
+      stub({
+        id: 'any',
+        request: { method: undefined, urlPath: '/v1/wild' },
+        top: { name: 'any' },
+      }),
+      stub({ id: 'get', request: { method: 'GET', urlPath: '/v1/wild' }, top: { name: 'get' } }),
+      stub({ id: 'del', request: { method: 'DELETE', urlPath: '/v1/wild' }, top: { name: 'del' } }),
+    ])
+    const s = byName()
+    expect(s.get('any')?.contenders).toBe(3)
+    expect(s.get('get')?.contenders).toBe(2)
+    expect(s.get('del')?.contenders).toBe(2)
+  })
+
+  it('reports a tie rather than inventing a winner', () => {
+    seed([
+      stub({ id: 't1', request: { urlPath: '/v1/tie' }, top: { name: 'one', priority: 2 } }),
+      stub({ id: 't2', request: { urlPath: '/v1/tie' }, top: { name: 'two', priority: 2 } }),
+    ])
+    const s = byName()
+    expect(s.get('one')).toMatchObject({ ahead: 0, tied: 1, contenders: 2 })
+    expect(s.get('two')).toMatchObject({ ahead: 0, tied: 1, contenders: 2 })
+  })
+
+  it('counts over the whole corpus, not the filtered page', () => {
+    seed(contenders())
+    // Searching for the loser alone must still say two stubs are ahead of it: a warning that
+    // disappears when you filter down to the row it is about would be worse than none.
+    const filtered = search('fallback', 100)
+    expect(filtered.items).toHaveLength(1)
+    expect(filtered.items[0]!.standing).toMatchObject({ contenders: 3, ahead: 2 })
+  })
+
+  it('carries the same standing on a single-stub read', () => {
+    seed(contenders())
+    const listed = byName().get('standard')!
+    const one = search('standard', 1).items[0]!
+    expect(getMock(db, 'p1', one.clientKey)?.standing).toEqual(listed)
+  })
+})

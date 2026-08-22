@@ -1,4 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
+import { describeStanding, verdictOf } from '@mock-knight/core/types'
+import type { PriorityStanding } from '@mock-knight/core/types'
 
 /**
  * The small shared pieces. Every colour here is a `--mk-*` token: a literal colour in a
@@ -311,4 +313,80 @@ export function Skeleton({ width, height = 12 }: { width: number | string; heigh
       }}
     />
   )
+}
+
+/**
+ * Priority, and what it actually means for this stub — FR-FIND-7, design brief §6.2.
+ *
+ * A bare number is close to useless here for two reasons. Lower wins, which is the opposite of
+ * what most people assume, and a priority only matters relative to the stubs it competes with:
+ * `3` is decisive against a `5` and irrelevant if nothing else matches that path. So the cell
+ * renders the number *and* the standing — "1 of 3" — and flags the rows that lose.
+ *
+ * The count is Mock Knight's inference over the corpus, not something WireMock reported, so it
+ * carries the inference glyph and says so on hover (§9.4). Its absence is not a promise: two
+ * stubs whose patterns overlap without sharing a matcher are not detected, and the tooltip
+ * says that rather than implying a clean bill of health.
+ */
+export function PriorityCell({ standing }: { standing: PriorityStanding }) {
+  const verdict = verdictOf(standing)
+  const contested = standing.contenders > 1
+  const rank = standing.ahead + 1
+  const note = describeStanding(standing)
+
+  const title = [
+    `Priority ${standing.priority}${standing.explicit ? '' : ', the default — this stub does not set one'}. Lower wins.`,
+    note,
+    contested
+      ? 'Contenders computed by Mock Knight: stubs sharing this URL matcher whose methods can overlap. Stubs that overlap by pattern alone are not counted.'
+      : 'No other stub shares this URL matcher. Mock Knight does not detect overlap between different patterns, so this is not a guarantee.',
+  ]
+    .filter((line) => line !== null)
+    .join('\n\n')
+
+  return (
+    <span
+      title={title}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}
+    >
+      <span
+        className="mk-tabular"
+        style={{
+          fontSize: 12,
+          // A defaulted number is dimmer than a chosen one: the stub did not ask for it.
+          color: standing.explicit ? 'var(--mk-text-primary)' : 'var(--mk-text-tertiary)',
+        }}
+      >
+        {standing.priority}
+      </span>
+      {contested && (
+        <Chip tone={verdict === 'wins' ? 'accent' : 'warning'}>
+          {/* Never colour alone (§8): the glyph and the text both carry the state. */}
+          {verdict === 'wins' ? (
+            <svg width="9" height="9" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M3.5 8.5l3 3 6-7"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          ) : (
+            <span aria-hidden="true">⚑</span>
+          )}
+          <span className="mk-tabular">
+            {rank} of {standing.contenders}
+          </span>
+        </Chip>
+      )}
+    </span>
+  )
+}
+
+/** The screen-reader sentence for a priority cell, which cannot rely on a hover tooltip. */
+export function priorityLabel(standing: PriorityStanding): string {
+  const note = describeStanding(standing)
+  return `Priority ${standing.priority}${standing.explicit ? '' : ' by default'}${note === null ? '' : `. ${note}`}`
 }

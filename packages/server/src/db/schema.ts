@@ -174,9 +174,24 @@ CREATE VIRTUAL TABLE mock_fts USING fts5(
 );
 `
 
+/**
+ * An index for overlap detection (FR-FIND-7).
+ *
+ * Priority standing asks, for every row on the page, "what else can match this method and
+ * path?" — a correlated count over the whole profile's corpus. Without an index that is a full
+ * scan per row: at the 10k fixture, fifty rows a page, half a million rows visited to draw one
+ * screen. The index turns each of those counts into a range seek.
+ *
+ * Index-only, so unlike v2 it keeps the mirror. Nothing needs re-ingesting to benefit.
+ */
+const ADD_PATH_INDEX = `
+CREATE INDEX mock_path ON mock(profile_id, url_value, method);
+`
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: 'initial mirror schema', sql: INITIAL },
   { version: 2, name: 'index request header matchers', sql: ADD_HEADER_MATCHERS },
+  { version: 3, name: 'index url and method for overlap detection', sql: ADD_PATH_INDEX },
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version

@@ -1,4 +1,5 @@
-import type { QueryFilter, QueryPlan } from '@mock-knight/core'
+import { DEFAULT_PRIORITY } from '@mock-knight/core'
+import type { PriorityStanding, QueryFilter, QueryPlan } from '@mock-knight/core'
 import type { Database as Db } from 'better-sqlite3'
 
 /**
@@ -39,6 +40,11 @@ export interface MockListItem {
   bodyTruncated: boolean
   lastServedAt: string | null
   contentHash: string
+  /**
+   * Which stub wins when several match the same method and path (FR-FIND-7). Mock Knight's own
+   * inference over the full corpus, not something the server reported — render it as such.
+   */
+  standing: PriorityStanding
 }
 
 export interface FacetBucket {
@@ -313,6 +319,9 @@ interface MockRow {
   body_truncated: number
   last_served_at: string | null
   content_hash: string
+  contenders: number
+  ahead: number
+  tied: number
 }
 
 function parseTags(raw: string | null): string[] {
@@ -360,8 +369,43 @@ function toItem(row: MockRow): MockListItem {
     bodyTruncated: row.body_truncated === 1,
     lastServedAt: row.last_served_at,
     contentHash: row.content_hash,
+    standing: {
+      priority: row.priority ?? DEFAULT_PRIORITY,
+      explicit: row.priority !== null,
+      contenders: row.contenders,
+      ahead: row.ahead,
+      tied: row.tied,
+    },
   }
 }
+
+/**
+ * Priority standing for one row, counted over the **whole** profile's corpus (FR-FIND-7).
+ *
+ * Scoped to the corpus, never to the filtered page: a stub is shadowed whether or not the thing
+ * shadowing it happens to match the current search. Answering from the page would make the
+ * warning appear and vanish as the user typed, which is worse than not having it.
+ *
+ * `IS` rather than `=` throughout, because `url_kind`, `url_value` and `method` are all
+ * nullable and `NULL = NULL` is not true. A stub with no method matcher answers any method, so
+ * it contends with every method on its path — hence the three-way method clause. This is the
+ * conservative half of the inference: it finds contenders that share a URL matcher verbatim,
+ * and does not attempt to prove that two different patterns can cover the same request.
+ */
+const PEERS = `FROM mock p
+   WHERE p.profile_id = m.profile_id
+     AND p.url_kind IS m.url_kind AND p.url_value IS m.url_value
+     AND (p.method IS NULL OR m.method IS NULL OR p.method IS m.method)`
+
+const STANDING_COLUMNS = `
+  (SELECT COUNT(*) ${PEERS}) AS contenders,
+  (SELECT COUNT(*) ${PEERS}
+     AND COALESCE(p.priority, ${DEFAULT_PRIORITY}) < COALESCE(m.priority, ${DEFAULT_PRIORITY})
+  ) AS ahead,
+  (SELECT COUNT(*) ${PEERS}
+     AND COALESCE(p.priority, ${DEFAULT_PRIORITY}) = COALESCE(m.priority, ${DEFAULT_PRIORITY})
+     AND p.rowid <> m.rowid
+  ) AS tied`
 
 const SELECT_COLUMNS = `
   m.client_key, m.server_id, m.name, m.folder, m.folder_source, m.tags, m.method, m.url_kind,
@@ -441,7 +485,8 @@ export function searchCorpus(db: Db, request: SearchRequest): SearchResult {
 
   const rows = db
     .prepare(
-      `SELECT ${SELECT_COLUMNS} FROM mock m JOIN ${MATCH_SET} s ON s.rowid = m.rowid
+      `SELECT ${SELECT_COLUMNS}, ${STANDING_COLUMNS}
+       FROM mock m JOIN ${MATCH_SET} s ON s.rowid = m.rowid
        ${order} LIMIT ? OFFSET ?`,
     )
     .all(request.limit, request.offset) as MockRow[]
@@ -496,7 +541,8 @@ export function getMock(
 ): (MockListItem & { raw: unknown }) | null {
   const row = db
     .prepare(
-      `SELECT ${SELECT_COLUMNS}, m.raw FROM mock m WHERE m.profile_id = ? AND m.client_key = ?`,
+      `SELECT ${SELECT_COLUMNS}, ${STANDING_COLUMNS}, m.raw
+       FROM mock m WHERE m.profile_id = ? AND m.client_key = ?`,
     )
     .get(profileId, clientKey) as (MockRow & { raw: string }) | undefined
   if (row === undefined) return null
