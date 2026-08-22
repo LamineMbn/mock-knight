@@ -18,7 +18,8 @@
     "test:e2e": "playwright test",
     "dev:server": "pnpm --filter mock-knight dev",
     "dev:web": "pnpm --filter @mock-knight/web dev",
-    "build": "pnpm --filter @mock-knight/web build && pnpm --filter mock-knight build"
+    "build": "pnpm --filter @mock-knight/web build && pnpm --filter mock-knight build",
+    "test:perf": "vitest run --config vitest.perf.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

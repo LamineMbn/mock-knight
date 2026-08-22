@@ -35,7 +35,11 @@ function bodyExcerptFor(mock: Mock): { excerpt: string | null; truncated: boolea
       text = null
       break
     case 'json':
-      text = body.value === null ? null : canonicalJson(body.value)
+      // Plain stringify, not `canonicalJson`: this text is only ever substring-searched, so it
+      // needs no sorted key order and no validation pass. Canonicalising every body was a deep
+      // recursive sort of the largest values in the corpus, on the ingest hot path, for a
+      // property nothing downstream reads.
+      text = body.value === null ? null : JSON.stringify(body.value)
       break
     default:
       text = typeof body.value === 'string' ? body.value : null

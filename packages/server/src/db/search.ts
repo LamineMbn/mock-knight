@@ -347,60 +347,114 @@ const SELECT_COLUMNS = `
   m.url_value, m.status, m.priority, m.enabled, m.scenario, m.has_delay, m.has_fault,
   m.is_proxy, m.body_file, m.headers, m.body_truncated, m.last_served_at, m.content_hash`
 
-function countBucket(
-  db: Db,
-  request: SearchRequest,
-  field: string,
-  expression: string,
-  extraFrom = '',
-): FacetBucket[] {
-  // Counts for a facet group exclude that group's own filters: ticking one method must not
-  // zero the count beside every other method in the same list.
-  const conditions = buildConditions(request, field)
-  const { sql, params } = fromWhere(conditions, extraFrom)
+/**
+ * Materialise the matching rows once, then answer everything else from that set.
+ *
+ * Measured at the 5k fixture: the page, the total, the flag tallies, and each of five facet
+ * groups every re-ran the same FTS scan at ~21ms apiece, so one broad search cost ~147ms
+ * against a 150ms budget. They now share a single scan.
+ *
+ * `bm25` is captured at materialisation time because the rank cannot be recomputed once the
+ * FTS table is out of the query, and dropping it would lose relevance ordering.
+ *
+ * The temp table is per-connection, and better-sqlite3 is synchronous, so a search runs to
+ * completion before the next one starts — two requests cannot interleave over it.
+ */
+function materialise(db: Db, name: string, conditions: Conditions): void {
+  db.exec(`CREATE TEMP TABLE IF NOT EXISTS ${name} (rowid INTEGER PRIMARY KEY, rank REAL)`)
+  db.exec(`DELETE FROM ${name}`)
+  const { sql, params } = fromWhere(conditions)
+  const rank = conditions.match !== null ? 'bm25(mock_fts)' : '0'
+  db.prepare(`INSERT INTO ${name} (rowid, rank) SELECT m.rowid, ${rank} ${sql}`).run(...params)
+}
+
+const MATCH_SET = 'temp.mk_match'
+const FACET_SET = 'temp.mk_facet'
+
+function countBucket(db: Db, set: string, expression: string, extraFrom = ''): FacetBucket[] {
   // Grouped and ordered by **ordinal**, not by the alias. `json_each` exposes its own column
   // called `value`, so `GROUP BY value` silently binds to that instead of the alias — which
   // split one header name into a group per row and made every count 1. The tag facet had the
   // same shape and only gave right answers by coincidence.
   const rows = db
     .prepare(
-      `SELECT ${expression} AS facet_value, count(*) AS facet_count ${sql}
-       AND ${expression} IS NOT NULL
+      `SELECT ${expression} AS facet_value, count(*) AS facet_count
+       FROM mock m${extraFrom} JOIN ${set} s ON s.rowid = m.rowid
+       WHERE ${expression} IS NOT NULL
        GROUP BY 1 ORDER BY 2 DESC, 1 ASC`,
     )
-    .all(...params) as { facet_value: string | number; facet_count: number }[]
+    .all() as { facet_value: string | number; facet_count: number }[]
   return rows.map((row) => ({ value: String(row.facet_value), count: row.facet_count }))
 }
 
-function countFlag(db: Db, request: SearchRequest, column: string): number {
-  const conditions = buildConditions(request)
-  const { sql, params } = fromWhere(conditions)
-  const row = db.prepare(`SELECT count(*) n ${sql} AND m.${column} = 1`).get(...params) as {
-    n: number
-  }
-  return row.n
+/**
+ * Facet counts for one group, excluding that group's own filters: ticking one method must not
+ * zero the count beside every other method. Only a field the query actually filters on needs
+ * its own scan; every other group reuses the shared match set.
+ */
+function facetFor(
+  db: Db,
+  request: SearchRequest,
+  field: string,
+  expression: string,
+  extraFrom = '',
+): FacetBucket[] {
+  const filtered = request.plan.groups.some((group) => group.field === field)
+  if (!filtered) return countBucket(db, MATCH_SET, expression, extraFrom)
+  materialise(db, FACET_SET, buildConditions(request, field))
+  return countBucket(db, FACET_SET, expression, extraFrom)
 }
 
 export function searchCorpus(db: Db, request: SearchRequest): SearchResult {
   const conditions = buildConditions(request)
-  const { sql, params } = fromWhere(conditions)
+  materialise(db, MATCH_SET, conditions)
 
-  const totalRow = db.prepare(`SELECT count(*) n ${sql}`).get(...params) as { n: number }
+  const totalRow = db.prepare(`SELECT count(*) n FROM ${MATCH_SET}`).get() as { n: number }
 
-  // bm25 ranks lower-is-better. Without a text term there is nothing to rank by, so fall back
-  // to a stable alphabetical order — a list that reshuffles between pages is unusable.
+  // bm25 ranks lower-is-better. Without a text term every rank is 0, so fall back to a stable
+  // alphabetical order — a list that reshuffles between pages is unusable.
   const order =
     conditions.match !== null
-      ? 'ORDER BY bm25(mock_fts), m.rowid'
+      ? 'ORDER BY s.rank, m.rowid'
       : 'ORDER BY m.url_value, m.method, m.rowid'
 
   const rows = db
-    .prepare(`SELECT ${SELECT_COLUMNS} ${sql} ${order} LIMIT ? OFFSET ?`)
-    .all(...params, request.limit, request.offset) as MockRow[]
+    .prepare(
+      `SELECT ${SELECT_COLUMNS} FROM mock m JOIN ${MATCH_SET} s ON s.rowid = m.rowid
+       ${order} LIMIT ? OFFSET ?`,
+    )
+    .all(request.limit, request.offset) as MockRow[]
 
-  const truncatedRow = db
-    .prepare(`SELECT count(*) n ${sql} AND m.body_truncated = 1`)
-    .get(...params) as { n: number }
+  const flags = db
+    .prepare(
+      `SELECT
+         sum(CASE WHEN m.has_delay = 1 THEN 1 ELSE 0 END)      AS hasDelay,
+         sum(CASE WHEN m.has_fault = 1 THEN 1 ELSE 0 END)      AS hasFault,
+         sum(CASE WHEN m.is_proxy = 1 THEN 1 ELSE 0 END)       AS isProxy,
+         sum(CASE WHEN m.body_truncated = 1 THEN 1 ELSE 0 END) AS bodyTruncated
+       FROM mock m JOIN ${MATCH_SET} s ON s.rowid = m.rowid`,
+    )
+    .get() as Record<string, number | null>
+
+  // Facets last: `facetFor` may overwrite the facet scratch set, but never the match set the
+  // page and totals were read from.
+  const facets: Facets = {
+    method: facetFor(db, request, 'method', 'm.method'),
+    statusClass: facetFor(db, request, 'status', "(m.status / 100) || 'xx'"),
+    scenario: facetFor(db, request, 'scenario', 'm.scenario'),
+    folder: facetFor(db, request, 'folder', 'm.folder'),
+    tag: facetFor(db, request, 'tag', 'j.value', ', json_each(m.tags) j'),
+    header: facetFor(
+      db,
+      request,
+      'header',
+      `json_extract(h.value, '$.name')`,
+      ', json_each(m.headers) h',
+    ),
+    hasDelay: flags['hasDelay'] ?? 0,
+    hasFault: flags['hasFault'] ?? 0,
+    isProxy: flags['isProxy'] ?? 0,
+  }
 
   return {
     items: rows.map(toItem),
@@ -408,24 +462,8 @@ export function searchCorpus(db: Db, request: SearchRequest): SearchResult {
     limit: request.limit,
     offset: request.offset,
     textStrategy: strategyFor(conditions),
-    bodyIndexTruncated: truncatedRow.n > 0,
-    facets: {
-      method: countBucket(db, request, 'method', 'm.method'),
-      statusClass: countBucket(db, request, 'status', "(m.status / 100) || 'xx'"),
-      scenario: countBucket(db, request, 'scenario', 'm.scenario'),
-      folder: countBucket(db, request, 'folder', 'm.folder'),
-      tag: countBucket(db, request, 'tag', 'j.value', ', json_each(m.tags) j'),
-      header: countBucket(
-        db,
-        request,
-        'header',
-        `json_extract(h.value, '$.name')`,
-        ', json_each(m.headers) h',
-      ),
-      hasDelay: countFlag(db, request, 'has_delay'),
-      hasFault: countFlag(db, request, 'has_fault'),
-      isProxy: countFlag(db, request, 'is_proxy'),
-    },
+    bodyIndexTruncated: (flags['bodyTruncated'] ?? 0) > 0,
+    facets,
   }
 }
 
