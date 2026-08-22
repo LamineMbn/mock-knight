@@ -1,4 +1,5 @@
-import type { QueryPlan } from '@mock-knight/core/types'
+import type { QueryPlan, ScenarioAnalysis } from '@mock-knight/core/types'
+export type { ScenarioAnalysis }
 
 /**
  * The BFF client.
@@ -193,6 +194,25 @@ export const api = {
     call<CorpusPage>(
       `/api/${profileId}/mocks?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}`,
     ),
+  scenarios: (profileId: string) =>
+    call<{ scenarios: ScenarioAnalysis[]; canSetState: boolean; canResetAll: boolean }>(
+      `/api/${profileId}/scenarios`,
+    ),
+  setScenarioState: (profileId: string, name: string, state: string | null) =>
+    call<{ name: string; state: string | null }>(
+      `/api/${profileId}/scenarios/${encodeURIComponent(name)}/state`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ state }),
+      },
+    ),
+  resetAllScenarios: (profileId: string, confirm: string) =>
+    call<{ reset: true }>(`/api/${profileId}/scenarios/reset-all`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ confirm }),
+    }),
   events: (profileId: string, matched: 'all' | 'matched' | 'unmatched', limit = 200) =>
     call<JournalPage>(
       `/api/${profileId}/events?limit=${limit}` +

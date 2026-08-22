@@ -231,3 +231,117 @@ describe('the BFF routes behind the screen', () => {
     db.close()
   })
 })
+
+describe('scenarios', () => {
+  const app = async () => {
+    const { createApp } = await import('./app.js')
+    const { openDatabase } = await import('./db/database.js')
+    const { createProfile } = await import('./profiles.js')
+    const { ConnectionRegistry } = await import('./runtime.js')
+    const db = openDatabase(':memory:')
+    const registry = new ConnectionRegistry(db, 'local')
+    const instance = createApp({ db, registry, mode: 'local', version: 'test', actor: 'dana' })
+    const profile = createProfile(db, {
+      name: 'scenarios',
+      adapter: 'wiremock',
+      baseUrl: WIREMOCK_URL,
+      adminPath: null,
+      colour: 'indigo',
+      protected: false,
+      readOnly: false,
+      mappingsDir: null,
+      authKind: 'none',
+      authRef: null,
+      correlationHeader: null,
+      redactHeaders: [],
+    })
+    await instance.request(`/api/profiles/${profile.id}/connect`, { method: 'POST' })
+    await instance.request(`/api/${profile.id}/refresh`, { method: 'POST' })
+    return { instance, id: profile.id, registry, db }
+  }
+
+  it('derives the scenario shape from the corpus, not just its name', async () => {
+    const { instance, id, registry, db } = await app()
+    const response = await instance.request(`/api/${id}/scenarios`)
+    const body = (await response.json()) as {
+      scenarios: {
+        name: string
+        currentState: string
+        states: { name: string; isCurrent: boolean; terminal: boolean }[]
+        transitions: { stubName: string | null; from: string | null; to: string | null }[]
+        warnings: string[]
+      }[]
+      canSetState: boolean
+    }
+
+    const checkout = body.scenarios.find((s) => s.name === 'checkout')!
+    expect(checkout.currentState).toBe('Started')
+    // The seed's stub goes Started -> ordered, and nothing leaves `ordered`.
+    expect(checkout.transitions).toEqual([
+      expect.objectContaining({ from: 'Started', to: 'ordered' }),
+    ])
+    expect(checkout.states.find((s) => s.name === 'ordered')?.terminal).toBe(true)
+    expect(checkout.warnings.some((w) => w.includes('only a reset'))).toBe(true)
+    expect(body.canSetState).toBe(true)
+
+    await registry.closeAll()
+    db.close()
+  })
+
+  it('sets and resets one scenario, and records both in the audit', async () => {
+    const { instance, id, registry, db } = await app()
+
+    const set = await instance.request(`/api/${id}/scenarios/checkout/state`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ state: 'ordered' }),
+    })
+    expect(set.status).toBe(200)
+    expect(
+      ((await (await fetch(`${WIREMOCK_URL}/__admin/scenarios`)).json()) as any).scenarios[0].state,
+    ).toBe('ordered')
+
+    // An empty body resets that one scenario — the same route, per FR-STATE-2.
+    await instance.request(`/api/${id}/scenarios/checkout/state`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ state: null }),
+    })
+    expect(
+      ((await (await fetch(`${WIREMOCK_URL}/__admin/scenarios`)).json()) as any).scenarios[0].state,
+    ).toBe('Started')
+
+    const audit = (await (await instance.request(`/api/${id}/audit`)).json()) as {
+      entries: { summary: string }[]
+    }
+    expect(audit.entries.map((e) => e.summary)).toEqual([
+      'reset scenario checkout',
+      'set scenario checkout to ordered',
+    ])
+
+    await registry.closeAll()
+    db.close()
+  })
+
+  it('refuses to reset every scenario without the typed profile name', async () => {
+    const { instance, id, registry, db } = await app()
+
+    const unconfirmed = await instance.request(`/api/${id}/scenarios/reset-all`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ confirm: 'wrong' }),
+    })
+    // Validated server-side: the UI dialog is a convenience, this is the gate (§9.6).
+    expect(unconfirmed.status).toBe(400)
+
+    const confirmed = await instance.request(`/api/${id}/scenarios/reset-all`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ confirm: 'scenarios' }),
+    })
+    expect(confirmed.status).toBe(200)
+
+    await registry.closeAll()
+    db.close()
+  })
+})

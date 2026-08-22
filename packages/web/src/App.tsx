@@ -7,6 +7,7 @@ import { CorpusList } from './components/CorpusList.js'
 import { FacetPane } from './components/FacetPane.js'
 import { StubDetail } from './components/StubDetail.js'
 import { TrafficScreen } from './components/TrafficScreen.js'
+import { ScenariosScreen } from './components/ScenariosScreen.js'
 import { Button, Chip } from './components/primitives.js'
 
 /**
@@ -18,7 +19,7 @@ import { Button, Chip } from './components/primitives.js'
 
 const PAGE_SIZE = 100
 
-export type Screen = 'corpus' | 'traffic'
+export type Screen = 'corpus' | 'traffic' | 'scenarios'
 
 interface UrlState {
   screen: Screen
@@ -37,7 +38,12 @@ function useUrlState(): [UrlState, (next: Partial<UrlState>) => void] {
   }, [])
 
   const current: UrlState = {
-    screen: params.get('screen') === 'traffic' ? 'traffic' : 'corpus',
+    screen:
+      params.get('screen') === 'traffic'
+        ? 'traffic'
+        : params.get('screen') === 'scenarios'
+          ? 'scenarios'
+          : 'corpus',
     query: params.get('q') ?? '',
     selectedKey: params.get('stub'),
   }
@@ -169,6 +175,14 @@ export function App() {
       {screen === 'traffic' ? (
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           <TrafficScreen profileId={profile.id} baseUrl={profile.baseUrl} />
+        </div>
+      ) : screen === 'scenarios' ? (
+        <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+          <ScenariosScreen
+            profileId={profile.id}
+            profileName={profile.name}
+            isProtected={profile.protected}
+          />
         </div>
       ) : (
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
@@ -371,12 +385,13 @@ function TopBar({
       </span>
 
       <nav style={{ marginLeft: 16, display: 'flex', gap: 4 }} aria-label="Screens">
-        {/* Two of the four destinations exist. Scenarios and Sync are deliberately not drawn:
-            a nav item that goes nowhere is a control that fails. */}
+        {/* Three of the four destinations exist. Sync is deliberately not drawn: a nav item
+            that goes nowhere is a control that fails. */}
         {(
           [
             ['corpus', 'Corpus'],
             ['traffic', 'Traffic'],
+            ['scenarios', 'Scenarios'],
           ] as const
         ).map(([value, label]) => (
           <button

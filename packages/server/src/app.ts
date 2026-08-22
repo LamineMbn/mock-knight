@@ -6,11 +6,12 @@ import type { Database as Db } from 'better-sqlite3'
 import { mirrorStatus, replaceCorpus } from './db/mirror.js'
 import { getMock, searchCorpus } from './db/search.js'
 import { getServeEventRaw, listServeEvents, recordServeEvents } from './db/journal.js'
-import { listAudit } from './db/audit.js'
+import { listAudit, recordAudit } from './db/audit.js'
 import { createMock, deleteMock, updateMock } from './writes.js'
 import type { WriteContext } from './writes.js'
 import { resolveActor } from './identity.js'
-import { MATCHER_TIGHTNESS, stubFromRequest } from '@mock-knight/core'
+import { MATCHER_TIGHTNESS, analyseScenarios, stubFromRequest } from '@mock-knight/core'
+import type { ScenarioTransition } from '@mock-knight/core'
 import {
   createProfile,
   deleteProfile,
@@ -74,6 +75,9 @@ const writeBodySchema = z.object({
 
 const createBodySchema = z.object({ raw: z.record(z.string(), z.any()) })
 const deleteBodySchema = z.object({ baseHash: z.string().min(1) })
+
+const scenarioStateSchema = z.object({ state: z.string().nullable().default(null) })
+const confirmSchema = z.object({ confirm: z.string() })
 
 const fromRequestSchema = z.object({
   eventId: z.number().int().optional(),
@@ -545,6 +549,125 @@ export function createApp(options: AppOptions) {
           : { responseStatus: parsed.data.responseStatus }),
       })
       return c.json({ raw: connection.adapter.render(generated.draft), notes: generated.notes })
+    })
+
+    /**
+     * Scenarios, with the shape derived from the corpus — FR-STATE-1/3/4.
+     *
+     * The server reports each scenario's name and current state; everything else (which stubs
+     * move it, which states are unreachable, which are dead ends) exists only as a property of
+     * the stubs that reference it, so it is computed here from the mirror.
+     */
+    .get('/api/:p/scenarios', async (c) => {
+      const profileId = c.req.param('p')
+      if (getProfile(db, profileId) === null) return c.json({ error: 'not_found' }, 404)
+      const connection = registry.get(profileId)
+      if (connection === null) return c.json({ error: 'not_connected' }, 409)
+      if (connection.adapter.listScenarios === undefined) return c.json({ error: 'not_found' }, 404)
+
+      const scenarios = await connection.adapter.listScenarios()
+      const rows = db
+        .prepare(
+          `SELECT client_key, name, scenario, required_state, new_state
+           FROM mock WHERE profile_id = ? AND scenario IS NOT NULL`,
+        )
+        .all(profileId) as {
+        client_key: string
+        name: string | null
+        scenario: string
+        required_state: string | null
+        new_state: string | null
+      }[]
+
+      const byScenario: Record<string, ScenarioTransition[]> = {}
+      for (const row of rows) {
+        ;(byScenario[row.scenario] ??= []).push({
+          clientKey: row.client_key,
+          stubName: row.name,
+          from: row.required_state,
+          to: row.new_state,
+        })
+      }
+
+      return c.json({
+        scenarios: analyseScenarios(scenarios, byScenario),
+        // The write affordances are drawn from this, not guessed at.
+        canSetState: connection.adapter.setScenarioState !== undefined,
+        canResetAll: connection.adapter.resetAllScenarios !== undefined,
+      })
+    })
+
+    /** Set one scenario's state, or reset just that one when `state` is null. Not destructive. */
+    .put('/api/:p/scenarios/:name/state', async (c) => {
+      const profileId = c.req.param('p')
+      const profile = getProfile(db, profileId)
+      if (profile === null || profile.readOnly) return c.json({ error: 'not_found' }, 404)
+      const connection = registry.get(profileId)
+      if (connection === null) return c.json({ error: 'not_connected' }, 409)
+      if (connection.adapter.setScenarioState === undefined) {
+        return c.json({ error: 'not_found' }, 404)
+      }
+
+      const parsed = scenarioStateSchema.safeParse(await c.req.json().catch(() => ({})))
+      if (!parsed.success)
+        return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400)
+
+      const name = c.req.param('name')
+      await connection.adapter.setScenarioState(name, parsed.data.state)
+      recordAudit(db, {
+        profileId,
+        actor,
+        action: 'state',
+        clientKey: null,
+        before: null,
+        after: null,
+        summary:
+          parsed.data.state === null
+            ? `reset scenario ${name}`
+            : `set scenario ${name} to ${parsed.data.state}`,
+      })
+      return c.json({ name, state: parsed.data.state })
+    })
+
+    /**
+     * Reset **every** scenario — a §9.6 destructive operation, so it takes a typed confirmation
+     * matching the profile name, re-validated here rather than trusted from the UI, and is
+     * absent entirely on a protected profile.
+     */
+    .post('/api/:p/scenarios/reset-all', async (c) => {
+      const profileId = c.req.param('p')
+      const profile = getProfile(db, profileId)
+      if (profile === null || profile.readOnly || profile.protected) {
+        return c.json({ error: 'not_found' }, 404)
+      }
+      const connection = registry.get(profileId)
+      if (connection === null) return c.json({ error: 'not_connected' }, 409)
+      if (connection.adapter.resetAllScenarios === undefined) {
+        return c.json({ error: 'not_found' }, 404)
+      }
+
+      const parsed = confirmSchema.safeParse(await c.req.json().catch(() => ({})))
+      if (!parsed.success || parsed.data.confirm !== profile.name) {
+        return c.json(
+          {
+            error: 'confirmation_required',
+            message: `Type the profile name (${profile.name}) to confirm resetting every scenario.`,
+          },
+          400,
+        )
+      }
+
+      await connection.adapter.resetAllScenarios()
+      recordAudit(db, {
+        profileId,
+        actor,
+        action: 'reset',
+        clientKey: null,
+        before: null,
+        after: null,
+        summary: 'reset every scenario',
+      })
+      return c.json({ reset: true })
     })
 
     .post('/api/:p/refresh', async (c) => {

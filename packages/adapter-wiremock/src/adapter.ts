@@ -388,6 +388,23 @@ export class WireMockAdapter implements MockBackendAdapter {
   }
 
   /**
+   * Set one scenario's state, or reset just that one with an empty body.
+   *
+   * `PUT /scenarios/{name}/state` is the same route for both, which is why PRD FR-STATE-2 spells
+   * it out: there is no per-scenario reset endpoint. Resetting *every* scenario is a different
+   * and destructive operation — `resetAllScenarios` — and the naming split is deliberate.
+   */
+  async setScenarioState(name: string, state: string | null): Promise<void> {
+    await this.transport.json('PUT', `/scenarios/${encodeURIComponent(name)}/state`, {
+      ...(state === null ? {} : { body: { state } }),
+    })
+  }
+
+  async resetAllScenarios(): Promise<void> {
+    await this.transport.json('POST', '/scenarios/reset')
+  }
+
+  /**
    * Current state per scenario, read fresh for each explanation.
    *
    * Not cached: scenario state is exactly what changes between the request that failed and the
