@@ -292,7 +292,12 @@ export function App() {
             </footer>
           </main>
 
-          <StubDetail profileId={profile.id} clientKey={selectedKey} />
+          <StubDetail
+            profileId={profile.id}
+            profileName={profile.name}
+            canWrite={!profile.readOnly}
+            clientKey={selectedKey}
+          />
         </div>
       )}
     </div>

@@ -141,6 +141,27 @@ export interface Explanation {
   candidatesConsidered: number
 }
 
+export interface AuditRow {
+  id: number
+  at: string
+  actor: string
+  action: string
+  clientKey: string | null
+  summary: string
+}
+
+/**
+ * A refused write. The server hands back what it currently holds, so the merge has all three
+ * documents without another round trip through a target that keeps moving.
+ */
+export interface WriteConflict {
+  error: 'conflict'
+  message: string
+  current: Record<string, unknown>
+  currentHash: string
+  baseHash: string
+}
+
 /** Carries the upstream detail so the UI can put it behind a copyable disclosure. */
 export class ApiError extends Error {
   constructor(
@@ -183,6 +204,25 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ eventId }),
     }),
+  updateMock: (profileId: string, clientKey: string, raw: unknown, baseHash: string) =>
+    call<{ mock: MockListItem & { raw: unknown } }>(
+      `/api/${profileId}/mocks/${encodeURIComponent(clientKey)}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ raw, baseHash }),
+      },
+    ),
+  deleteMock: (profileId: string, clientKey: string, baseHash: string) =>
+    call<{ deleted: true }>(`/api/${profileId}/mocks/${encodeURIComponent(clientKey)}`, {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ baseHash }),
+    }),
+  audit: (profileId: string, clientKey?: string) =>
+    call<{ entries: AuditRow[]; scope: string }>(
+      `/api/${profileId}/audit${clientKey === undefined ? '' : `?key=${encodeURIComponent(clientKey)}`}`,
+    ),
   mock: (profileId: string, clientKey: string) =>
     call<{ mock: MockListItem & { raw: unknown } }>(
       `/api/${profileId}/mocks/${encodeURIComponent(clientKey)}`,

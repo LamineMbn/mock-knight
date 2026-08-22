@@ -1,0 +1,83 @@
+[
+  {
+    "name": "orders create 500",
+    "priority": 3,
+    "scenarioName": "checkout",
+    "requiredScenarioState": "Started",
+    "newScenarioState": "ordered",
+    "metadata": {
+      "mock-knight": {
+        "folder": ["orders"],
+        "tags": ["legacy"]
+      }
+    },
+    "request": {
+      "method": "POST",
+      "urlPath": "/v1/orders",
+      "headers": {
+        "X-Tenant": {
+          "equalTo": "acme"
+        }
+      }
+    },
+    "response": {
+      "status": 500,
+      "jsonBody": {
+        "error": "insufficient funds"
+      }
+    }
+  },
+  {
+    "name": "orders read",
+    "request": {
+      "method": "GET",
+      "urlPathPattern": "/v1/orders/[0-9]+"
+    },
+    "response": {
+      "status": 200,
+      "body": "{\"id\":1}",
+      "headers": {
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  {
+    "name": "customers list",
+    "request": {
+      "method": "GET",
+      "urlPath": "/v1/customers"
+    },
+    "response": {
+      "status": 404,
+      "body": "not found",
+      "fixedDelayMilliseconds": 50
+    }
+  },
+  {
+    "name": "payments proxy",
+    "request": {
+      "method": "ANY",
+      "urlPattern": "/v1/payments/.*"
+    },
+    "response": {
+      "proxyBaseUrl": "http://upstream.example"
+    }
+  },
+  {
+    "request": {
+      "method": "DELETE",
+      "url": "/v1/carts/9"
+    },
+    "response": {
+      "status": 204
+    },
+    "postServeActions": [
+      {
+        "name": "webhook",
+        "parameters": {
+          "url": "http://x"
+        }
+      }
+    ]
+  }
+]

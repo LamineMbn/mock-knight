@@ -1,7 +1,9 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { api } from '../api.js'
-import { Chip, InferenceLabel, MethodChip, Skeleton, StatusCode } from './primitives.js'
+import { useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { api, ApiError } from '../api.js'
+import type { JsonObject } from '@mock-knight/core/types'
+import { Button, Chip, InferenceLabel, MethodChip, Skeleton, StatusCode } from './primitives.js'
+import { ConflictDialog } from './ConflictDialog.js'
 
 /**
  * The detail pane — design brief §6.3.
@@ -13,19 +15,110 @@ import { Chip, InferenceLabel, MethodChip, Skeleton, StatusCode } from './primit
 
 export interface StubDetailProps {
   profileId: string
+  profileName: string
+  /** Writes are absent, not disabled, where the profile or backend forbids them (§7.1). */
+  canWrite: boolean
   clientKey: string | null
 }
 
-type Tab = 'overview' | 'raw'
+type Tab = 'overview' | 'raw' | 'history'
 
-export function StubDetail({ profileId, clientKey }: StubDetailProps) {
+export function StubDetail({ profileId, profileName, canWrite, clientKey }: StubDetailProps) {
   const [tab, setTab] = useState<Tab>('overview')
+  const queryClient = useQueryClient()
 
   const query = useQuery({
     queryKey: ['mock', profileId, clientKey],
     queryFn: () => api.mock(profileId, clientKey!),
     enabled: clientKey !== null,
   })
+
+  const loaded = query.data?.mock
+  const loadedText = useMemo(
+    () => (loaded === undefined ? '' : JSON.stringify(loaded.raw, null, 2)),
+    [loaded],
+  )
+  const [draft, setDraft] = useState<string | null>(null)
+  const [conflict, setConflict] = useState<{
+    theirs: JsonObject
+    mine: JsonObject
+    /**
+     * The hash of what the server holds *now*. Retrying a merge with the hash we originally
+     * loaded is guaranteed to be refused again — the whole reason we are here is that it went
+     * stale. The retry has to be rebased onto the version the conflict just showed us.
+     */
+    currentHash: string
+  } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  // Selecting a different stub abandons an untouched draft; a touched one is kept until the
+  // user resolves it, so switching rows cannot silently discard typing.
+  useEffect(() => {
+    setDraft(null)
+    setConflict(null)
+    setError(null)
+  }, [clientKey])
+
+  const dirty = draft !== null && draft !== loadedText
+
+  const save = useMutation({
+    mutationFn: async ({ raw, baseHash }: { raw: JsonObject; baseHash: string }) => {
+      if (loaded === undefined) throw new Error('nothing loaded')
+      return api.updateMock(profileId, loaded.clientKey, raw, baseHash)
+    },
+    onSuccess: () => {
+      setDraft(null)
+      setConflict(null)
+      setError(null)
+      void queryClient.invalidateQueries({ queryKey: ['mock', profileId] })
+      void queryClient.invalidateQueries({ queryKey: ['corpus'] })
+    },
+    onError: (caught: unknown) => {
+      // A 409 is not an error to report — it is the three-way merge's cue.
+      // Discriminate on the payload, not the status: `not_connected` is also a 409, and
+      // treating it as a merge conflict opens the dialog with no documents in it.
+      const payload = caught instanceof ApiError ? (caught.payload as { error?: string }) : null
+      if (caught instanceof ApiError && caught.status === 409 && payload?.error === 'conflict') {
+        const conflictPayload = caught.payload as {
+          current: JsonObject
+          currentHash: string
+          message: string
+        }
+        setConflict({
+          theirs: conflictPayload.current,
+          mine: parseDraft(draft) ?? {},
+          currentHash: conflictPayload.currentHash,
+        })
+        return
+      }
+      if (caught instanceof ApiError && payload?.error === 'not_connected') {
+        setError('Not connected to the mock server. Reconnect, then save again.')
+        return
+      }
+      setError(describeError(caught))
+    },
+  })
+
+  const remove = useMutation({
+    mutationFn: async () => {
+      if (loaded === undefined) throw new Error('nothing loaded')
+      return api.deleteMock(profileId, loaded.clientKey, loaded.contentHash)
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['corpus'] })
+    },
+    onError: (caught: unknown) => setError(describeError(caught)),
+  })
+
+  const attemptSave = () => {
+    const parsed = parseDraft(draft)
+    if (parsed === null) {
+      setError('That is not valid JSON, so nothing was sent to the server.')
+      return
+    }
+    setError(null)
+    save.mutate({ raw: parsed, baseHash: loaded?.contentHash ?? '' })
+  }
 
   if (clientKey === null) {
     return (
@@ -103,6 +196,7 @@ export function StubDetail({ profileId, clientKey }: StubDetailProps) {
           [
             ['overview', 'Overview'],
             ['raw', 'Raw JSON'],
+            ['history', 'History'],
           ] as const
         ).map(([value, label]) => (
           <button
@@ -122,6 +216,20 @@ export function StubDetail({ profileId, clientKey }: StubDetailProps) {
             }}
           >
             {label}
+            {/* An unsaved draft is a filled accent dot on the tab (design brief §7.3). */}
+            {value === 'raw' && dirty && (
+              <span
+                aria-label="unsaved changes"
+                style={{
+                  display: 'inline-block',
+                  width: 6,
+                  height: 6,
+                  marginLeft: 6,
+                  borderRadius: 9999,
+                  background: 'var(--mk-accent-solid)',
+                }}
+              />
+            )}
           </button>
         ))}
       </div>
@@ -226,14 +334,223 @@ export function StubDetail({ profileId, clientKey }: StubDetailProps) {
               </span>
             </Row>
           </dl>
+        ) : tab === 'history' ? (
+          <History profileId={profileId} clientKey={mock.clientKey} />
+        ) : canWrite ? (
+          <textarea
+            aria-label="Raw JSON"
+            spellCheck={false}
+            value={draft ?? loadedText}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === 's') {
+                event.preventDefault()
+                if (dirty) attemptSave()
+              }
+              if (event.key === 'Escape' && dirty) {
+                event.preventDefault()
+                setDraft(null)
+              }
+            }}
+            className="mk-mono"
+            style={{ ...preStyle, width: '100%', minHeight: 340, resize: 'vertical' }}
+          />
         ) : (
           <pre className="mk-mono" style={preStyle}>
-            {JSON.stringify(mock.raw, null, 2)}
+            {loadedText}
           </pre>
         )}
       </div>
+
+      {error !== null && (
+        <div
+          role="alert"
+          style={{
+            padding: '8px 12px',
+            fontSize: 12,
+            color: 'var(--mk-danger-text)',
+            background: 'var(--mk-danger-bg)',
+            borderTop: '1px solid var(--mk-danger-border)',
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      {canWrite && tab === 'raw' && (
+        <footer
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 12px',
+            borderTop: '1px solid var(--mk-border-default)',
+          }}
+        >
+          {dirty ? (
+            <>
+              <span style={{ flex: 1, fontSize: 12, color: 'var(--mk-text-secondary)' }}>
+                ⌘S save · esc discard
+              </span>
+              <Button onClick={() => setDraft(null)}>Discard</Button>
+              <Button variant="primary" disabled={save.isPending} onClick={attemptSave}>
+                {save.isPending ? 'Saving…' : 'Save'}
+              </Button>
+            </>
+          ) : (
+            <>
+              <span style={{ flex: 1 }} />
+              <DeleteButton
+                name={mock.name ?? mock.url?.value ?? 'this stub'}
+                pending={remove.isPending}
+                onConfirm={() => remove.mutate()}
+              />
+            </>
+          )}
+        </footer>
+      )}
+
+      {conflict !== null && (
+        <ConflictDialog
+          profileName={profileName}
+          base={(mock.raw ?? {}) as JsonObject}
+          theirs={conflict.theirs}
+          mine={conflict.mine}
+          saving={save.isPending}
+          onCancel={() => setConflict(null)}
+          onResolve={(merged) => {
+            // Rebased onto the version the conflict reported, not the one originally loaded.
+            // The freshness check still runs server-side, so a third writer arriving between
+            // the dialog opening and this click is caught exactly the same way.
+            setDraft(JSON.stringify(merged, null, 2))
+            save.mutate({ raw: merged, baseHash: conflict.currentHash })
+          }}
+        />
+      )}
     </aside>
   )
+}
+
+/**
+ * Delete needs the target named and typed back (design brief §7.2). Muscle memory defeats a
+ * double-click confirm, and this is the one action with nothing left on screen afterwards.
+ */
+function DeleteButton({
+  name,
+  pending,
+  onConfirm,
+}: {
+  name: string
+  pending: boolean
+  onConfirm: () => void
+}) {
+  const [arming, setArming] = useState(false)
+  const [typed, setTyped] = useState('')
+  if (!arming) {
+    return (
+      <Button onClick={() => setArming(true)} title={`Delete ${name}`}>
+        Delete…
+      </Button>
+    )
+  }
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+      <span style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>
+        Type <code className="mk-mono">{name}</code>
+      </span>
+      <input
+        autoFocus
+        aria-label="Type the stub name to confirm deletion"
+        value={typed}
+        onChange={(event) => setTyped(event.target.value)}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          height: 24,
+          padding: '0 6px',
+          font: 'inherit',
+          fontSize: 12,
+          color: 'var(--mk-text-primary)',
+          background: 'var(--mk-bg-surface)',
+          border: '1px solid var(--mk-border-strong)',
+          borderRadius: 'var(--mk-radius-sm)',
+        }}
+      />
+      <Button onClick={() => setArming(false)}>Cancel</Button>
+      <button
+        type="button"
+        disabled={typed !== name || pending}
+        onClick={onConfirm}
+        style={{
+          height: 26,
+          padding: '0 10px',
+          font: 'inherit',
+          fontSize: 13,
+          borderRadius: 'var(--mk-radius-sm)',
+          cursor: typed === name ? 'pointer' : 'not-allowed',
+          opacity: typed === name ? 1 : 0.5,
+          color: 'var(--mk-danger-on-solid)',
+          background: 'var(--mk-danger-solid)',
+          border: '1px solid var(--mk-danger-solid)',
+        }}
+      >
+        {pending ? 'Deleting…' : 'Delete'}
+      </button>
+    </span>
+  )
+}
+
+/** The local audit trail for one stub, with the scope note the API insists on. */
+function History({ profileId, clientKey }: { profileId: string; clientKey: string }) {
+  const query = useQuery({
+    queryKey: ['audit', profileId, clientKey],
+    queryFn: () => api.audit(profileId, clientKey),
+  })
+  if (query.isPending) return <Skeleton width="80%" height={60} />
+  if (query.data === undefined || query.data.entries.length === 0) {
+    return (
+      <p style={{ margin: 0, fontSize: 13, color: 'var(--mk-text-tertiary)' }}>
+        No changes recorded. {query.data?.scope ?? ''}
+      </p>
+    )
+  }
+  return (
+    <>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 8 }}>
+        {query.data.entries.map((entry) => (
+          <li key={entry.id} style={{ fontSize: 13 }}>
+            <span style={{ color: 'var(--mk-text-primary)' }}>{entry.summary}</span>
+            <span style={{ display: 'block', fontSize: 12, color: 'var(--mk-text-tertiary)' }}>
+              {entry.actor} · {new Date(entry.at).toLocaleString()} · {entry.action}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p style={{ marginTop: 12, fontSize: 12, color: 'var(--mk-text-tertiary)' }}>
+        {query.data.scope} A change made with curl leaves no trace here.
+      </p>
+    </>
+  )
+}
+
+function parseDraft(draft: string | null): JsonObject | null {
+  if (draft === null) return null
+  try {
+    const parsed: unknown = JSON.parse(draft)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as JsonObject)
+      : null
+  } catch {
+    return null
+  }
+}
+
+function describeError(caught: unknown): string {
+  if (caught instanceof ApiError) {
+    const payload = caught.payload as { message?: string; upstream?: { status?: number } }
+    return payload?.message ?? `The server refused the write (${caught.status}).`
+  }
+  return caught instanceof Error ? caught.message : 'The write failed.'
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {

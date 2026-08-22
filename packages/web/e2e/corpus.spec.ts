@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { resetToSeed } from './seed.js'
 
 /**
  * End-to-end against the real stack: CLI → SQLite mirror → BFF → SPA, with a real WireMock
@@ -10,6 +11,11 @@ import { expect, test } from '@playwright/test'
  */
 
 const ROW = '[role="row"][aria-rowindex]'
+
+// Order-independent: every spec restores the shared corpus before it runs.
+test.beforeEach(async ({ page }) => {
+  await resetToSeed(page)
+})
 
 for (const colorScheme of ['light', 'dark'] as const) {
   test.describe(`corpus screen (${colorScheme})`, () => {
@@ -37,7 +43,8 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expect(detail).toContainText('this server has no enabled/disabled concept')
 
       await detail.getByRole('tab', { name: 'Raw JSON' }).click()
-      await expect(detail.locator('pre')).toContainText('"request"')
+      // An editable textarea where writes are allowed, a read-only block where they are not.
+      await expect(detail.getByLabel('Raw JSON')).toHaveValue(/"request"/)
 
       expect(errors, `console errors: ${errors.join(' | ')}`).toEqual([])
     })

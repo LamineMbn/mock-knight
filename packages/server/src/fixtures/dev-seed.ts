@@ -1,4 +1,5 @@
 import type { JsonObject } from '@mock-knight/core'
+import seed from '../../../../fixtures/wiremock-seed.json' with { type: 'json' }
 
 /**
  * The small corpus the integration and end-to-end tiers run against.
@@ -10,42 +11,14 @@ import type { JsonObject } from '@mock-knight/core'
  * Deliberately covers the awkward shapes rather than the tidy ones — a header-selected stub, a
  * regex path, a proxy, a delay, and a stub carrying fields the canonical model does not model.
  */
-export const DEV_SEED: JsonObject[] = [
-  {
-    name: 'orders create 500',
-    priority: 3,
-    scenarioName: 'checkout',
-    requiredScenarioState: 'Started',
-    newScenarioState: 'ordered',
-    metadata: { 'mock-knight': { folder: ['orders'], tags: ['legacy'] } },
-    request: {
-      method: 'POST',
-      urlPath: '/v1/orders',
-      headers: { 'X-Tenant': { equalTo: 'acme' } },
-    },
-    response: { status: 500, jsonBody: { error: 'insufficient funds' } },
-  },
-  {
-    name: 'orders read',
-    request: { method: 'GET', urlPathPattern: '/v1/orders/[0-9]+' },
-    response: { status: 200, body: '{"id":1}', headers: { 'Content-Type': 'application/json' } },
-  },
-  {
-    name: 'customers list',
-    request: { method: 'GET', urlPath: '/v1/customers' },
-    response: { status: 404, body: 'not found', fixedDelayMilliseconds: 50 },
-  },
-  {
-    name: 'payments proxy',
-    request: { method: 'ANY', urlPattern: '/v1/payments/.*' },
-    response: { proxyBaseUrl: 'http://upstream.example' },
-  },
-  {
-    request: { method: 'DELETE', url: '/v1/carts/9' },
-    response: { status: 204 },
-    postServeActions: [{ name: 'webhook', parameters: { url: 'http://x' } }],
-  },
-]
+/**
+ * The one seed every suite shares — integration, end-to-end, and any manual poke at the dev
+ * server. It lives in `fixtures/wiremock-seed.json` rather than in code because the e2e specs
+ * cannot import from this package, and a duplicated copy is exactly how the suites started
+ * invalidating each other: each one replaces the target corpus wholesale, so whichever ran last
+ * silently redefined what the others were asserting against.
+ */
+export const DEV_SEED = seed as unknown as JsonObject[]
 
 /** Replace a throwaway WireMock's corpus with the shared seed. Never point this at a real one. */
 export async function seedWireMock(baseUrl: string): Promise<void> {
