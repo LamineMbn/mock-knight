@@ -182,7 +182,7 @@ export function App() {
 
       {screen === 'traffic' ? (
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          <TrafficScreen profileId={profile.id} baseUrl={profile.baseUrl} />
+          <TrafficScreen profile={profile} />
         </div>
       ) : screen === 'profiles' ? (
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>

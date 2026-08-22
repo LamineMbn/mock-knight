@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api.js'
-import type { ServeEventRow } from '../api.js'
+import type { Profile, ServeEventRow } from '../api.js'
 import { MatchExplainer } from './MatchExplainer.js'
 import { Button, MethodChip, MiddleEllipsis, Skeleton, StatusCode } from './primitives.js'
 
@@ -166,8 +166,22 @@ function Row({
   )
 }
 
-export function TrafficScreen({ profileId, baseUrl }: { profileId: string; baseUrl: string }) {
+export function TrafficScreen({ profile }: { profile: Profile }) {
+  const profileId = profile.id
+  const baseUrl = profile.baseUrl
+  const queryClient = useQueryClient()
   const [filter, setFilter] = useState<Filter>('all')
+  /**
+   * Events the user has dismissed from *their* view.
+   *
+   * Held as a set of ids rather than a timestamp watermark: events arrive newest-first within a
+   * poll, so their ids are not monotonic with time and an id or time cutoff would hide the
+   * wrong ones. This destroys nothing — the server's journal is untouched and so is everyone
+   * else's view of it, which is the difference between this and Clear journal below.
+   */
+  const [dismissed, setDismissed] = useState<ReadonlySet<number>>(new Set())
+  const [confirmingClear, setConfirmingClear] = useState(false)
+  const [confirmText, setConfirmText] = useState('')
   const [explaining, setExplaining] = useState<number | null>(null)
   const [displayed, setDisplayed] = useState<ServeEventRow[]>([])
   const [focusedId, setFocusedId] = useState<number | null>(null)
@@ -204,8 +218,28 @@ export function TrafficScreen({ profileId, baseUrl }: { profileId: string; baseU
     setHeld(false)
   }, [fetched, shouldHold])
 
+  const visible = useMemo(
+    () => displayed.filter((event) => !dismissed.has(event.id)),
+    [displayed, dismissed],
+  )
+  // Counted against what is actually on hand, not against the dismissed set: events age out of
+  // the journal window, and offering to unhide 40 that no longer exist would be a lie.
+  const hiddenCount = displayed.length - visible.length
   const shownIds = useMemo(() => new Set(displayed.map((e) => e.id)), [displayed])
   const pending = fetched.filter((event) => !shownIds.has(event.id)).length
+
+  const clearJournal = useMutation({
+    mutationFn: () => api.danger(profileId, 'clear-journal', confirmText),
+    onSuccess: () => {
+      setConfirmingClear(false)
+      setConfirmText('')
+      setDismissed(new Set())
+      setDisplayed([])
+      void queryClient.invalidateQueries({ queryKey: ['events', profileId] })
+      // "Unused since…" was quoting a window whose events no longer exist.
+      void queryClient.invalidateQueries({ queryKey: ['corpus'] })
+    },
+  })
 
   const flush = () => {
     setDisplayed(fetched)
@@ -215,10 +249,10 @@ export function TrafficScreen({ profileId, baseUrl }: { profileId: string; baseU
   // Focus is keyed to the row **id**, never the index: rows prepend, so an index-based roving
   // focus walks the user down one row on every arrival.
   const move = (delta: number) => {
-    if (displayed.length === 0) return
-    const current = displayed.findIndex((event) => event.id === focusedId)
-    const next = Math.min(displayed.length - 1, Math.max(0, (current === -1 ? 0 : current) + delta))
-    setFocusedId(displayed[next]!.id)
+    if (visible.length === 0) return
+    const current = visible.findIndex((event) => event.id === focusedId)
+    const next = Math.min(visible.length - 1, Math.max(0, (current === -1 ? 0 : current) + delta))
+    setFocusedId(visible[next]!.id)
   }
 
   return (
@@ -281,12 +315,94 @@ export function TrafficScreen({ profileId, baseUrl }: { profileId: string; baseU
           <span style={{ fontSize: 12, color: 'var(--mk-text-tertiary)' }}>paused</span>
         )}
 
+        {/*
+          Hides what is on screen so the next call is easy to spot. Nothing is deleted, which is
+          what makes it safe to press on a server a whole team shares — the destructive version
+          is beside it, and says so.
+        */}
+        {visible.length > 0 && (
+          <Button
+            variant="quiet"
+            onClick={() => setDismissed(new Set(displayed.map((event) => event.id)))}
+          >
+            Clear view
+          </Button>
+        )}
+        {hiddenCount > 0 && (
+          <Button variant="quiet" onClick={() => setDismissed(new Set())}>
+            Show {hiddenCount} hidden
+          </Button>
+        )}
+
         <span style={{ flex: 1 }} />
         {journal.data?.window.earliestAt != null && (
           <span style={{ fontSize: 12, color: 'var(--mk-text-tertiary)' }}>
             {/* Bounded truth: never a claim about all time. */}
             journal reaches back to {new Date(journal.data.window.earliestAt).toLocaleTimeString()}
           </span>
+        )}
+
+        {/*
+          The real thing — FR-TRAF-7 makes it a §9.6 destructive operation, so it takes the
+          profile name typed back and is absent on a protected profile. It empties the journal
+          for *everyone* pointed at this server, which is why it is not the easy button.
+        */}
+        {!profile.protected && !profile.readOnly && (
+          <>
+            {confirmingClear ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>
+                  Empties it for everyone. Type <code className="mk-mono">{profile.name}</code>:
+                </span>
+                <input
+                  autoFocus
+                  aria-label="Type the profile name to confirm clearing the journal"
+                  value={confirmText}
+                  onChange={(event) => setConfirmText(event.target.value)}
+                  style={{
+                    height: 24,
+                    width: 150,
+                    padding: '0 6px',
+                    font: 'inherit',
+                    fontSize: 12,
+                    color: 'var(--mk-text-primary)',
+                    background: 'var(--mk-bg-surface)',
+                    border: '1px solid var(--mk-border-strong)',
+                    borderRadius: 'var(--mk-radius-sm)',
+                  }}
+                />
+                <Button
+                  onClick={() => {
+                    setConfirmingClear(false)
+                    setConfirmText('')
+                  }}
+                >
+                  Cancel
+                </Button>
+                <button
+                  type="button"
+                  disabled={confirmText !== profile.name || clearJournal.isPending}
+                  onClick={() => clearJournal.mutate()}
+                  style={{
+                    height: 24,
+                    padding: '0 8px',
+                    font: 'inherit',
+                    fontSize: 12,
+                    borderRadius: 'var(--mk-radius-sm)',
+                    cursor: confirmText === profile.name ? 'pointer' : 'not-allowed',
+                    opacity: confirmText === profile.name ? 1 : 0.5,
+                    color: 'var(--mk-danger-on-solid)',
+                    background: 'var(--mk-danger-solid)',
+                    border: '1px solid var(--mk-danger-solid)',
+                  }}
+                >
+                  Clear journal
+                </button>
+              </span>
+            ) : (
+              <Button onClick={() => setConfirmingClear(true)}>Clear journal…</Button>
+            )}
+          </>
         )}
       </div>
 
@@ -324,14 +440,24 @@ export function TrafficScreen({ profileId, baseUrl }: { profileId: string; baseU
               <Skeleton key={index} width={`${40 + ((index * 11) % 50)}%`} />
             ))}
           </div>
-        ) : displayed.length === 0 ? (
+        ) : visible.length === 0 ? (
           <div
             style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--mk-text-secondary)' }}
           >
             <strong style={{ display: 'block', fontSize: 16, marginBottom: 6 }}>
-              No requests recorded yet.
+              {hiddenCount > 0 ? 'Waiting for the next request.' : 'No requests recorded yet.'}
             </strong>
-            Send a request to <code className="mk-mono">{baseUrl}</code> and it will appear here.
+            {hiddenCount > 0 ? (
+              <>
+                {hiddenCount} earlier {hiddenCount === 1 ? 'request is' : 'requests are'} hidden
+                from this view — still on the server.
+              </>
+            ) : (
+              <>
+                Send a request to <code className="mk-mono">{baseUrl}</code> and it will appear
+                here.
+              </>
+            )}
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -339,7 +465,7 @@ export function TrafficScreen({ profileId, baseUrl }: { profileId: string; baseU
               Requests this server has served. Use j and k to move, Enter to explain one.
             </caption>
             <tbody>
-              {displayed.map((event) => (
+              {visible.map((event) => (
                 <Row
                   key={event.id}
                   event={event}

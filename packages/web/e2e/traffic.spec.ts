@@ -113,3 +113,74 @@ test('only one row is in the tab order at a time', async ({ page }) => {
   // A roving tabindex (§8): the list is one tab stop, arrows move within it.
   expect(tabbable).toBeLessThanOrEqual(1)
 })
+
+/**
+ * Clearing — two different actions that must not be confused for each other.
+ *
+ * "Clear view" is the everyday one: the developer wants to see their *next* call and the noise
+ * above it is in the way. It deletes nothing, so it is safe to press repeatedly on a server a
+ * whole team shares. "Clear journal" really does empty the journal, for everyone pointed at
+ * that server, which is why FR-TRAF-7 makes it a §9.6 destructive operation with the profile
+ * name typed back. The tests below exist to stop the cheap one quietly acquiring the
+ * expensive one's consequences.
+ */
+
+async function journalSize(): Promise<number> {
+  const body = (await (await fetch(`${WIREMOCK}/__admin/requests`)).json()) as {
+    requests: unknown[]
+  }
+  return body.requests.length
+}
+
+test('Clear view empties the list without touching the server journal', async ({ page }) => {
+  await traffic(page)
+  const before = await page.locator(ROW).count()
+  expect(before).toBeGreaterThan(0)
+  // Not compared against the row count: the local mirror keeps its own bounded history, so it
+  // legitimately holds events this WireMock's journal has already been asked to forget.
+  const onServer = await journalSize()
+  expect(onServer).toBeGreaterThan(0)
+
+  await page.getByRole('button', { name: 'Clear view' }).click()
+
+  await expect(page.locator(ROW)).toHaveCount(0)
+  await expect(page.getByText('Waiting for the next request.')).toBeVisible()
+  // The load-bearing assertion: the server still has every one of them.
+  expect(await journalSize()).toBe(onServer)
+
+  // The next call arrives on an otherwise empty screen — the whole point of the button.
+  await fetch(`${WIREMOCK}/v1/after-the-clear`)
+  await expect(page.locator(ROW)).toHaveCount(1, { timeout: 8000 })
+  await expect(page.locator(ROW).first()).toContainText('/v1/after-the-clear')
+
+  // And hiding is reversible, because nothing was destroyed.
+  await page.getByRole('button', { name: `Show ${before} hidden` }).click()
+  await expect(page.locator(ROW)).toHaveCount(before + 1)
+})
+
+test('Clear journal needs the profile name typed, then empties the server too', async ({
+  page,
+}) => {
+  await traffic(page)
+  expect(await journalSize()).toBeGreaterThan(0)
+
+  await page.getByRole('button', { name: 'Clear journal…' }).click()
+  const confirm = page.getByRole('button', { name: 'Clear journal', exact: true })
+  await expect(confirm).toBeDisabled()
+
+  // A near miss is still a miss — this is the guard, not a formality.
+  await page.getByLabel(/Type the profile name to confirm clearing the journal/).fill('localhost')
+  await expect(confirm).toBeDisabled()
+
+  await page
+    .getByLabel(/Type the profile name to confirm clearing the journal/)
+    .fill('localhost:18099')
+  await expect(confirm).toBeEnabled()
+  await confirm.click()
+
+  await expect(page.locator(ROW)).toHaveCount(0)
+  expect(await journalSize()).toBe(0)
+  // Not the "hidden from this view" copy: there is genuinely nothing left to unhide.
+  await expect(page.getByText('No requests recorded yet.')).toBeVisible()
+  await expect(page.getByRole('button', { name: /hidden/ })).toHaveCount(0)
+})
