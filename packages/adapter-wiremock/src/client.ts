@@ -16,6 +16,38 @@ import type { ConnectionConfig, Json, ResolvedAuth } from '@mock-knight/core'
 export const DEFAULT_ADMIN_PATH = '/__admin'
 const DEFAULT_TIMEOUT_MS = 10_000
 
+/**
+ * Identify ourselves on every request.
+ *
+ * undici sends no `User-Agent` at all, and a request without one is refused outright by some
+ * WAFs — observed against an AWS ALB that answered `404` to curl and `403` to us, purely
+ * because of the missing header. The failure is doubly bad: the tool cannot connect, and the
+ * status it reports points at the wrong cause.
+ *
+ * It also earns its place on the other side: this tool pokes at mock servers a whole team
+ * shares, and "who is hitting my admin API?" should have an answer in the access log.
+ */
+const USER_AGENT = 'mock-knight'
+
+/**
+ * Where the admin API lives, given a base URL and an admin path.
+ *
+ * The admin path is **appended to** the base URL, including any context path it carries. This
+ * used to resolve the two as URLs, which meant an absolute admin path silently discarded the
+ * context: `https://host/wcboo` + `/__admin` became `https://host/__admin`, and the tool then
+ * reported whatever the load balancer said about a path nobody had asked for. A server behind a
+ * context path is completely ordinary, so losing it was never acceptable.
+ *
+ * An empty admin path is allowed, for a server whose admin API is the base URL itself.
+ */
+export function composeAdminUrl(baseUrl: string, adminPath?: string | null): string {
+  const base = new URL(baseUrl)
+  const context = base.pathname.replace(/\/+$/, '')
+  const raw = (adminPath ?? DEFAULT_ADMIN_PATH).trim().replace(/\/+$/, '')
+  const suffix = raw === '' ? '' : raw.startsWith('/') ? raw : `/${raw}`
+  return `${base.origin}${context}${suffix}`
+}
+
 export interface WireMockResponse<T> {
   status: number
   body: T
@@ -43,8 +75,7 @@ export class WireMockClient {
 
   constructor(private readonly config: ConnectionConfig) {
     const base = new URL(config.baseUrl)
-    const adminPath = (config.adminPath ?? DEFAULT_ADMIN_PATH).replace(/\/$/, '')
-    this.adminUrl = new URL(adminPath, base).toString().replace(/\/$/, '')
+    this.adminUrl = composeAdminUrl(config.baseUrl, config.adminPath)
     this.allowedHosts = config.allowedHosts
     this.assertHostAllowed(base.host)
 
@@ -55,7 +86,11 @@ export class WireMockClient {
       bodyTimeout: timeout,
       connections: 8,
     })
-    this.headers = { accept: 'application/json', ...authHeaders(config.auth) }
+    this.headers = {
+      accept: 'application/json',
+      'user-agent': config.userAgent ?? USER_AGENT,
+      ...authHeaders(config.auth),
+    }
   }
 
   private assertHostAllowed(host: string): void {

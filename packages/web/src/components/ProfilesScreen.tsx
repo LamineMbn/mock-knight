@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api.js'
-import type { CapabilityRow, Profile } from '../api.js'
+import type { CapabilityRow, NewProfile, Profile } from '../api.js'
+import { ServerForm } from './ServerForm.js'
 import { Button, Chip, Skeleton } from './primitives.js'
 
 /**
@@ -14,168 +15,53 @@ import { Button, Chip, Skeleton } from './primitives.js'
  * bug.
  */
 
-const COLOURS = ['slate', 'indigo', 'cyan', 'violet', 'rose', 'olive'] as const
-
-function AddServer({ onAdded }: { onAdded: (id: string) => void }) {
+function AddOrEditServer({
+  existing,
+  onDone,
+}: {
+  existing?: Profile
+  onDone: (id: string) => void
+}) {
   const queryClient = useQueryClient()
-  const [baseUrl, setBaseUrl] = useState('http://localhost:8080')
-  const [name, setName] = useState('')
-  const [colour, setColour] = useState<string>('indigo')
-  const [isProtected, setProtected] = useState(false)
-  const [readOnly, setReadOnly] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const add = useMutation({
-    mutationFn: async () => {
-      let host = name.trim()
-      if (host === '') {
-        try {
-          host = new URL(baseUrl).host
-        } catch {
-          throw new Error('That is not a valid URL.')
-        }
+  const save = useMutation({
+    mutationFn: async (input: NewProfile) => {
+      if (existing !== undefined) {
+        const updated = await api.updateProfile(existing.id, input)
+        if (updated.mirrorCleared) await api.refresh(existing.id).catch(() => undefined)
+        return updated.profile
       }
-      const created = await api.createProfile({
-        name: host,
-        baseUrl: baseUrl.trim(),
-        colour,
-        protected: isProtected,
-        readOnly,
-      })
-      // Connect immediately: a profile that cannot be reached should say so now, not the first
-      // time someone opens the corpus and finds it empty.
-      await api.connect(created.profile.id).catch(() => undefined)
+      const created = await api.createProfile(input)
+      const connected = await api.connect(created.profile.id).catch(() => null)
+      if (connected === null) {
+        await api.deleteProfile(created.profile.id).catch(() => undefined)
+        throw new Error(
+          `Nothing usable answered at ${input.baseUrl}. Check the URL and the admin path.`,
+        )
+      }
       await api.refresh(created.profile.id).catch(() => undefined)
       return created.profile
     },
     onSuccess: (profile) => {
-      void queryClient.invalidateQueries({ queryKey: ['profiles'] })
-      onAdded(profile.id)
+      void queryClient.invalidateQueries()
+      onDone(profile.id)
     },
     onError: (caught: unknown) =>
-      setError(caught instanceof Error ? caught.message : 'Could not add that server.'),
+      setError(caught instanceof Error ? caught.message : 'Could not save that server.'),
   })
 
-  const field: React.CSSProperties = {
-    height: 28,
-    padding: '0 8px',
-    font: 'inherit',
-    fontSize: 13,
-    color: 'var(--mk-text-primary)',
-    background: 'var(--mk-bg-surface)',
-    border: '1px solid var(--mk-border-strong)',
-    borderRadius: 'var(--mk-radius-sm)',
-  }
-
   return (
-    <section
-      style={{
-        border: '1px solid var(--mk-border-default)',
-        borderRadius: 'var(--mk-radius-md)',
-        padding: 12,
-        marginBottom: 16,
-        background: 'var(--mk-bg-surface)',
+    <ServerForm
+      {...(existing === undefined ? {} : { existing })}
+      pending={save.isPending}
+      error={error}
+      onSubmit={(input) => {
+        setError(null)
+        save.mutate(input)
       }}
-    >
-      <strong style={{ display: 'block', fontSize: 14, marginBottom: 8 }}>Add a mock server</strong>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <label style={{ display: 'grid', gap: 3, flex: '2 1 260px' }}>
-          <span style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>Base URL</span>
-          <input
-            aria-label="Base URL"
-            value={baseUrl}
-            onChange={(event) => setBaseUrl(event.target.value)}
-            style={field}
-          />
-        </label>
-        <label style={{ display: 'grid', gap: 3, flex: '1 1 160px' }}>
-          <span style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>
-            Name <span style={{ color: 'var(--mk-text-tertiary)' }}>(optional)</span>
-          </span>
-          <input
-            aria-label="Name"
-            placeholder="from the URL"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            style={field}
-          />
-        </label>
-        <label style={{ display: 'grid', gap: 3 }}>
-          <span style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>Colour</span>
-          <span style={{ display: 'flex', gap: 4 }}>
-            {COLOURS.map((option) => (
-              <button
-                key={option}
-                type="button"
-                aria-label={option}
-                aria-pressed={colour === option}
-                onClick={() => setColour(option)}
-                style={{
-                  width: 26,
-                  height: 28,
-                  cursor: 'pointer',
-                  borderRadius: 'var(--mk-radius-sm)',
-                  border: `2px solid ${colour === option ? 'var(--mk-accent-solid)' : 'transparent'}`,
-                  background: 'var(--mk-bg-surface)',
-                }}
-              >
-                <span
-                  style={{
-                    display: 'block',
-                    width: 12,
-                    height: 12,
-                    margin: '0 auto',
-                    borderRadius: 9999,
-                    background: `var(--mk-profile-${option})`,
-                  }}
-                />
-              </button>
-            ))}
-          </span>
-        </label>
-      </div>
-
-      <div style={{ display: 'flex', gap: 16, margin: '10px 0', fontSize: 13 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input
-            type="checkbox"
-            checked={isProtected}
-            onChange={(event) => setProtected(event.target.checked)}
-            style={{ accentColor: 'var(--mk-accent-solid)' }}
-          />
-          Protected
-          <span style={{ fontSize: 12, color: 'var(--mk-text-tertiary)' }}>
-            — destructive operations become unreachable, in the UI and in the API
-          </span>
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input
-            type="checkbox"
-            checked={readOnly}
-            onChange={(event) => setReadOnly(event.target.checked)}
-            style={{ accentColor: 'var(--mk-accent-solid)' }}
-          />
-          Read-only
-        </label>
-      </div>
-
-      {error !== null && (
-        <p role="alert" style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--mk-danger-text)' }}>
-          {error}
-        </p>
-      )}
-
-      <Button
-        variant="primary"
-        disabled={add.isPending}
-        onClick={() => {
-          setError(null)
-          add.mutate()
-        }}
-      >
-        {add.isPending ? 'Connecting…' : 'Add and connect'}
-      </Button>
-    </section>
+      {...(existing === undefined ? {} : { onCancel: () => onDone(existing.id) })}
+    />
   )
 }
 
@@ -375,14 +261,33 @@ export function ProfilesScreen({
   onSelect: (id: string) => void
 }) {
   const queryClient = useQueryClient()
+  const [editing, setEditing] = useState<string | null>(null)
   const remove = useMutation({
     mutationFn: (id: string) => api.deleteProfile(id),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['profiles'] }),
   })
 
+  const underEdit = profiles.find((profile) => profile.id === editing)
+
   return (
     <main style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: 14 }}>
-      <AddServer onAdded={onSelect} />
+      {/*
+        Keyed, so switching between "add" and "edit" — or between two profiles — remounts the
+        form. Without it React reuses the instance, the `useState` initialisers never re-run,
+        and Edit opens showing whatever was half-typed into the add form.
+      */}
+      {underEdit === undefined ? (
+        <AddOrEditServer key="new" onDone={onSelect} />
+      ) : (
+        <AddOrEditServer
+          key={underEdit.id}
+          existing={underEdit}
+          onDone={(id) => {
+            setEditing(null)
+            onSelect(id)
+          }}
+        />
+      )}
 
       <strong style={{ display: 'block', fontSize: 14, marginBottom: 6 }}>Servers</strong>
       <ul style={{ listStyle: 'none', margin: '0 0 8px', padding: 0, display: 'grid', gap: 6 }}>
@@ -429,6 +334,7 @@ export function ProfilesScreen({
                 Switch
               </Button>
             )}
+            <Button onClick={() => setEditing(profile.id)}>Edit</Button>
             {profiles.length > 1 && profile.id !== active.id && (
               <Button onClick={() => remove.mutate(profile.id)}>Remove</Button>
             )}

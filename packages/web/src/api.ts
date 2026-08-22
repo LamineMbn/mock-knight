@@ -78,6 +78,8 @@ export interface Profile {
 export interface NewProfile {
   name: string
   baseUrl: string
+  /** Appended to the base URL, context path and all. `/__admin` unless the server says otherwise. */
+  adminPath: string | null
   colour: string
   protected: boolean
   readOnly: boolean
@@ -209,6 +211,12 @@ export const api = {
   createProfile: (profile: NewProfile) =>
     call<{ profile: Profile }>('/api/profiles', {
       method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...profile, adapter: 'wiremock' }),
+    }),
+  updateProfile: (profileId: string, profile: NewProfile) =>
+    call<{ profile: Profile; mirrorCleared: boolean }>(`/api/profiles/${profileId}`, {
+      method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ ...profile, adapter: 'wiremock' }),
     }),

@@ -17,6 +17,7 @@ import { Button } from './primitives.js'
 export function FirstRun({ onAdded }: { onAdded: (id: string) => void }) {
   const queryClient = useQueryClient()
   const [baseUrl, setBaseUrl] = useState('http://localhost:8080')
+  const [adminPath, setAdminPath] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   const add = useMutation({
@@ -30,6 +31,7 @@ export function FirstRun({ onAdded }: { onAdded: (id: string) => void }) {
       const created = await api.createProfile({
         name: host,
         baseUrl: baseUrl.trim(),
+        adminPath: adminPath.trim() === '' ? null : adminPath.trim(),
         colour: 'indigo',
         protected: false,
         readOnly: false,
@@ -117,6 +119,32 @@ export function FirstRun({ onAdded }: { onAdded: (id: string) => void }) {
               borderRadius: 'var(--mk-radius-sm)',
             }}
           />
+        </label>
+
+        <label style={{ display: 'grid', gap: 4, marginTop: 10 }}>
+          <span style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>
+            Admin path <span style={{ color: 'var(--mk-text-tertiary)' }}>(default /__admin)</span>
+          </span>
+          <input
+            aria-label="Admin path"
+            placeholder="/__admin"
+            value={adminPath}
+            onChange={(event) => setAdminPath(event.target.value)}
+            style={{
+              height: 30,
+              padding: '0 10px',
+              font: 'inherit',
+              fontSize: 13,
+              color: 'var(--mk-text-primary)',
+              background: 'var(--mk-bg-surface)',
+              border: '1px solid var(--mk-border-strong)',
+              borderRadius: 'var(--mk-radius-sm)',
+            }}
+          />
+          <span style={{ fontSize: 12, color: 'var(--mk-text-tertiary)' }}>
+            {/* A context path in the base URL is kept, so this appends to it. */}
+            Appended to the base URL, including any context path it already has.
+          </span>
         </label>
 
         {error !== null && (

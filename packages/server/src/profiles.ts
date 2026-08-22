@@ -126,6 +126,57 @@ export function createProfile(
   return getProfile(db, id)!
 }
 
+/**
+ * Edit a profile in place.
+ *
+ * The id is stable across edits on purpose: it keys the mirror, the audit trail, and any URL
+ * someone has pasted into Slack. Correcting a typo in a URL must not orphan all of that.
+ *
+ * Changing where a profile points invalidates the mirror — the stubs on the new server are not
+ * the stubs we cached from the old one — so the caller is expected to drop it. `updateProfile`
+ * reports whether that happened rather than deciding silently.
+ */
+export function updateProfile(
+  db: Db,
+  id: string,
+  input: ProfileInput,
+): { profile: Profile; targetChanged: boolean } | null {
+  const existing = getProfile(db, id)
+  if (existing === null) return null
+
+  const targetChanged = existing.baseUrl !== input.baseUrl || existing.adminPath !== input.adminPath
+
+  db.prepare(
+    `UPDATE profile SET name = @name, base_url = @base_url, admin_path = @admin_path,
+       colour = @colour, protected = @protected, read_only = @read_only,
+       auth_kind = @auth_kind, auth_ref = @auth_ref, correlation_header = @correlation_header,
+       redact_headers = @redact_headers
+     WHERE id = @id`,
+  ).run({
+    id,
+    name: input.name,
+    base_url: input.baseUrl,
+    admin_path: input.adminPath,
+    colour: input.colour,
+    protected: input.protected ? 1 : 0,
+    read_only: input.readOnly ? 1 : 0,
+    auth_kind: input.authKind,
+    auth_ref: input.authRef,
+    correlation_header: input.correlationHeader,
+    redact_headers: JSON.stringify(input.redactHeaders),
+  })
+
+  if (targetChanged) {
+    // Anything derived from the old server is now a lie about the new one.
+    db.prepare(`DELETE FROM mock WHERE profile_id = ?`).run(id)
+    db.prepare(`DELETE FROM serve_event WHERE profile_id = ?`).run(id)
+    db.prepare(`DELETE FROM journal_window WHERE profile_id = ?`).run(id)
+    db.prepare(`UPDATE profile SET capabilities = NULL, server_ident = NULL WHERE id = ?`).run(id)
+  }
+
+  return { profile: getProfile(db, id)!, targetChanged }
+}
+
 export function recordConnection(
   db: Db,
   id: string,

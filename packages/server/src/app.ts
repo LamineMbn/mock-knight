@@ -18,6 +18,7 @@ import {
   getProfile,
   listProfiles,
   profileInputSchema,
+  updateProfile,
 } from './profiles.js'
 import type { Connection, ConnectionRegistry, RuntimeMode } from './runtime.js'
 
@@ -276,6 +277,24 @@ export function createApp(options: AppOptions) {
         return c.json({ error: 'invalid_profile', issues: parsed.error.issues }, 400)
       }
       return c.json({ profile: createProfile(db, parsed.data) }, 201)
+    })
+
+    .patch('/api/profiles/:id', async (c) => {
+      const id = c.req.param('id')
+      const parsed = profileInputSchema.safeParse(await c.req.json())
+      if (!parsed.success) {
+        return c.json({ error: 'invalid_profile', issues: parsed.error.issues }, 400)
+      }
+      const updated = updateProfile(db, id, parsed.data)
+      if (updated === null) return c.json({ error: 'not_found' }, 404)
+
+      // Re-point the live connection too: leaving the old adapter in place would answer for a
+      // server the profile no longer names.
+      if (updated.targetChanged) {
+        await registry.disconnect(id)
+        await registry.connect(updated.profile).catch(() => undefined)
+      }
+      return c.json({ profile: updated.profile, mirrorCleared: updated.targetChanged })
     })
 
     .delete('/api/profiles/:id', (c) =>

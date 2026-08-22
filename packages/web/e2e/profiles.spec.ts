@@ -41,8 +41,8 @@ test('the active environment is always named, not just coloured', async ({ page 
 test('a second server can be added and switched to from the UI', async ({ page }) => {
   await page.goto('/?screen=profiles')
 
-  await page.getByLabel('Base URL').fill(WIREMOCK)
-  await page.getByLabel('Name').fill('second view')
+  await page.getByLabel('Base URL', { exact: true }).fill(WIREMOCK)
+  await page.getByLabel('Name', { exact: true }).fill('second view')
   await page.getByRole('button', { name: 'Add and connect' }).click()
 
   // Switching carries the profile in the URL, so a pasted link reproduces the whole view
@@ -77,8 +77,8 @@ test('the danger zone is absent on a protected profile, not merely disabled', as
   // Unprotected: it is there.
   await expect(page.getByText('Danger zone')).toBeVisible()
 
-  await page.getByLabel('Base URL').fill(WIREMOCK)
-  await page.getByLabel('Name').fill('locked')
+  await page.getByLabel('Base URL', { exact: true }).fill(WIREMOCK)
+  await page.getByLabel('Name', { exact: true }).fill('locked')
   await page.getByRole('checkbox').first().check()
   await page.getByRole('button', { name: 'Add and connect' }).click()
   await expect(page.getByRole('button', { name: /Profile: / })).toContainText('locked')
@@ -95,4 +95,46 @@ test('a destructive operation needs the profile name typed back', async ({ page 
   await expect(confirm).toBeDisabled()
   await page.getByLabel(/Type the profile name to confirm/).fill('localhost:18099')
   await expect(confirm).toBeEnabled()
+})
+
+test('shows the admin URL it will actually call, context path and all', async ({ page }) => {
+  await page.goto('/?screen=profiles')
+
+  // The composed URL is the thing that is wrong when a context path is missing, and it is not
+  // obvious from the two fields that produce it. A base URL used to have its context silently
+  // discarded, and the tool then reported whatever the load balancer said about a path nobody
+  // had asked for.
+  await page.getByLabel('Base URL', { exact: true }).fill('https://host/wcboo')
+  await expect(page.getByTestId('admin-url-preview')).toContainText('https://host/wcboo/__admin')
+
+  await page.getByLabel('Admin path', { exact: true }).fill('/mocks/__admin')
+  await expect(page.getByTestId('admin-url-preview')).toContainText(
+    'https://host/wcboo/mocks/__admin',
+  )
+
+  await page.getByLabel('Base URL', { exact: true }).fill('not a url')
+  await expect(page.getByTestId('admin-url-preview')).toContainText('not a valid URL')
+  await expect(page.getByRole('button', { name: 'Add and connect' })).toBeDisabled()
+})
+
+test('a server can be edited, and the form opens on that server', async ({ page }) => {
+  await page.goto('/?screen=profiles')
+
+  // Edit a profile this test owns. Renaming the shared one leaks into every other spec that
+  // types the profile name to confirm a destructive action.
+  await page.getByLabel('Base URL', { exact: true }).fill(WIREMOCK)
+  await page.getByLabel('Name', { exact: true }).fill('to be renamed')
+  await page.getByRole('button', { name: 'Add and connect' }).click()
+  await expect(page.getByRole('button', { name: /Profile: / })).toContainText('to be renamed')
+
+  // Leave something half-typed in the add form first: the edit form must not inherit it.
+  await page.getByLabel('Base URL', { exact: true }).fill('http://half-typed')
+  const row = page.locator('main li').filter({ hasText: 'to be renamed' })
+  await row.getByRole('button', { name: 'Edit' }).click()
+
+  await expect(page.getByLabel('Base URL', { exact: true })).toHaveValue(WIREMOCK)
+  await page.getByLabel('Name', { exact: true }).fill('renamed in the ui')
+  await page.getByRole('button', { name: 'Save changes' }).click()
+
+  await expect(page.getByRole('button', { name: /Profile: / })).toContainText('renamed in the ui')
 })

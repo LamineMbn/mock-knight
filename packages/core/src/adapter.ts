@@ -48,6 +48,8 @@ export interface ConnectionConfig {
   readonly allowedHosts?: readonly string[]
   /** Header that groups one test run's traffic together (FR-TRAF-8). */
   readonly correlationHeader?: string | null
+  /** Overrides how the tool identifies itself upstream. Adapters supply a default. */
+  readonly userAgent?: string
 }
 
 export interface ConnectionInfo {
