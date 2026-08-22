@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.DS_Store
+.vite/
+playwright-report/
+test-results/
+design/contrast-report.txt

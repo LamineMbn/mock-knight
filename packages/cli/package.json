@@ -1,0 +1,31 @@
+{
+  "name": "mock-knight",
+  "version": "0.0.0",
+  "description": "A local-first web UI for HTTP mock servers",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "mock-knight": "./dist/index.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --root ../.."
+  },
+  "dependencies": {
+    "@mock-knight/server": "workspace:*",
+    "@hono/node-server": "^1.13.7",
+    "better-sqlite3": "^13.0.0",
+    "undici": "^7.2.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  }
+}

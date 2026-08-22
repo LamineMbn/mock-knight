@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": {
+      "@mock-knight/core": ["../core/src/index.ts"],
+      "@mock-knight/core/types": ["../core/src/types.ts"],
+      "@mock-knight/adapter-wiremock": ["../adapter-wiremock/src/index.ts"],
+      "@mock-knight/server": ["../server/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

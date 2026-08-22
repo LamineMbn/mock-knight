@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // No rootDir: typechecking resolves @mock-knight/core to its *source* via `paths`, so the
+    // inner loop never depends on a prior build. tsup does the emitting, not tsc.
+    "paths": {
+      "@mock-knight/core": ["../core/src/index.ts"],
+      "@mock-knight/core/types": ["../core/src/types.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

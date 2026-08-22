@@ -1,0 +1,10 @@
+dist/
+node_modules/
+pnpm-lock.yaml
+mock-knight-logo-kit/
+LICENSE
+
+# The specs are hand-formatted and are the source of truth. Prettier column-aligns markdown
+# tables, which rewrites most of these files for no benefit and buries real edits in churn.
+*.md
+design/*.md

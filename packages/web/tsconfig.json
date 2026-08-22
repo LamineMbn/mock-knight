@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "paths": {
+      "@mock-knight/core/types": ["../core/src/types.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

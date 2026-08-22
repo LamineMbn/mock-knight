@@ -1,0 +1,88 @@
+/* Base layer. Colour, spacing and type all come from tokens.css — never a literal here. */
+@import './tokens.css';
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+
+@theme {
+  --font-sans: 'Inter Variable', Inter, -apple-system, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --mk-radius-sm: 4px;
+  --mk-radius-md: 6px;
+  --mk-radius-lg: 8px;
+
+  --mk-row-compact: 26px;
+  --mk-row-default: 32px;
+  --mk-row-comfortable: 38px;
+
+  --mk-motion-fast: 80ms;
+  --mk-motion-base: 140ms;
+  --mk-ease: cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--mk-bg-canvas);
+  color: var(--mk-text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 18px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numbers that sit in columns must not jitter as data streams in. */
+.mk-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.mk-mono {
+  font-family: var(--font-mono);
+}
+
+/* One focus treatment for everything, :focus-visible only. Two layers so it survives on any
+   surface — verified ≥3:1 against both surface and canvas in both themes. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--mk-accent-solid);
+  outline-offset: 2px;
+  border-radius: var(--mk-radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    transition-duration: 0ms !important;
+  }
+}
+
+/* The mark swaps with the theme rather than being recoloured with a filter. */
+.mk-mark-dark {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .mk-mark-light {
+    display: none;
+  }
+  :root:not([data-theme='light']) .mk-mark-dark {
+    display: block;
+  }
+}
+[data-theme='dark'] .mk-mark-light {
+  display: none;
+}
+[data-theme='dark'] .mk-mark-dark {
+  display: block;
+}
