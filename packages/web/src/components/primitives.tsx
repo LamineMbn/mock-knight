@@ -209,7 +209,7 @@ export function Button({
 }: {
   children: ReactNode
   onClick?: () => void
-  variant?: 'primary' | 'secondary' | 'ghost'
+  variant?: 'primary' | 'secondary' | 'ghost' | 'quiet'
   disabled?: boolean
   title?: string
 }) {
@@ -228,6 +228,19 @@ export function Button({
       background: 'transparent',
       color: 'var(--mk-text-secondary)',
       border: '1px solid transparent',
+    },
+    /**
+     * An accent action that repeats down a list.
+     *
+     * A filled primary button is right for *one* action in a view. On a failing test run most
+     * traffic rows are unmatched, so a filled "Why?" becomes thirty stacked blocks of indigo
+     * competing with the red match stripes for the same eye. This reads as the action it is
+     * without shouting on every row.
+     */
+    quiet: {
+      background: 'transparent',
+      color: 'var(--mk-accent-text)',
+      border: '1px solid var(--mk-border-default)',
     },
   }
   return (
