@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { describeStanding, verdictOf } from '@mock-knight/core/types'
 import type { PriorityStanding } from '@mock-knight/core/types'
@@ -389,4 +390,172 @@ export function PriorityCell({ standing }: { standing: PriorityStanding }) {
 export function priorityLabel(standing: PriorityStanding): string {
   const note = describeStanding(standing)
   return `Priority ${standing.priority}${standing.explicit ? '' : ' by default'}${note === null ? '' : `. ${note}`}`
+}
+
+/**
+ * The shape the BFF puts on an error it wants disclosed. Every field is optional because a
+ * failure that never reached the mock server has no status, and one refused before it left the
+ * process has no upstream at all.
+ */
+export interface ErrorPayload {
+  error?: string
+  message?: string
+  upstream?: {
+    method?: string
+    url?: string
+    status?: number | null
+    code?: string | null
+    body?: string
+  }
+}
+
+/** Pull the disclosable part out of whatever was thrown, without assuming it is one. */
+export function errorPayloadOf(caught: unknown): ErrorPayload | null {
+  if (caught === null || typeof caught !== 'object') return null
+  const payload = (caught as { payload?: unknown }).payload
+  return payload !== null && typeof payload === 'object' ? (payload as ErrorPayload) : null
+}
+
+/**
+ * An error, the way design brief §6.11 requires it: human sentence first, then a disclosure
+ * carrying the upstream method, path, status and body — and copyable, because a developer is
+ * going to paste it into an issue or a Slack thread.
+ *
+ * The disclosure is collapsed by default and the sentence stands alone: someone who typed a
+ * hostname wrong needs one line, not a stack trace. Someone debugging a load balancer needs the
+ * body verbatim. Both are here, in that order.
+ *
+ * We had the upstream block on the wire for the whole build and threw it away in the browser,
+ * which is how a context path being silently dropped turned into "it does not work".
+ */
+export function ErrorDisclosure({
+  sentence,
+  payload,
+  onRetry,
+}: {
+  sentence: string
+  payload: ErrorPayload | null
+  onRetry?: () => void
+}) {
+  const [copied, setCopied] = useState(false)
+  const upstream = payload?.upstream
+  const answered = upstream?.status !== null && upstream?.status !== undefined
+
+  const report =
+    upstream === undefined
+      ? null
+      : [
+          `${upstream.method ?? '?'} ${upstream.url ?? '?'}`,
+          upstream.status === null || upstream.status === undefined
+            ? `no response${upstream.code == null ? '' : ` (${upstream.code})`}`
+            : `${upstream.status}`,
+          '',
+          upstream.body ?? '',
+        ].join('\n')
+
+  return (
+    <div
+      role="alert"
+      style={{
+        padding: '10px 12px',
+        borderRadius: 'var(--mk-radius-md)',
+        border: '1px solid var(--mk-danger-border)',
+        background: 'var(--mk-danger-bg)',
+        color: 'var(--mk-danger-text)',
+        fontSize: 13,
+        display: 'grid',
+        gap: 8,
+      }}
+    >
+      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+        <span style={{ flex: 1 }}>{sentence}</span>
+        {onRetry !== undefined && <Button onClick={onRetry}>Try again</Button>}
+      </div>
+
+      {report !== null && (
+        <details>
+          <summary style={{ cursor: 'pointer', fontSize: 12 }}>
+            {/* Never claim the server said something when nothing answered. The two cases have
+                different diagnoses and the label is the first thing that tells them apart. */}
+            {answered ? 'What the mock server said' : 'What happened on the wire'}
+          </summary>
+          <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+            <dl
+              className="mk-mono"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'auto 1fr',
+                gap: '2px 10px',
+                fontSize: 12,
+                margin: 0,
+              }}
+            >
+              <dt style={{ color: 'var(--mk-text-tertiary)' }}>request</dt>
+              <dd style={{ margin: 0, wordBreak: 'break-all' }}>
+                {upstream?.method} {upstream?.url}
+              </dd>
+              <dt style={{ color: 'var(--mk-text-tertiary)' }}>status</dt>
+              <dd style={{ margin: 0 }}>
+                {/* Never a fabricated 0 or 500: nothing answered, and saying so is the point. */}
+                {upstream?.status ??
+                  `no response${upstream?.code == null ? '' : ` · ${upstream.code}`}`}
+              </dd>
+            </dl>
+            {upstream?.body !== undefined && upstream.body !== '' && (
+              <pre
+                className="mk-mono"
+                style={{
+                  margin: 0,
+                  padding: 8,
+                  maxHeight: 200,
+                  overflow: 'auto',
+                  fontSize: 12,
+                  background: 'var(--mk-bg-subtle)',
+                  color: 'var(--mk-text-primary)',
+                  borderRadius: 'var(--mk-radius-sm)',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {upstream.body}
+              </pre>
+            )}
+            <div>
+              <Button
+                onClick={() => {
+                  void navigator.clipboard.writeText(`${sentence}\n\n${report}`).then(
+                    () => setCopied(true),
+                    // Clipboard access can be refused; saying nothing would look like it worked.
+                    () => setCopied(false),
+                  )
+                }}
+              >
+                {copied ? 'Copied' : 'Copy details'}
+              </Button>
+            </div>
+          </div>
+        </details>
+      )}
+    </div>
+  )
+}
+
+export interface Failure {
+  sentence: string
+  payload: ErrorPayload | null
+}
+
+/**
+ * Turn whatever was thrown into something renderable, preferring the server's own sentence.
+ *
+ * The BFF already writes the human explanation — "No DNS record for host…", "The mock server
+ * rejected GET …" — so a component that substitutes its own generic string is throwing away the
+ * more specific one. The fallback is for the cases that never reached the server at all.
+ */
+export function toFailure(caught: unknown, fallback: string): Failure {
+  const payload = errorPayloadOf(caught)
+  const sentence =
+    payload?.message ??
+    (caught instanceof Error && caught.message !== '' ? caught.message : fallback)
+  return { sentence, payload }
 }

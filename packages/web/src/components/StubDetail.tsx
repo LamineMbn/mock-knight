@@ -6,12 +6,15 @@ import type { JsonObject } from '@mock-knight/core/types'
 import {
   Button,
   Chip,
+  ErrorDisclosure,
   InferenceLabel,
   MethodChip,
   PriorityCell,
   Skeleton,
   StatusCode,
+  toFailure,
 } from './primitives.js'
+import type { Failure } from './primitives.js'
 import { ConflictDialog } from './ConflictDialog.js'
 
 /**
@@ -58,7 +61,7 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
      */
     currentHash: string
   } | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Failure | null>(null)
 
   // Selecting a different stub abandons an untouched draft; a touched one is kept until the
   // user resolves it, so switching rows cannot silently discard typing.
@@ -110,7 +113,10 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
         return
       }
       if (caught instanceof ApiError && payload?.error === 'not_connected') {
-        setError('Not connected to the mock server. Reconnect, then save again.')
+        setError({
+        sentence: 'Not connected to the mock server. Reconnect, then save again.',
+        payload: null,
+      })
         return
       }
       setError(describeError(caught))
@@ -131,7 +137,10 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
   const attemptSave = () => {
     const parsed = parseDraft(draft)
     if (parsed === null) {
-      setError('That is not valid JSON, so nothing was sent to the server.')
+      setError({
+        sentence: 'That is not valid JSON, so nothing was sent to the server.',
+        payload: null,
+      })
       return
     }
     setError(null)
@@ -386,17 +395,10 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
       </div>
 
       {error !== null && (
-        <div
-          role="alert"
-          style={{
-            padding: '8px 12px',
-            fontSize: 12,
-            color: 'var(--mk-danger-text)',
-            background: 'var(--mk-danger-bg)',
-            borderTop: '1px solid var(--mk-danger-border)',
-          }}
-        >
-          {error}
+        <div style={{ padding: '8px 12px', borderTop: '1px solid var(--mk-danger-border)' }}>
+          {/* A refused write is the case where the upstream body matters most: WireMock answers
+              422 with the property it did not recognise, and that names the fix exactly. */}
+          <ErrorDisclosure sentence={error.sentence} payload={error.payload} />
         </div>
       )}
 
@@ -568,12 +570,10 @@ function parseDraft(draft: string | null): JsonObject | null {
   }
 }
 
-function describeError(caught: unknown): string {
-  if (caught instanceof ApiError) {
-    const payload = caught.payload as { message?: string; upstream?: { status?: number } }
-    return payload?.message ?? `The server refused the write (${caught.status}).`
-  }
-  return caught instanceof Error ? caught.message : 'The write failed.'
+function describeError(caught: unknown): Failure {
+  const fallback =
+    caught instanceof ApiError ? `The server refused the write (${caught.status}).` : 'The write failed.'
+  return toFailure(caught, fallback)
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {

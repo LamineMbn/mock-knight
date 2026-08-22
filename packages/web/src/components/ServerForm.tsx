@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { composeAdminUrl } from '@mock-knight/core/types'
 import type { NewProfile, Profile } from '../api.js'
-import { Button } from './primitives.js'
+import { Button, ErrorDisclosure } from './primitives.js'
+import type { Failure } from './primitives.js'
 
 /**
  * Add or edit a mock server. One form for both, because they ask for exactly the same things and
@@ -30,12 +31,12 @@ export interface ServerFormProps {
   /** Present when editing; absent when adding. */
   existing?: Profile
   pending: boolean
-  error: string | null
+  failure: Failure | null
   onSubmit: (profile: NewProfile) => void
   onCancel?: () => void
 }
 
-export function ServerForm({ existing, pending, error, onSubmit, onCancel }: ServerFormProps) {
+export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: ServerFormProps) {
   const [baseUrl, setBaseUrl] = useState(existing?.baseUrl ?? 'http://localhost:8080')
   const [adminPath, setAdminPath] = useState(existing?.adminPath ?? '')
   const [name, setName] = useState(existing?.name ?? '')
@@ -200,10 +201,12 @@ export function ServerForm({ existing, pending, error, onSubmit, onCancel }: Ser
         </label>
       </div>
 
-      {error !== null && (
-        <p role="alert" style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--mk-danger-text)' }}>
-          {error}
-        </p>
+      {failure !== null && (
+        <div style={{ marginBottom: 8 }}>
+          {/* Not just the sentence: a connection that fails against a corporate host usually
+              fails for a reason only the upstream body names (design brief §6.11). */}
+          <ErrorDisclosure sentence={failure.sentence} payload={failure.payload} />
+        </div>
       )}
 
       <div style={{ display: 'flex', gap: 8 }}>

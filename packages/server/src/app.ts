@@ -1,6 +1,11 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { AdapterHttpError, AdapterHostNotAllowedError, parseQuery } from '@mock-knight/core'
+import {
+  AdapterHttpError,
+  AdapterHostNotAllowedError,
+  AdapterTransportError,
+  parseQuery,
+} from '@mock-knight/core'
 import type { LoggedRequest, Mock, NearMiss } from '@mock-knight/core'
 import type { Database as Db } from 'better-sqlite3'
 import { mirrorStatus, replaceCorpus } from './db/mirror.js'
@@ -256,6 +261,24 @@ export function createApp(options: AppOptions) {
               url: error.url,
               status: error.status,
               body: error.responseBody.slice(0, 4000),
+            },
+          },
+          502,
+        )
+      }
+      if (error instanceof AdapterTransportError) {
+        // Same envelope as an upstream HTTP error so the UI has one disclosure to render, with
+        // `status: null` marking the difference: nothing answered, so there is no status.
+        return c.json(
+          {
+            error: 'upstream_unreachable',
+            message: error.message,
+            upstream: {
+              method: error.method,
+              url: error.url,
+              status: null,
+              code: error.code,
+              body: error.detail,
             },
           },
           502,

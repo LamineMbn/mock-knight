@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api.js'
-import { Button } from './primitives.js'
+import { Button, ErrorDisclosure, toFailure } from './primitives.js'
+import type { Failure } from './primitives.js'
 
 /**
  * First run, no profile — design brief §6.11: "a centred setup card: paste a URL, pick an
@@ -18,7 +19,7 @@ export function FirstRun({ onAdded }: { onAdded: (id: string) => void }) {
   const queryClient = useQueryClient()
   const [baseUrl, setBaseUrl] = useState('http://localhost:8080')
   const [adminPath, setAdminPath] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Failure | null>(null)
 
   const add = useMutation({
     mutationFn: async () => {
@@ -37,15 +38,18 @@ export function FirstRun({ onAdded }: { onAdded: (id: string) => void }) {
         readOnly: false,
       })
       // Connect and mirror before handing over, so the first screen has something on it.
-      const connected = await api.connect(created.profile.id).catch(() => null)
-      if (connected === null) {
+      try {
+        await api.connect(created.profile.id)
+      } catch (caught) {
         // Undo the profile. "Test connection and continue" either continues or it does not —
         // leaving a broken profile behind drops the user into an empty corpus for a server that
         // does not answer, with the reason no longer on screen.
+        //
+        // The original error is rethrown, not replaced: the server's sentence names the actual
+        // failure (DNS, refused, expired certificate) and carries the upstream block the
+        // disclosure renders.
         await api.deleteProfile(created.profile.id).catch(() => undefined)
-        throw new Error(
-          `Nothing answered at ${baseUrl}. Check the server is running and the URL is right.`,
-        )
+        throw caught
       }
       await api.refresh(created.profile.id).catch(() => undefined)
       return created.profile
@@ -56,7 +60,7 @@ export function FirstRun({ onAdded }: { onAdded: (id: string) => void }) {
     },
     onError: (caught: unknown) => {
       void queryClient.invalidateQueries({ queryKey: ['profiles'] })
-      setError(caught instanceof Error ? caught.message : 'Could not connect.')
+      setError(toFailure(caught, 'Could not connect.'))
     },
   })
 
@@ -148,12 +152,9 @@ export function FirstRun({ onAdded }: { onAdded: (id: string) => void }) {
         </label>
 
         {error !== null && (
-          <p
-            role="alert"
-            style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--mk-danger-text)' }}
-          >
-            {error}
-          </p>
+          <div style={{ marginTop: 10 }}>
+            <ErrorDisclosure sentence={error.sentence} payload={error.payload} />
+          </div>
         )}
 
         <div style={{ marginTop: 14 }}>

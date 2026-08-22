@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api.js'
-import { Button, Chip, InferenceLabel, Skeleton } from './primitives.js'
+import { Button, Chip, ErrorDisclosure, InferenceLabel, Skeleton, toFailure } from './primitives.js'
+import type { Failure } from './primitives.js'
 
 /**
  * Create a stub from a captured request — FR-TRAF-5, and the exit from §6.4.
@@ -54,7 +55,7 @@ export function CreateFromRequest({
   const [tightness, setTightness] = useState('method-and-path')
   const [matchBody, setMatchBody] = useState(false)
   const [edited, setEdited] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Failure | null>(null)
 
   const generated = useQuery({
     queryKey: ['stub-from-request', profileId, eventId, tightness, matchBody],
@@ -88,7 +89,7 @@ export function CreateFromRequest({
       onCreated()
     },
     onError: (caught: unknown) =>
-      setError(caught instanceof Error ? caught.message : 'The stub could not be created.'),
+      setError(toFailure(caught, 'The stub could not be created.')),
   })
 
   const text = edited ?? JSON.stringify(generated.data?.raw ?? {}, null, 2)
@@ -237,16 +238,10 @@ export function CreateFromRequest({
         </div>
 
         {error !== null && (
-          <div
-            role="alert"
-            style={{
-              padding: '8px 14px',
-              fontSize: 12,
-              color: 'var(--mk-danger-text)',
-              background: 'var(--mk-danger-bg)',
-            }}
-          >
-            {error}
+          <div style={{ padding: '8px 14px' }}>
+            {/* WireMock answers 422 and names the property it rejected; that is the whole
+                diagnosis for a generated stub the server would not take. */}
+            <ErrorDisclosure sentence={error.sentence} payload={error.payload} />
           </div>
         )}
 

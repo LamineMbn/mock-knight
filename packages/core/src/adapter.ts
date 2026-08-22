@@ -214,6 +214,85 @@ export class AdapterHttpError extends Error {
   }
 }
 
+/**
+ * A request that never got an HTTP response at all — DNS, TCP, TLS, or a timeout.
+ *
+ * Separate from `AdapterHttpError` because the fix is different in kind: a 403 means the server
+ * answered and refused, an `ENOTFOUND` means nothing was ever reached. undici collapses all of
+ * these into `TypeError: fetch failed` and hides the real reason in `cause`, which is worse than
+ * useless in a UI — "fetch failed" tells a developer pointing at a corporate host nothing about
+ * whether they typed the name wrong, are off the VPN, or hit an expired certificate.
+ */
+export class AdapterTransportError extends Error {
+  override readonly name = 'AdapterTransportError'
+  constructor(
+    readonly method: string,
+    readonly url: string,
+    /** The `cause.code` undici reported, e.g. `ENOTFOUND`, or `null` when it gave none. */
+    readonly code: string | null,
+    /** The underlying message, kept verbatim for the disclosure. */
+    readonly detail: string,
+  ) {
+    super(describeTransportFailure(code, url))
+  }
+}
+
+/**
+ * A plain sentence for a transport failure, naming the likely fix.
+ *
+ * Deliberately says what to *check*, not just what happened: every one of these has a common
+ * cause that is one step away from the message. Unknown codes fall through to the raw code
+ * rather than a vague catch-all — a developer can search a code.
+ *
+ * Browser-safe.
+ */
+export function describeTransportFailure(code: string | null, url: string): string {
+  let host = url
+  try {
+    host = new URL(url).host
+  } catch {
+    // Keep the whole string: a URL we could not parse is itself the useful detail.
+  }
+  switch (code) {
+    case 'ENOTFOUND':
+    case 'EAI_AGAIN':
+      return `No DNS record for ${host}. Check the hostname, and whether this machine needs a VPN or an internal resolver to see it.`
+    case 'ECONNREFUSED':
+      return `Nothing is listening on ${host}. The server may be down, or on a different port.`
+    case 'ECONNRESET':
+      return `${host} closed the connection without answering. Often a proxy or load balancer in front of the server.`
+    case 'ETIMEDOUT':
+    case 'UND_ERR_CONNECT_TIMEOUT':
+      return `Timed out connecting to ${host}. Usually a firewall dropping the packets rather than refusing them.`
+    case 'UND_ERR_HEADERS_TIMEOUT':
+    case 'UND_ERR_BODY_TIMEOUT':
+      return `${host} accepted the connection but did not finish answering in time.`
+    case 'CERT_HAS_EXPIRED':
+      return `The TLS certificate for ${host} has expired.`
+    case 'DEPTH_ZERO_SELF_SIGNED_CERT':
+    case 'SELF_SIGNED_CERT_IN_CHAIN':
+    case 'UNABLE_TO_VERIFY_LEAF_SIGNATURE':
+      return `The TLS certificate for ${host} is not signed by a CA this machine trusts. Common with an internal CA that is not in the system trust store.`
+    case 'ERR_TLS_CERT_ALTNAME_INVALID':
+      return `The TLS certificate presented by ${host} is for a different hostname.`
+    case null:
+      return `Could not reach ${host}.`
+    default:
+      return `Could not reach ${host} (${code}).`
+  }
+}
+
+/** Dig undici's real reason out of the `cause` chain it hides it in. */
+export function transportCode(error: unknown): string | null {
+  let current: unknown = error
+  for (let depth = 0; depth < 5 && current !== null && current !== undefined; depth++) {
+    const code = (current as { code?: unknown }).code
+    if (typeof code === 'string') return code
+    current = (current as { cause?: unknown }).cause
+  }
+  return null
+}
+
 /** A request refused before it left the process, because the host is not on the allowlist. */
 export class AdapterHostNotAllowedError extends Error {
   override readonly name = 'AdapterHostNotAllowedError'

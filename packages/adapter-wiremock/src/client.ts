@@ -1,5 +1,11 @@
 import { Agent, request } from 'undici'
-import { AdapterHostNotAllowedError, AdapterHttpError, composeAdminUrl } from '@mock-knight/core'
+import {
+  AdapterHostNotAllowedError,
+  AdapterHttpError,
+  AdapterTransportError,
+  composeAdminUrl,
+  transportCode,
+} from '@mock-knight/core'
 import type { ConnectionConfig, Json, ResolvedAuth } from '@mock-knight/core'
 
 /**
@@ -97,12 +103,25 @@ export class WireMockClient {
     this.assertHostAllowed(new URL(url).host)
 
     const hasBody = options.body !== undefined
-    const response = await request(url, {
-      method: method as 'GET',
-      dispatcher: this.agent,
-      headers: hasBody ? { ...this.headers, 'content-type': 'application/json' } : this.headers,
-      body: hasBody ? JSON.stringify(options.body) : undefined,
-    })
+    // undici rejects with `TypeError: fetch failed` and buries the real reason — ENOTFOUND,
+    // ECONNREFUSED, an expired certificate — in a `cause` chain. Caught here, where the method
+    // and URL are still in scope, so the UI can say which one and what to check.
+    let response
+    try {
+      response = await request(url, {
+        method: method as 'GET',
+        dispatcher: this.agent,
+        headers: hasBody ? { ...this.headers, 'content-type': 'application/json' } : this.headers,
+        body: hasBody ? JSON.stringify(options.body) : undefined,
+      })
+    } catch (error) {
+      throw new AdapterTransportError(
+        method,
+        url,
+        transportCode(error),
+        error instanceof Error ? error.message : String(error),
+      )
+    }
 
     const text = await response.body.text()
     const ok = response.statusCode >= 200 && response.statusCode < 300

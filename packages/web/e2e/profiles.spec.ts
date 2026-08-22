@@ -138,3 +138,34 @@ test('a server can be edited, and the form opens on that server', async ({ page 
 
   await expect(page.getByRole('button', { name: /Profile: / })).toContainText('renamed in the ui')
 })
+
+/**
+ * A connection that fails has to say why — design brief §6.11.
+ *
+ * "It does not work" was the actual report that led here: the server had already worked out the
+ * status, the URL it called and the body it got back, and the browser threw all of it away one
+ * step before the screen that needed it.
+ */
+test('a server that cannot be reached explains itself, in detail, copyably', async ({ page }) => {
+  await page.goto('/?screen=profiles')
+  // Port 1 on loopback: refused instantly, no DNS and no network round trip.
+  await page.getByLabel('Base URL').first().fill('http://127.0.0.1:1')
+  await page.getByLabel('Name', { exact: true }).first().fill('unreachable')
+  await page.getByRole('button', { name: 'Add and connect' }).click()
+
+  const alert = page.getByRole('alert').filter({ hasText: 'Nothing is listening' })
+  // The sentence names the host and what to check — not "fetch failed", not "could not connect".
+  await expect(alert).toContainText('127.0.0.1:1')
+  await expect(alert).toContainText('may be down, or on a different port')
+
+  // And the disclosure carries what a developer would paste into an issue.
+  await alert.locator('summary').click()
+  await expect(alert).toContainText('/__admin')
+  await expect(alert).toContainText('ECONNREFUSED')
+  // Not "What the mock server said": nothing answered, and the label must not imply otherwise.
+  await expect(alert.locator('summary')).toHaveText('What happened on the wire')
+  await expect(alert.getByRole('button', { name: 'Copy details' })).toBeVisible()
+
+  // The failed profile was rolled back, so the list is unchanged.
+  await expect(page.getByText('unreachable', { exact: true })).toHaveCount(0)
+})

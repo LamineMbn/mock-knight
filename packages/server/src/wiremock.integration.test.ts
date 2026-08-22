@@ -215,3 +215,48 @@ describe('what the round trip proves', () => {
     expect(body.meta.total).toBe(DEV_SEED.length)
   })
 })
+
+describe('an unreachable server explains itself', () => {
+  /**
+   * The failure a developer actually meets first — a hostname that does not resolve, a port
+   * nothing listens on, a VPN they are not on. undici reports every one of these as
+   * `TypeError: fetch failed`, which is the least useful sentence available. These check that
+   * what reaches the browser names the host, the reason, and what to look at.
+   */
+  const connectTo = async (baseUrl: string) => {
+    const created = await json('/api/profiles', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'unreachable', adapter: 'wiremock', baseUrl }),
+    })
+    return json(`/api/profiles/${created.body.profile.id as string}/connect`, { method: 'POST' })
+  }
+
+  it('says nothing is listening, and on which host', async () => {
+    // Port 1 on loopback: reliably refused, no DNS involved, no network round trip.
+    const result = await connectTo('http://127.0.0.1:1')
+    expect(result.status).toBe(502)
+    expect(result.body.error).toBe('upstream_unreachable')
+    expect(result.body.message).toContain('127.0.0.1:1')
+    expect(result.body.message).toContain('Nothing is listening')
+  })
+
+  it('hands the browser a disclosure with no invented status', async () => {
+    const result = await connectTo('http://127.0.0.1:1')
+    // `null`, not 0 or 500: nothing answered, and the UI has to be able to say so.
+    expect(result.body.upstream.status).toBeNull()
+    expect(result.body.upstream.method).toBe('GET')
+    expect(result.body.upstream.url).toContain('/__admin')
+    expect(result.body.upstream.code).toBe('ECONNREFUSED')
+    // The raw reason survives for the copyable block, however undici phrased it.
+    expect(String(result.body.upstream.body).length).toBeGreaterThan(0)
+  })
+
+  it('does not leave a half-connected profile behind', async () => {
+    await connectTo('http://127.0.0.1:1')
+    const caps = await json(
+      `/api/profiles/${(await json('/api/profiles')).body.profiles.at(-1).id}/capabilities`,
+    )
+    expect(caps.body.connected).toBe(false)
+  })
+})

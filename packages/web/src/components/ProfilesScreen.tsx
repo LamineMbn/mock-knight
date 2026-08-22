@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api.js'
 import type { CapabilityRow, NewProfile, Profile } from '../api.js'
 import { ServerForm } from './ServerForm.js'
-import { Button, Chip, Skeleton } from './primitives.js'
+import { Button, Chip, Skeleton, toFailure } from './primitives.js'
+import type { Failure } from './primitives.js'
 
 /**
  * Connection management and the capability report — design brief §6.9, PRD FR-CONN-1..5.
@@ -23,7 +24,7 @@ function AddOrEditServer({
   onDone: (id: string) => void
 }) {
   const queryClient = useQueryClient()
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Failure | null>(null)
 
   const save = useMutation({
     mutationFn: async (input: NewProfile) => {
@@ -33,12 +34,15 @@ function AddOrEditServer({
         return updated.profile
       }
       const created = await api.createProfile(input)
-      const connected = await api.connect(created.profile.id).catch(() => null)
-      if (connected === null) {
+      try {
+        await api.connect(created.profile.id)
+      } catch (caught) {
+        // Undo the profile, then rethrow **the original**. Swallowing it and throwing a generic
+        // sentence is what made a dropped context path present as "it does not work": the server
+        // had already worked out the status, the URL it called and the body it got back, and this
+        // line threw all of it away one step before the screen that needed it.
         await api.deleteProfile(created.profile.id).catch(() => undefined)
-        throw new Error(
-          `Nothing usable answered at ${input.baseUrl}. Check the URL and the admin path.`,
-        )
+        throw caught
       }
       await api.refresh(created.profile.id).catch(() => undefined)
       return created.profile
@@ -47,15 +51,14 @@ function AddOrEditServer({
       void queryClient.invalidateQueries()
       onDone(profile.id)
     },
-    onError: (caught: unknown) =>
-      setError(caught instanceof Error ? caught.message : 'Could not save that server.'),
+    onError: (caught: unknown) => setError(toFailure(caught, 'Could not save that server.')),
   })
 
   return (
     <ServerForm
       {...(existing === undefined ? {} : { existing })}
       pending={save.isPending}
-      error={error}
+      failure={error}
       onSubmit={(input) => {
         setError(null)
         save.mutate(input)
