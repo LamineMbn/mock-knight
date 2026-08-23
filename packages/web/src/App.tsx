@@ -5,6 +5,8 @@ import type { Profile } from './api.js'
 import type { QueryPlan } from '@mock-knight/core/types'
 import { CorpusList } from './components/CorpusList.js'
 import { NewStub } from './components/NewStub.js'
+import { CommandPalette } from './components/CommandPalette.js'
+import type { Command } from './components/CommandPalette.js'
 import { FacetPane } from './components/FacetPane.js'
 import { StubDetail } from './components/StubDetail.js'
 import { TrafficScreen } from './components/TrafficScreen.js'
@@ -83,6 +85,31 @@ export function App() {
   const [draft, setDraft] = useState(query)
   const [expandedFolders, setExpandedFolders] = useState<ReadonlySet<string>>(new Set())
   const [creating, setCreating] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+
+  /**
+   * ⌘K anywhere, and `/` to jump to the search box — design brief §8.
+   *
+   * Bound on the document rather than a wrapper so it works with focus anywhere, and ignored
+   * while focus is in a field so typing a `/` in a path matcher does not steal it away.
+   */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      const typing =
+        target !== null &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setPaletteOpen((open) => !open)
+      } else if (event.key === '/' && !typing) {
+        event.preventDefault()
+        document.querySelector<HTMLInputElement>('input[aria-label="Search stubs"]')?.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   const profiles = useQuery({ queryKey: ['profiles'], queryFn: api.profiles })
   const all = useMemo(() => profiles.data?.profiles ?? [], [profiles.data])
@@ -112,6 +139,66 @@ export function App() {
       void queryClient.invalidateQueries({ queryKey: ['mirror'] })
     },
   })
+
+  const commands = useMemo<Command[]>(() => {
+    if (profile === undefined) return []
+    const go = (name: Screen, label: string): Command => ({
+      id: `go:${name}`,
+      label,
+      section: 'Go to',
+      run: () => setUrlState({ screen: name }),
+    })
+    return [
+      ...(profile.readOnly || screen !== 'corpus'
+        ? []
+        : [
+            {
+              id: 'action:new-stub',
+              label: 'New stub',
+              section: 'Actions' as const,
+              run: () => setCreating(true),
+            },
+          ]),
+      {
+        id: 'action:refresh',
+        label: 'Refresh the corpus',
+        section: 'Actions',
+        hint: `from ${profile.baseUrl}`,
+        run: () => refresh.mutate(),
+      },
+      /**
+       * Listed, but it navigates rather than acting — §6.10 says destructive actions appear in
+       * the palette and still route through their typed confirmation. Reaching the control is
+       * the point; skipping the confirmation would not be.
+       */
+      ...(profile.readOnly || profile.protected
+        ? []
+        : [
+            {
+              id: 'action:clear-journal',
+              label: 'Clear the request journal…',
+              section: 'Actions' as const,
+              hint: 'opens the confirmation on Traffic',
+              destructive: true,
+              run: () => setUrlState({ screen: 'traffic' }),
+            },
+          ]),
+      go('corpus', 'Corpus'),
+      go('traffic', 'Traffic'),
+      go('scenarios', 'Scenarios'),
+      go('profiles', 'Servers'),
+      ...all
+        .filter((candidate) => candidate.id !== profile.id)
+        .map((candidate): Command => ({
+          id: `profile:${candidate.id}`,
+          label: candidate.name,
+          section: 'Switch profile',
+          hint: candidate.baseUrl,
+          colour: candidate.colour,
+          run: () => setUrlState({ profileId: candidate.id, query: '', selectedKey: null }),
+        })),
+    ]
+  }, [profile, screen, all, setUrlState, refresh])
 
   /**
    * Which facet tokens are on, read from the URL rather than from the server's echoed plan.
@@ -188,6 +275,16 @@ export function App() {
           setUrlState({ profileId: id, query: '', selectedKey: null })
         }
       />
+
+      {paletteOpen && (
+        <CommandPalette
+          profileId={profile.id}
+          profiles={all}
+          commands={commands}
+          onClose={() => setPaletteOpen(false)}
+          onOpenStub={(clientKey) => setUrlState({ screen: 'corpus', selectedKey: clientKey })}
+        />
+      )}
 
       {screen === 'traffic' ? (
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
