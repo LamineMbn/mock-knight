@@ -299,7 +299,13 @@ export function App() {
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           <TrafficScreen
             profile={profile}
-            onOpenStub={(clientKey) => setUrlState({ screen: 'corpus', selectedKey: clientKey })}
+            onOpenStub={async (clientKey, refreshFirst) => {
+              // The journal can name a stub the mirror has not seen — the mirror is a cache and
+              // an import reissues every id. Refreshing first turns the common case into a
+              // working link instead of a dead end.
+              if (refreshFirst) await refresh.mutateAsync().catch(() => undefined)
+              setUrlState({ screen: 'corpus', selectedKey: clientKey })
+            }}
           />
         </div>
       ) : screen === 'profiles' ? (

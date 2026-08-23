@@ -149,8 +149,11 @@ export interface ServeEventRow {
   durationMs: number | null
   /** How much of that was a delay someone configured rather than work the server did. */
   addedDelayMs: number | null
-  /** Whether the stub that served this request is still in the corpus. */
-  matchedStubPresent: boolean
+  /**
+   * Whether the serving stub is in the local mirror. False is usually a stale mirror rather
+   * than a deleted stub, so the UI refreshes before concluding anything.
+   */
+  matchedStubInMirror: boolean
 }
 
 /**

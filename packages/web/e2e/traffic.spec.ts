@@ -316,22 +316,37 @@ test.describe('what the journal already knew', () => {
   })
 })
 
-test('a stub that no longer exists is said, not linked', async ({ page }) => {
-  // The journal outlives the corpus: reseeding issues new ids, so yesterday's events point at
-  // stubs that are gone. Linking to one landed on "Could not load this stub", which reads as a
-  // fault rather than as history.
+test('the stub link works even when the mirror has not seen that stub', async ({ page }) => {
+  // The case that made this look broken: the mirror is a cache, and anything that changes the
+  // corpus outside this tool leaves it stale — an import reissues every id. The event's key was
+  // right; the mirror simply did not know it. Refreshing on click resolves that outright.
   await clearBothJournals(page)
   await fetch(`${WIREMOCK}/v1/customers`)
+
+  // Change the corpus behind the mirror's back, without refreshing: exactly what a colleague's
+  // import looks like from here.
+  await fetch(`${WIREMOCK}/__admin/mappings/import`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      mappings: [
+        { request: { method: 'GET', urlPath: '/v1/unrelated' }, response: { status: 200 } },
+      ],
+      importOptions: { duplicatePolicy: 'OVERWRITE', deleteAllNotInImport: false },
+    }),
+  })
+
   await page.goto('/?screen=traffic')
-  await expect(page.getByRole('button', { name: 'stub ↗' }).first()).toBeVisible()
+  const link = page
+    .locator(ROW)
+    .filter({ hasText: '/v1/customers' })
+    .getByRole('button', { name: 'stub ↗' })
+    .first()
+  await expect(link).toBeVisible()
+  await link.click()
 
-  // Replace the corpus wholesale, which is what an import or a colleague's reseed does.
-  await resetToSeed(page)
-  await page.reload()
-
-  const row = page.locator(ROW).filter({ hasText: '/v1/customers' }).first()
-  await expect(row).toContainText('stub gone')
-  await expect(row.getByRole('button', { name: 'stub ↗' })).toHaveCount(0)
+  await expect(page).toHaveURL(/[?&]stub=/)
+  await expect(page.locator('aside').last()).toContainText('/v1/customers')
 })
 
 test('arriving at a deleted stub by URL explains rather than erroring', async ({ page }) => {

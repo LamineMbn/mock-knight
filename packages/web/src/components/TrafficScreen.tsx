@@ -75,7 +75,7 @@ function Row({
   onFocus: () => void
   onExplain: (id: number) => void
   onCorrelation: (correlation: string) => void
-  onOpenStub: (clientKey: string) => void
+  onOpenStub: (clientKey: string, refreshFirst: boolean) => void
 }) {
   const ref = useRef<HTMLTableRowElement>(null)
   useEffect(() => {
@@ -244,29 +244,27 @@ function Row({
         {event.matched ? (
           event.matchedClientKey === null ? (
             <span style={{ fontSize: 12, color: 'var(--mk-text-tertiary)' }}>—</span>
-          ) : event.matchedStubPresent ? (
-            // Was inert text with an arrow on it, which is worse than nothing: the server tells
-            // us which stub answered, and the affordance looked clickable and was not.
+          ) : (
+            /*
+              Always a link. The key came from the server, so the stub existed; whether we can
+              resolve it here depends on how fresh the mirror is, and the mirror goes stale the
+              moment anyone changes the corpus outside this tool — an import reissues every id.
+
+              So a key the mirror does not know is a reason to refresh, not a reason to say the
+              stub is gone. Clicking refreshes first and then opens it, which resolves the
+              common case outright; if it is genuinely deleted, the detail pane says so.
+            */
             <Button
               variant="quiet"
-              onClick={() => onOpenStub(event.matchedClientKey!)}
-              title={`Open the stub that answered ${event.method ?? ''} ${event.url ?? ''}`}
+              onClick={() => onOpenStub(event.matchedClientKey!, !event.matchedStubInMirror)}
+              title={
+                event.matchedStubInMirror
+                  ? `Open the stub that answered ${event.method ?? ''} ${event.url ?? ''}`
+                  : 'This stub is not in the local mirror. Opening it refreshes from the server first.'
+              }
             >
               stub ↗
             </Button>
-          ) : (
-            /*
-              The stub that served this request is no longer in the corpus — deleted, or
-              replaced by a reseed that issued new ids. The journal reaches back further than
-              the corpus does, so this is history rather than a broken link, and it is said
-              rather than drawn as a control that would land on "Could not load this stub".
-            */
-            <span
-              title="The stub that served this request is no longer in the corpus. The journal reaches back further than the corpus does."
-              style={{ fontSize: 12, color: 'var(--mk-text-tertiary)' }}
-            >
-              stub gone
-            </span>
           )
         ) : (
           <Button
@@ -288,7 +286,7 @@ export function TrafficScreen({
   onOpenStub,
 }: {
   profile: Profile
-  onOpenStub: (clientKey: string) => void
+  onOpenStub: (clientKey: string, refreshFirst: boolean) => void
 }) {
   const profileId = profile.id
   const baseUrl = profile.baseUrl

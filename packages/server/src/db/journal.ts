@@ -102,10 +102,15 @@ export interface ServeEventRow {
   /** How much of `durationMs` was a configured delay rather than work. */
   addedDelayMs: number | null
   /**
-   * Whether `matchedClientKey` still names a stub in the corpus. False once that stub has been
-   * deleted or replaced — the journal outlives the corpus, so the key is history, not a link.
+   * Whether `matchedClientKey` names a stub **in the local mirror**.
+   *
+   * Not "whether the stub still exists": the mirror is a disposable cache that goes stale the
+   * moment anyone changes the corpus outside this tool, and an import issues new ids for
+   * everything. False therefore means "we cannot resolve this here", which is usually a stale
+   * mirror and only sometimes a deleted stub. Saying more than that would be inference
+   * presented as fact.
    */
-  matchedStubPresent: boolean
+  matchedStubInMirror: boolean
 }
 
 export interface JournalQueryOptions {
@@ -240,7 +245,7 @@ export function listServeEvents(
       correlation: row.correlation,
       durationMs: row.duration_ms,
       addedDelayMs: row.added_delay_ms,
-      matchedStubPresent: row.stub_present === 1,
+      matchedStubInMirror: row.stub_present === 1,
     })),
     total,
     earliestAt: window?.earliest_at ?? null,
