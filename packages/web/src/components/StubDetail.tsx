@@ -16,7 +16,9 @@ import {
 } from './primitives.js'
 import type { Failure } from './primitives.js'
 import { ConflictDialog } from './ConflictDialog.js'
+import { duplicateMockDraft } from '@mock-knight/core/types'
 import { MatcherForm } from './MatcherForm.js'
+import { NewStub } from './NewStub.js'
 import { ResponseForm } from './ResponseForm.js'
 
 /**
@@ -67,6 +69,8 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
   const [error, setError] = useState<Failure | null>(null)
   /** Unsaved edits made through the form tabs, as a canonical draft. */
   const [formDraft, setFormDraft] = useState<MockDraft | null>(null)
+  /** The stub being copied, while the duplicate dialog is open. */
+  const [duplicating, setDuplicating] = useState<MockDraft | null>(null)
 
   // Selecting a different stub abandons an untouched draft; a touched one is kept until the
   // user resolves it, so switching rows cannot silently discard typing.
@@ -542,7 +546,10 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
         </div>
       )}
 
-      {canWrite && (tab === 'raw' || tab === 'matcher' || tab === 'response') && (
+      {/* Shown on every tab. Duplicate and Delete are actions on the stub, not on the tab, and
+          hiding them behind an editing tab made them unreachable from the one you land on. Save
+          appears only when something is unsaved, so it follows the edit rather than the tab. */}
+      {canWrite && (
         <footer
           style={{
             display: 'flex',
@@ -572,6 +579,9 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
           ) : (
             <>
               <span style={{ flex: 1 }} />
+              {serverDraft !== null && (
+                <Button onClick={() => setDuplicating(serverDraft)}>Duplicate</Button>
+              )}
               <DeleteButton
                 name={mock.name ?? mock.url?.value ?? 'this stub'}
                 pending={remove.isPending}
@@ -580,6 +590,17 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
             </>
           )}
         </footer>
+      )}
+
+      {duplicating !== null && (
+        <NewStub
+          profileId={profileId}
+          // WireMock keys a mapping on `id`/`uuid`; carrying either into a "new" stub would make
+          // the copy overwrite the stub it was copied from.
+          source={duplicateMockDraft(duplicating, ['id', 'uuid'])}
+          onClose={() => setDuplicating(null)}
+          onCreated={() => setDuplicating(null)}
+        />
       )}
 
       {conflict !== null && (

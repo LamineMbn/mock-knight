@@ -4,6 +4,7 @@ import { api } from './api.js'
 import type { Profile } from './api.js'
 import type { QueryPlan } from '@mock-knight/core/types'
 import { CorpusList } from './components/CorpusList.js'
+import { NewStub } from './components/NewStub.js'
 import { FacetPane } from './components/FacetPane.js'
 import { StubDetail } from './components/StubDetail.js'
 import { TrafficScreen } from './components/TrafficScreen.js'
@@ -81,6 +82,7 @@ export function App() {
   const [{ screen, query, selectedKey, profileId }, setUrlState] = useUrlState()
   const [draft, setDraft] = useState(query)
   const [expandedFolders, setExpandedFolders] = useState<ReadonlySet<string>>(new Set())
+  const [creating, setCreating] = useState(false)
 
   const profiles = useQuery({ queryKey: ['profiles'], queryFn: api.profiles })
   const all = useMemo(() => profiles.data?.profiles ?? [], [profiles.data])
@@ -267,6 +269,15 @@ export function App() {
                       This server has no stubs yet.
                     </strong>
                     Nothing has been mirrored from {profile.baseUrl}.
+                    {!profile.readOnly && (
+                      <div style={{ marginTop: 12 }}>
+                        {/* An empty corpus used to be a dead end: the screen said this and
+                            offered no way to change it. */}
+                        <Button variant="primary" onClick={() => setCreating(true)}>
+                          Create the first stub
+                        </Button>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <>
@@ -291,6 +302,7 @@ export function App() {
                 color: 'var(--mk-text-tertiary)',
               }}
             >
+              {!profile.readOnly && <Button onClick={() => setCreating(true)}>New stub</Button>}
               <span className="mk-tabular">
                 {corpus.data?.total ?? 0} stubs
                 {corpus.data !== undefined && corpus.data.total > corpus.data.items.length
@@ -335,6 +347,19 @@ export function App() {
             canWrite={!profile.readOnly}
             clientKey={selectedKey}
           />
+
+          {creating && (
+            <NewStub
+              profileId={profile.id}
+              onClose={() => setCreating(false)}
+              onCreated={(clientKey) => {
+                setCreating(false)
+                // Select what was just written, so the next thing on screen is the stub rather
+                // than the list it disappeared into.
+                setUrlState({ selectedKey: clientKey })
+              }}
+            />
+          )}
         </div>
       )}
     </div>

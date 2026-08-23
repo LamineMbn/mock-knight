@@ -98,7 +98,11 @@ const writeBodySchema = z.union([
   }),
 ])
 
-const createBodySchema = z.object({ raw: z.record(z.string(), z.any()) })
+/** Create takes either shape too, for the same reason as the write above. */
+const createBodySchema = z.union([
+  z.object({ raw: z.record(z.string(), z.any()) }),
+  z.object({ draft: mockDraftSchema }),
+])
 const deleteBodySchema = z.object({ baseHash: z.string().min(1) })
 
 /**
@@ -593,7 +597,11 @@ export function createApp(options: AppOptions) {
       const parsed = createBodySchema.safeParse(await c.req.json())
       if (!parsed.success)
         return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400)
-      return writeResponse(c, await createMock(resolved.context, parsed.data.raw), 201)
+      const raw =
+        'raw' in parsed.data
+          ? parsed.data.raw
+          : resolved.context.connection.adapter.render(parsed.data.draft)
+      return writeResponse(c, await createMock(resolved.context, raw), 201)
     })
 
     .delete('/api/:p/mocks/:key', async (c) => {

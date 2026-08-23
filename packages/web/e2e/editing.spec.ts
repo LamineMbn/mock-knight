@@ -388,3 +388,56 @@ test('the unsaved dot marks the tab that actually changed', async ({ page }) => 
   await page.getByLabel('Status code').fill('404')
   await expect(dot('Response')).toHaveCount(0)
 })
+
+/**
+ * Writing a stub by hand, and copying one — FR-EDIT-5, FR-EDIT-7.
+ *
+ * Before these, capturing an unmatched request was the only route to a new stub, so an empty
+ * server was a dead end.
+ */
+test('a stub can be written from scratch and answers immediately', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.locator(ROW).first()).toBeVisible()
+  await page.getByRole('button', { name: 'New stub' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'New stub' })
+  await dialog.getByLabel('Name').fill('written by hand')
+  await dialog.getByLabel('URL', { exact: true }).fill('/v1/handwritten')
+  await dialog.getByRole('tab', { name: 'Response' }).click()
+  await dialog.getByLabel('Status code').fill('201')
+  await dialog.getByLabel('Body', { exact: true }).fill('{"created":true}')
+  await dialog.getByRole('button', { name: 'Create stub' }).click()
+  await expect(dialog).toHaveCount(0)
+
+  // The only assertion that matters: the mock server now answers it.
+  const served = await fetch(`${WIREMOCK}/v1/handwritten`)
+  expect(served.status).toBe(201)
+  expect(await served.json()).toEqual({ created: true })
+})
+
+test('duplicating keeps fields no form can show, and warns about the contest it creates', async ({
+  page,
+}) => {
+  await page.goto('/?q=method%3ADELETE')
+  await expect(page.locator(ROW)).toHaveCount(1)
+  await page.locator(ROW).first().click()
+  await expect(page.getByRole('button', { name: 'Duplicate' })).toBeVisible()
+  await page.getByRole('button', { name: 'Duplicate' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Duplicate this stub' })
+  // A copy matches the same requests by definition, so it lands in a priority contest at once.
+  await expect(dialog.getByText(/one of them will shadow the other/)).toBeVisible()
+  await expect(dialog.getByLabel('Name')).toHaveValue(/\(copy\)$/)
+
+  await dialog.getByLabel('URL', { exact: true }).fill('/v1/carts/99')
+  await dialog.getByRole('button', { name: 'Create copy' }).click()
+  await expect(dialog).toHaveCount(0)
+
+  const all = (await mappings()) as (Mapping & { postServeActions?: unknown })[]
+  const copy = all.find((m) => m.request?.url === '/v1/carts/99')
+  expect(copy).toBeDefined()
+  // The point of copying the retained document rather than rebuilding from canonical fields.
+  expect(copy?.postServeActions).toEqual([{ name: 'webhook', parameters: { url: 'http://x' } }])
+  // And the original is untouched — a reused vendor id would have overwritten it.
+  expect(all.find((m) => m.request?.url === '/v1/carts/9')).toBeDefined()
+})

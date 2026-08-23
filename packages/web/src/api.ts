@@ -311,6 +311,13 @@ export const api = {
         body: JSON.stringify({ draft, baseHash }),
       },
     ),
+  /** Create from the form tabs. Same reason as `updateMockDraft`: the browser has no adapter. */
+  createMockDraft: (profileId: string, draft: MockDraft) =>
+    call<{ mock: MockListItem & { raw: unknown } }>(`/api/${profileId}/mocks`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ draft }),
+    }),
   deleteMock: (profileId: string, clientKey: string, baseHash: string) =>
     call<{ deleted: true }>(`/api/${profileId}/mocks/${encodeURIComponent(clientKey)}`, {
       method: 'DELETE',
