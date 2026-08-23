@@ -6,6 +6,7 @@ import type { QueryPlan } from '@mock-knight/core/types'
 import { CorpusList } from './components/CorpusList.js'
 import { NewStub } from './components/NewStub.js'
 import { CommandPalette } from './components/CommandPalette.js'
+import { Shortcuts, modifierKey } from './components/Shortcuts.js'
 import type { Command } from './components/CommandPalette.js'
 import { FacetPane } from './components/FacetPane.js'
 import { StubDetail } from './components/StubDetail.js'
@@ -86,6 +87,7 @@ export function App() {
   const [expandedFolders, setExpandedFolders] = useState<ReadonlySet<string>>(new Set())
   const [creating, setCreating] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
   /**
    * ⌘K anywhere, and `/` to jump to the search box — design brief §8.
@@ -105,6 +107,9 @@ export function App() {
       } else if (event.key === '/' && !typing) {
         event.preventDefault()
         document.querySelector<HTMLInputElement>('input[aria-label="Search stubs"]')?.focus()
+      } else if (event.key === '?' && !typing) {
+        event.preventDefault()
+        setShortcutsOpen((open) => !open)
       }
     }
     document.addEventListener('keydown', onKey)
@@ -268,6 +273,8 @@ export function App() {
         refreshing={refresh.isPending}
         screen={screen}
         onScreen={(next) => setUrlState({ screen: next })}
+        onPalette={() => setPaletteOpen(true)}
+        onShortcuts={() => setShortcutsOpen(true)}
         profiles={all}
         onSelectProfile={(id) =>
           // Switching environment abandons the current query and selection: a stub key from one
@@ -275,6 +282,8 @@ export function App() {
           setUrlState({ profileId: id, query: '', selectedKey: null })
         }
       />
+
+      {shortcutsOpen && <Shortcuts onClose={() => setShortcutsOpen(false)} />}
 
       {paletteOpen && (
         <CommandPalette
@@ -472,6 +481,8 @@ function TopBar({
   refreshing,
   screen,
   onScreen,
+  onPalette,
+  onShortcuts,
   profiles,
   onSelectProfile,
 }: {
@@ -483,6 +494,8 @@ function TopBar({
   refreshing: boolean
   screen: Screen
   onScreen: (next: Screen) => void
+  onPalette: () => void
+  onShortcuts: () => void
   profiles: Profile[]
   onSelectProfile: (id: string) => void
 }) {
@@ -561,6 +574,57 @@ function TopBar({
       <span className="mk-tabular" style={{ fontSize: 12, color: 'var(--mk-text-tertiary)' }}>
         {count} mirrored{version !== null ? ` · WireMock ${version}` : ''}
       </span>
+      {/*
+        The palette is only useful to someone who knows it exists, which is nobody on their
+        first run — so it gets a control, showing the modifier for *this* platform. Printing
+        the wrong one is worse than printing nothing: it names a combination that does not work
+        on the machine in front of you (design brief §6.1).
+      */}
+      <button
+        type="button"
+        onClick={onPalette}
+        title="Command palette — every action, screen, server and stub"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          height: 26,
+          padding: '0 8px',
+          font: 'inherit',
+          fontSize: 12,
+          cursor: 'pointer',
+          color: 'var(--mk-text-secondary)',
+          background: 'var(--mk-bg-subtle)',
+          border: '1px solid var(--mk-border-default)',
+          borderRadius: 'var(--mk-radius-sm)',
+        }}
+      >
+        Search
+        <kbd style={{ font: 'inherit', fontSize: 11, color: 'var(--mk-text-tertiary)' }}>
+          {modifierKey()}K
+        </kbd>
+      </button>
+
+      <button
+        type="button"
+        onClick={onShortcuts}
+        aria-label="Keyboard shortcuts"
+        title="Keyboard shortcuts (?)"
+        style={{
+          width: 26,
+          height: 26,
+          font: 'inherit',
+          fontSize: 13,
+          cursor: 'pointer',
+          color: 'var(--mk-text-secondary)',
+          background: 'transparent',
+          border: '1px solid var(--mk-border-default)',
+          borderRadius: 'var(--mk-radius-sm)',
+        }}
+      >
+        ?
+      </button>
+
       <Button onClick={onRefresh} disabled={refreshing}>
         {refreshing ? 'Refreshing…' : 'Refresh'}
       </Button>

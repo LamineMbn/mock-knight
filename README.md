@@ -44,6 +44,7 @@ ones it answers worst:
 | **Edit safely** | Every write re-reads and hash-compares first, so two people editing the same stub get a three-way merge instead of a lost update |
 | **Watch** | A live request journal with match state, filters, and the match explainer one keystroke away |
 | **Scenarios** | Stateful stubs as a state graph, with unreachable states and dead ends flagged |
+| **Keyboard first** | `⌘K` reaches every action, screen, server and stub; `/` focuses search; `?` publishes the whole map |
 
 Two principles shape all of it:
 

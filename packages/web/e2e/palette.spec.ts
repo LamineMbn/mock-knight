@@ -128,3 +128,44 @@ test('switches server, and does not offer the one already active', async ({ page
   await palette(page).getByRole('option', { name: 'localhost:18099', exact: true }).click()
   await expect(page.getByRole('button', { name: /Profile: / })).toContainText('localhost:18099')
 })
+
+/**
+ * Telling people the shortcuts exist — design brief §6.1 and §8.
+ *
+ * ⌘K is only useful to someone who already knows about it, which is nobody on a first run. A
+ * keyboard-first tool that never says so is a mouse-driven tool with extra steps.
+ */
+test.describe('discoverability', () => {
+  test('the top bar advertises the palette and opens it', async ({ page }) => {
+    await page.goto('/')
+    const control = page.getByRole('button', { name: /Search/ }).first()
+    await expect(control).toBeVisible()
+    // Names a modifier that works on this platform. Printing the wrong one would send someone
+    // to a key combination that does nothing on the machine in front of them.
+    await expect(control).toContainText(process.platform === 'darwin' ? '⌘K' : 'CtrlK')
+    await control.click()
+    await expect(palette(page)).toBeVisible()
+  })
+
+  test('? publishes the whole keymap', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByRole('button', { name: /Profile: / })).toBeVisible()
+    await page.keyboard.press('?')
+
+    const sheet = page.getByRole('dialog', { name: 'Keyboard shortcuts' })
+    await expect(sheet).toBeVisible()
+    for (const entry of ['Command palette', 'Focus the search box', 'Save']) {
+      await expect(sheet.getByText(entry, { exact: false }).first()).toBeVisible()
+    }
+    await page.keyboard.press('Escape')
+    await expect(sheet).toHaveCount(0)
+  })
+
+  test('? does not fire while typing, so a question mark can be typed', async ({ page }) => {
+    await page.goto('/')
+    const search = page.getByLabel('Search stubs')
+    await search.fill('why?')
+    await expect(search).toHaveValue('why?')
+    await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toHaveCount(0)
+  })
+})
