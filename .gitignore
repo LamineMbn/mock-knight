@@ -19,3 +19,7 @@ PRD.md
 TECH-DESIGN.md
 design/DESIGN-BRIEF.md
 design/CLAUDE-DESIGN-PROMPT.md
+
+# Copied from the repo root at build time so npm ships them inside the tarball.
+packages/cli/README.md
+packages/cli/LICENSE

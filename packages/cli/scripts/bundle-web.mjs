@@ -17,6 +17,8 @@ import { fileURLToPath } from 'node:url'
 const here = dirname(fileURLToPath(import.meta.url))
 const source = resolve(here, '..', '..', 'web', 'dist')
 const target = resolve(here, '..', 'dist', 'web')
+const packageRoot = resolve(here, '..')
+const repoRoot = resolve(here, '..', '..', '..')
 
 if (!existsSync(join(source, 'index.html'))) {
   console.error(
@@ -40,3 +42,21 @@ const bytes = (dir) =>
   )
 const files = readdirSync(target, { recursive: true }).length
 console.log(`bundle-web: ${files} files, ${(bytes(target) / 1024 / 1024).toFixed(1)}MB → dist/web`)
+
+/**
+ * npm only picks up a README and LICENSE sitting in the package directory, and in a monorepo
+ * both live at the repo root. Without this the npm page is blank and the tarball carries no
+ * licence text — for an Apache-2.0 project the second one is the part that actually matters.
+ *
+ * Copied rather than symlinked (npm does not follow symlinks into a tarball) and gitignored
+ * inside the package, so the root copies stay the only source.
+ */
+for (const name of ['README.md', 'LICENSE']) {
+  const from = join(repoRoot, name)
+  if (!existsSync(from)) {
+    console.error(`bundle-web: ${name} is missing from the repo root; the tarball needs it.`)
+    process.exit(1)
+  }
+  cpSync(from, join(packageRoot, name))
+}
+console.log('bundle-web: README.md and LICENSE copied into the package')

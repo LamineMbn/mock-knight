@@ -28,5 +28,24 @@
     "@mock-knight/server": "workspace:*",
     "@mock-knight/web": "workspace:*",
     "tsx": "^4.19.2"
+  },
+  "keywords": [
+    "wiremock",
+    "mock-server",
+    "http-mock",
+    "api-mocking",
+    "stub",
+    "devtools",
+    "testing"
+  ],
+  "author": "Lamine Bendib",
+  "homepage": "https://github.com/LamineMbn/mock-knight#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LamineMbn/mock-knight.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/LamineMbn/mock-knight/issues"
   }
 }
