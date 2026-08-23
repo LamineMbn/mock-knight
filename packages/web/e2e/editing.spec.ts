@@ -313,3 +313,78 @@ test('an operator the form cannot edit is shown, not hidden', async ({ page }) =
   // Rendered as a chip rather than a dropdown, so it cannot be silently replaced.
   await expect(page.getByLabel('Operator')).toHaveCount(0)
 })
+
+/** The Response tab — same draft plumbing, different half of the stub. */
+async function openResponse(page: import('@playwright/test').Page, query: string) {
+  await page.goto(`/?q=${encodeURIComponent(query)}`)
+  await expect(page.locator(ROW).first()).toBeVisible()
+  await page.locator(ROW).first().click()
+  await expect(page.getByRole('tab', { name: 'Response' })).toBeVisible()
+  await page.getByRole('tab', { name: 'Response' }).click()
+}
+
+test('editing the status in the form reaches the mock server', async ({ page }) => {
+  await openResponse(page, 'url:/v1/customers')
+  await expect(page.getByLabel('Status code')).toHaveValue('404')
+
+  await page.getByLabel('Status code').fill('410')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0)
+
+  expect(customers(await mappings())?.response?.status).toBe(410)
+})
+
+test('a JSON body is stored as a document, not as a quoted string', async ({ page }) => {
+  // The body is held as text while typing so a half-written document survives a keystroke.
+  // Saving that string would serve valid JSON of entirely the wrong shape — a failure that
+  // looks exactly like the mock working.
+  await openResponse(page, 'url:/v1/orders')
+  await expect(page.getByLabel('Body kind')).toHaveValue('json')
+  await page.getByLabel('Body', { exact: true }).fill('{"error":"rewritten"}')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0)
+
+  const all = (await mappings()) as (Mapping & { response?: { jsonBody?: unknown } })[]
+  const orders = all.find((m) => m.name === 'orders create 500')
+  expect(orders?.response?.jsonBody).toEqual({ error: 'rewritten' })
+})
+
+test('an unparseable JSON body is refused locally rather than sent', async ({ page }) => {
+  await openResponse(page, 'url:/v1/orders')
+  const before = ((await mappings()) as (Mapping & { response?: { jsonBody?: unknown } })[]).find(
+    (m) => m.name === 'orders create 500',
+  )?.response?.jsonBody
+
+  await page.getByLabel('Body', { exact: true }).fill('{"error": ')
+  await expect(page.getByText(/not valid JSON yet/)).toBeVisible()
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('not valid JSON')
+
+  const after = ((await mappings()) as (Mapping & { response?: { jsonBody?: unknown } })[]).find(
+    (m) => m.name === 'orders create 500',
+  )?.response?.jsonBody
+  expect(after).toEqual(before)
+})
+
+test('warns when a fault makes the body unreachable', async ({ page }) => {
+  // A fault closes the connection instead of replying, so a stub with both returns none of its
+  // carefully written body — and looks entirely correct in every list.
+  await openResponse(page, 'url:/v1/orders')
+  await page.getByLabel('Fault', { exact: true }).selectOption('EMPTY_RESPONSE')
+  await expect(page.getByText(/fault closes the connection instead of replying/)).toBeVisible()
+})
+
+test('the unsaved dot marks the tab that actually changed', async ({ page }) => {
+  // The draft spans both form tabs, so marking both would send someone to Matcher to look for
+  // a change that is on Response.
+  await openResponse(page, 'url:/v1/customers')
+  await page.getByLabel('Status code').fill('418')
+
+  const dot = (name: string) => page.getByRole('tab', { name }).getByLabel('unsaved changes')
+  await expect(dot('Response')).toBeVisible()
+  await expect(dot('Matcher')).toHaveCount(0)
+
+  // And typing a change then undoing it is not an unsaved change.
+  await page.getByLabel('Status code').fill('404')
+  await expect(dot('Response')).toHaveCount(0)
+})

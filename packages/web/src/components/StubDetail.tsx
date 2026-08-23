@@ -17,6 +17,7 @@ import {
 import type { Failure } from './primitives.js'
 import { ConflictDialog } from './ConflictDialog.js'
 import { MatcherForm } from './MatcherForm.js'
+import { ResponseForm } from './ResponseForm.js'
 
 /**
  * The detail pane — design brief §6.3.
@@ -34,7 +35,7 @@ export interface StubDetailProps {
   clientKey: string | null
 }
 
-type Tab = 'overview' | 'matcher' | 'raw' | 'history'
+type Tab = 'overview' | 'matcher' | 'response' | 'raw' | 'history'
 
 export function StubDetail({ profileId, profileName, canWrite, clientKey }: StubDetailProps) {
   const [tab, setTab] = useState<Tab>('overview')
@@ -97,6 +98,19 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
   const rawDirty = draft !== null && draft !== loadedText
   const formDirty = formDraft !== null
   const dirty = rawDirty || formDirty
+
+  /**
+   * Which form tab actually holds the change, so the unsaved dot points at it.
+   *
+   * The draft is one object spanning both tabs, so marking both whenever either is edited would
+   * send someone to the Matcher tab to look for a change that is on Response. Compared against
+   * the server's draft rather than tracked as a flag: an edit typed and then undone is not an
+   * unsaved change, and a flag would still claim it was.
+   */
+  const changedSection = (section: 'request' | 'response'): boolean =>
+    formDraft !== null &&
+    serverDraft !== null &&
+    JSON.stringify(formDraft[section]) !== JSON.stringify(serverDraft[section])
 
   /**
    * Shared by both write channels, so a conflict opens the same merge dialog whichever tab the
@@ -177,8 +191,19 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
 
   const attemptSave = () => {
     if (formDraft !== null) {
-      // The form channel: send the canonical draft and let the server patch the document.
-      saveDraft.mutate({ draft: formDraft, baseHash: loaded?.contentHash ?? '' })
+      // A `json` body is held as text while typing, so a half-written document is not thrown
+      // away on every keystroke. It has to become a real value before it is sent: saving the
+      // string would store the body as a quoted JSON *string*, which serves valid JSON that is
+      // the wrong shape — a failure that looks like the mock working.
+      const prepared = withParsedJsonBody(formDraft)
+      if (prepared === null) {
+        setError({
+          sentence: 'The response body is not valid JSON, so nothing was sent to the server.',
+          payload: null,
+        })
+        return
+      }
+      saveDraft.mutate({ draft: prepared, baseHash: loaded?.contentHash ?? '' })
       return
     }
     const parsed = parseDraft(draft)
@@ -269,6 +294,7 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
           [
             ['overview', 'Overview'],
             ['matcher', 'Matcher'],
+            ['response', 'Response'],
             ['raw', 'Raw JSON'],
             ['history', 'History'],
           ] as const
@@ -292,7 +318,9 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
             {label}
             {/* An unsaved draft is a filled accent dot on the tab (design brief §7.3), on the
                 tab that actually holds the edit. */}
-            {((value === 'raw' && rawDirty) || (value === 'matcher' && formDirty)) && (
+            {((value === 'raw' && rawDirty) ||
+              (value === 'matcher' && changedSection('request')) ||
+              (value === 'response' && changedSection('response'))) && (
               <span
                 aria-label="unsaved changes"
                 style={{
@@ -416,7 +444,7 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
           </dl>
         ) : tab === 'history' ? (
           <History profileId={profileId} clientKey={mock.clientKey} />
-        ) : tab === 'matcher' ? (
+        ) : tab === 'matcher' || tab === 'response' ? (
           serverDraft === null ? (
             <p style={{ margin: 0, fontSize: 13, color: 'var(--mk-text-secondary)' }}>
               {/* Not a form with a Save that cannot work: interpreting the document needs the
@@ -444,11 +472,19 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
                   both be live.
                 </p>
               )}
-              <MatcherForm
-                draft={formDraft ?? serverDraft}
-                disabled={!canWrite || rawDirty}
-                onChange={setFormDraft}
-              />
+              {tab === 'matcher' ? (
+                <MatcherForm
+                  draft={formDraft ?? serverDraft}
+                  disabled={!canWrite || rawDirty}
+                  onChange={setFormDraft}
+                />
+              ) : (
+                <ResponseForm
+                  draft={formDraft ?? serverDraft}
+                  disabled={!canWrite || rawDirty}
+                  onChange={setFormDraft}
+                />
+              )}
             </>
           )
         ) : canWrite ? (
@@ -506,7 +542,7 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
         </div>
       )}
 
-      {canWrite && (tab === 'raw' || tab === 'matcher') && (
+      {canWrite && (tab === 'raw' || tab === 'matcher' || tab === 'response') && (
         <footer
           style={{
             display: 'flex',
@@ -676,6 +712,23 @@ function parseDraft(draft: string | null): JsonObject | null {
     return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
       ? (parsed as JsonObject)
       : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Turn a `json` body that is being edited as text back into a value, or `null` if it will not
+ * parse. Every other body kind is text by definition and passes through untouched.
+ */
+function withParsedJsonBody(draft: MockDraft): MockDraft | null {
+  const body = draft.response.body
+  if (body.kind !== 'json' || typeof body.value !== 'string') return draft
+  try {
+    return {
+      ...draft,
+      response: { ...draft.response, body: { kind: 'json', value: JSON.parse(body.value) } },
+    }
   } catch {
     return null
   }
