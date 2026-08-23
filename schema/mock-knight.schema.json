@@ -1,0 +1,147 @@
+{
+  "$id": "https://raw.githubusercontent.com/LamineMbn/mock-knight/main/schema/mock-knight.schema.json",
+  "title": "mock-knight configuration",
+  "description": "Configuration for the mock-knight CLI. Every field is optional; a command-line flag always overrides the equivalent here. String values may reference environment variables as ${env:VAR}, except authRef, which names a variable rather than holding a value.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "host": {
+      "type": "string",
+      "minLength": 1
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "local",
+        "deployed"
+      ]
+    },
+    "state": {
+      "type": "string",
+      "minLength": 1
+    },
+    "allowedHosts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "adapter": {
+            "default": "wiremock",
+            "type": "string",
+            "const": "wiremock"
+          },
+          "baseUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "adminPath": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "colour": {
+            "default": "indigo",
+            "type": "string",
+            "enum": [
+              "slate",
+              "indigo",
+              "cyan",
+              "violet",
+              "rose",
+              "olive"
+            ]
+          },
+          "protected": {
+            "default": false,
+            "type": "boolean"
+          },
+          "readOnly": {
+            "default": false,
+            "type": "boolean"
+          },
+          "mappingsDir": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "authKind": {
+            "default": "none",
+            "type": "string",
+            "enum": [
+              "none",
+              "bearer",
+              "basic",
+              "headers"
+            ]
+          },
+          "authRef": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "correlationHeader": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "redactHeaders": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "baseUrl"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false
+}

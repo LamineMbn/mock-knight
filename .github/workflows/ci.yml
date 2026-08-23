@@ -43,6 +43,15 @@ jobs:
       - name: Colour contrast report
         run: python3 design/design-tokens.py | tail -1 | grep -qx '0 failure(s)'
 
+      # The config JSON Schema is generated from the same zod schema the loader validates
+      # against. Committed so editors can fetch it by URL; checked so it cannot drift from
+      # what the program actually accepts.
+      - name: Published JSON Schema is up to date
+        run: |
+          pnpm schema
+          git diff --exit-code -- schema/mock-knight.schema.json \
+            || { echo '::error::schema/mock-knight.schema.json is stale. Run `pnpm schema` and commit it.'; exit 1; }
+
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test

@@ -19,7 +19,8 @@
     "dev:server": "pnpm --filter mock-knight dev",
     "dev:web": "pnpm --filter @mock-knight/web dev",
     "build": "pnpm --filter @mock-knight/web build && pnpm --filter mock-knight build",
-    "test:perf": "vitest run --config vitest.perf.config.ts"
+    "test:perf": "vitest run --config vitest.perf.config.ts",
+    "schema": "pnpm --filter @mock-knight/core build && tsx packages/server/scripts/emit-schema.mts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

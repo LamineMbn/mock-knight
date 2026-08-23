@@ -1,4 +1,7 @@
+import { createRequire } from 'node:module'
 import { defineConfig } from 'tsup'
+
+const pkg = createRequire(import.meta.url)('./package.json') as { version: string }
 
 export default defineConfig({
   entry: ['src/index.ts'],
@@ -14,4 +17,8 @@ export default defineConfig({
   //    it produces a build that succeeds and then dies at startup on `Dynamic require of
   //    "assert" is not supported`.
   external: ['better-sqlite3', 'undici'],
+  // The version is single-sourced from package.json and inlined at build time. It used to be a
+  // literal in index.ts, which meant the published 0.1.0 answered `--version` with 0.0.0 —
+  // and the release workflow's tag check compares against package.json, so nothing caught it.
+  define: { __MOCK_KNIGHT_VERSION__: JSON.stringify(pkg.version) },
 })

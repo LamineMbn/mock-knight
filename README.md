@@ -82,6 +82,43 @@ named, and mirrors its corpus.
 | `--name <name>` | the URL's host | Profile name |
 | `--no-refresh` | | Skip the initial corpus mirror |
 | `--mode <local\|deployed>` | `local` | `deployed` disables actions that assume a single trusted user |
+| `--config <path>` | `./mock-knight.json` if present | See below |
+| `--no-config` | | Ignore any config file |
+
+### `mock-knight.json`
+
+Optional. Picked up from the working directory, or named with `--config`. **A flag always wins
+over the file** — a flag is what you typed just now.
+
+```jsonc
+{
+  "$schema": "https://raw.githubusercontent.com/LamineMbn/mock-knight/main/schema/mock-knight.schema.json",
+  "port": 7777,
+  "state": "./mirror.db",            // relative to this file, not your shell's directory
+  "allowedHosts": ["wiremock.internal:8080"],
+  "profiles": [
+    {
+      "name": "staging",
+      "adapter": "wiremock",
+      "baseUrl": "${env:STAGING_MOCK_URL}",
+      "authKind": "bearer",
+      "authRef": "STAGING_TOKEN",     // the NAME of an env var, never a value
+      "readOnly": true
+    }
+  ]
+}
+```
+
+- **`allowedHosts`** restricts where this instance may connect. Absent means no restriction;
+  an empty array means nothing is reachable. Worth setting whenever you use `--host`.
+- **`profiles`** are reconciled by name on every start, so edit and restart. They are the way
+  to share a set of servers with a team through version control.
+- **`${env:VAR}`** is interpolated into string values, and refuses to start if the variable is
+  unset rather than substituting an empty string. It is deliberately **not** applied to
+  `authRef`, which names a variable rather than holding one — so a token cannot end up in a
+  file you commit.
+- The `$schema` line gives you completion and validation in any editor that reads JSON Schema.
+- YAML is not implemented yet; a `.yaml` file is reported, not ignored.
 
 ## Supported backends
 

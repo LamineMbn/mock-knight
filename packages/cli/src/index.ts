@@ -6,14 +6,18 @@ import { parseArgs } from 'node:util'
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import {
+  ConfigError,
   ConnectionRegistry,
+  DEFAULT_CONFIG_FILENAME,
   createApp,
   createProfile,
   listProfiles,
+  loadConfig,
   openDatabase,
   replaceCorpus,
+  updateProfile,
 } from '@mock-knight/server'
-import type { RuntimeMode } from '@mock-knight/server'
+import type { LoadedConfig, ProfileInput, RuntimeMode } from '@mock-knight/server'
 
 /**
  * The `npx mock-knight` entry point.
@@ -28,7 +32,9 @@ import type { RuntimeMode } from '@mock-knight/server'
  *    terrible first impression (§16).
  */
 
-const VERSION = '0.0.0'
+/** Replaced at build time from packages/cli/package.json; see tsup.config.ts. */
+declare const __MOCK_KNIGHT_VERSION__: string
+const VERSION = typeof __MOCK_KNIGHT_VERSION__ === 'string' ? __MOCK_KNIGHT_VERSION__ : '0.0.0-dev'
 const DEFAULT_PORT = 7777
 const MINIMUM_NODE_MAJOR = 22
 
@@ -44,6 +50,8 @@ Options
                     turns on deployed mode and prints an exposure warning.
   --mode <m>        local | deployed. Inferred from --host when omitted.
   --state <path>    State database (default ~/.mock-knight/state.db)
+  --config <path>   Config file (default ./${DEFAULT_CONFIG_FILENAME} if present)
+  --no-config       Ignore any config file
   --name <name>     Name for the profile created from --url
   --no-refresh      Start without fetching the corpus
   --verbose         Log every upstream call
@@ -88,7 +96,11 @@ async function main(): Promise<void> {
         mode: { type: 'string' },
         state: { type: 'string' },
         name: { type: 'string' },
+        config: { type: 'string' },
         refresh: { type: 'boolean', default: true },
+        // A separate key, not a negation of `--config`: parseArgs only auto-negates booleans,
+        // and `--config` carries a path.
+        'no-config': { type: 'boolean', default: false },
         verbose: { type: 'boolean', default: false },
         version: { type: 'boolean', default: false },
         help: { type: 'boolean', default: false },
@@ -110,18 +122,43 @@ async function main(): Promise<void> {
     return
   }
 
-  const host = flags.host ?? '127.0.0.1'
-  const port = Number(flags.port ?? DEFAULT_PORT)
+  // Explicit --config must exist; a discovered one is optional. Asking for a file that is not
+  // there is a mistake worth stopping for, and not asking for one is not.
+  let loaded: LoadedConfig | null = null
+  if (flags['no-config'] !== true) {
+    const discovered = resolve(DEFAULT_CONFIG_FILENAME)
+    const target = flags.config ?? (existsSync(discovered) ? discovered : null)
+    if (target !== null) {
+      try {
+        loaded = loadConfig(target)
+      } catch (error) {
+        if (error instanceof ConfigError) {
+          console.error(`\nmock-knight could not use ${error.path}\n\n  ${error.message}\n`)
+          process.exit(1)
+        }
+        throw error
+      }
+    }
+  }
+  const file = loaded?.config ?? {}
+  if (loaded !== null) console.log(`  config: ${loaded.path}`)
+
+  // A flag always beats the file: a flag is what someone typed just now.
+  const host = flags.host ?? file.host ?? '127.0.0.1'
+  const port = Number(flags.port ?? file.port ?? DEFAULT_PORT)
   const mode: RuntimeMode =
-    (flags.mode as RuntimeMode | undefined) ?? (isLoopback(host) ? 'local' : 'deployed')
-  const statePath = flags.state ?? join(homedir(), '.mock-knight', 'state.db')
+    (flags.mode as RuntimeMode | undefined) ??
+    file.mode ??
+    (isLoopback(host) ? 'local' : 'deployed')
+  const statePath = flags.state ?? file.state ?? join(homedir(), '.mock-knight', 'state.db')
 
   if (!isLoopback(host)) {
     console.warn(
       `\n  ⚠  Binding to ${host}, so mock-knight is reachable from your network.\n` +
         `     It has no authentication and will fetch any URL a profile names, which makes an\n` +
         `     exposed instance a relay into whatever it can reach. Put a reverse proxy in front,\n` +
-        `     and set "allowedHosts" in mock-knight.json to limit where it may connect.\n`,
+        `     and set "allowedHosts" in ${loaded?.path ?? DEFAULT_CONFIG_FILENAME} to limit ` +
+        `where it may connect.\n`,
     )
   }
 
@@ -142,7 +179,26 @@ async function main(): Promise<void> {
     throw error
   }
 
-  const registry = new ConnectionRegistry(db, mode)
+  const registry = new ConnectionRegistry(db, mode, file.allowedHosts)
+  if (file.allowedHosts !== undefined) {
+    console.log(
+      file.allowedHosts.length === 0
+        ? `  allowedHosts is empty — no outbound connections are permitted`
+        : `  allowedHosts: ${file.allowedHosts.join(', ')}`,
+    )
+  }
+
+  // Config profiles are reconciled by name on every start, so editing the file and restarting
+  // is enough. They keep origin 'config' to mark where they came from.
+  for (const definition of file.profiles ?? []) {
+    const input = definition as ProfileInput
+    const existing = listProfiles(db).find((profile) => profile.name === input.name)
+    if (existing === undefined) {
+      createProfile(db, input, { origin: 'config' })
+    } else {
+      updateProfile(db, existing.id, input)
+    }
+  }
   const app = createApp({ db, registry, mode, version: VERSION })
 
   const webRoot = findWebRoot()
