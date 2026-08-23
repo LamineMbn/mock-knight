@@ -11,13 +11,52 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Everything CI does, against the exact commit being released. A tag is not a promise that
-  # the branch was green when it was cut.
+  # Cheap checks first, before ten minutes of CI. A tag is already pushed by the time this runs
+  # and a tag is awkward to retract, so anything that can fail should fail in twenty seconds.
+  preflight:
+    name: Preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The tag is the source of truth for the version. Publishing something that disagrees
+      # with it makes the Release page a lie for good — npm versions are immutable.
+      - name: Tag matches the package version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./packages/cli/package.json').version")
+          [ "$tag" = "$pkg" ] || {
+            echo "::error::Tag v$tag does not match packages/cli version $pkg."
+            exit 1
+          }
+
+      # npm granular access tokens expire — 90 days by default, a year at most. The failure
+      # that costs real time is discovering that at the publish step, after the whole suite has
+      # run and the tag is already public. `whoami` answers it immediately.
+      - name: The npm token exists and still works
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN is not set. gh secret set NPM_TOKEN --repo ${{ github.repository }}"
+            exit 1
+          fi
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+          who=$(npm whoami 2>&1) || {
+            echo "::error::npm rejected NPM_TOKEN — most likely expired, or lacking write access."
+            echo "$who"
+            exit 1
+          }
+          echo "npm accepts the token as: $who"
+
+  # Everything CI does, against the exact commit being released. A green branch yesterday is
+  # not a promise about the commit the tag points at.
   verify:
+    needs: preflight
     uses: ./.github/workflows/ci.yml
 
   publish:
-    needs: verify
+    needs: [preflight, verify]
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the GitHub Release
@@ -34,21 +73,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
-      # The tag is the source of truth for the version. Publishing something that disagrees
-      # with the tag makes the Release page a lie for good — npm versions are immutable.
-      - name: Tag matches the package version
-        run: |
-          tag="${GITHUB_REF_NAME#v}"
-          pkg=$(node -p "require('./packages/cli/package.json').version")
-          [ "$tag" = "$pkg" ] || {
-            echo "::error::Tag v$tag does not match packages/cli version $pkg."
-            exit 1
-          }
-
-      - name: Publish to npm
-        run: pnpm --filter mock-knight publish --access public --no-git-checks --provenance
+      # Written explicitly rather than relying on setup-node's registry-url alone: that writes
+      # an .npmrc pnpm does not always read, and the symptom is an ENEEDAUTH at the last step
+      # of a release that has already tagged and built everything.
+      - name: Authenticate to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+
+      # --provenance links the published tarball to this workflow run and this commit, and
+      # needs the `repository` field in package.json to agree with them.
+      - name: Publish to npm
+        run: pnpm --filter mock-knight publish --access public --no-git-checks --provenance
 
       - name: Attach the tarball to a GitHub Release
         env:

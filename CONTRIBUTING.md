@@ -159,5 +159,12 @@ npm version patch -w mock-knight   # or minor / major
 git push --follow-tags
 ```
 
-The tag triggers a workflow that runs every tier, publishes to npm with provenance, and attaches
+The tag triggers a workflow that checks the tag against the package version and the npm token
+before anything else, then runs every test tier, publishes to npm with provenance, and attaches
 the tarball to a GitHub Release. Tags must be `v*`.
+
+The `NPM_TOKEN` secret is a **granular access token** — npm retired the non-expiring Automation
+kind. It therefore expires, and the release will stop working on a date nobody remembers. The
+preflight job fails in seconds with the reason rather than at the publish step ten minutes in.
+To rotate: create a new token scoped to `mock-knight` with read *and* write, then
+`gh secret set NPM_TOKEN`.
