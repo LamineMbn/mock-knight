@@ -26,6 +26,25 @@ test.beforeEach(async ({ page }) => {
   await resetToSeed(page)
 })
 
+/**
+ * Empty **both** journals.
+ *
+ * `DELETE /__admin/requests` only empties WireMock's. Our mirror keeps its own bounded history,
+ * so a spec that cleared one counted whatever the previous spec left behind — and picked a
+ * stale row as "the newest". That asymmetry is exactly what the Clear journal button exists to
+ * resolve, so the fixtures use it.
+ */
+async function clearBothJournals(page: import('@playwright/test').Page) {
+  const profiles = (await (await page.request.get('/api/profiles')).json()) as {
+    profiles: { id: string; name: string }[]
+  }
+  const profile = profiles.profiles[0]!
+  await page.request.post(`/api/${profile.id}/danger/clear-journal`, {
+    data: { confirm: profile.name },
+  })
+  await fetch(`${WIREMOCK}/__admin/requests`, { method: 'DELETE' })
+}
+
 test('the row action is a quiet button, not a filled primary on every row', async ({ page }) => {
   await traffic(page)
   const button = page.getByRole('button', { name: 'Why?' }).first()
@@ -193,23 +212,8 @@ test('Clear journal needs the profile name typed, then empties the server too', 
  * journal has stored since it existed and never showed.
  */
 test.describe('filtering the log', () => {
-  /**
-   * Clears **both** journals, then sends three known requests.
-   *
-   * `DELETE /__admin/requests` only empties WireMock's. Our mirror keeps its own bounded
-   * history, so a spec that cleared only the upstream one counted whatever the previous spec
-   * happened to leave behind — which is exactly the asymmetry the Clear journal button exists
-   * to resolve, so the fixture uses it.
-   */
   const seedTraffic = async (page: import('@playwright/test').Page) => {
-    const profiles = (await (await page.request.get('/api/profiles')).json()) as {
-      profiles: { id: string; name: string }[]
-    }
-    const profile = profiles.profiles[0]!
-    await page.request.post(`/api/${profile.id}/danger/clear-journal`, {
-      data: { confirm: profile.name },
-    })
-    await fetch(`${WIREMOCK}/__admin/requests`, { method: 'DELETE' })
+    await clearBothJournals(page)
     await fetch(`${WIREMOCK}/v1/customers`) // matched, 404 per the seed
     await fetch(`${WIREMOCK}/v1/nothing-here`) // unmatched, 404
     await fetch(`${WIREMOCK}/v1/orders`, {
@@ -278,7 +282,7 @@ test.describe('what the journal already knew', () => {
   test('shows how long the server took, and says when the delay was configured', async ({
     page,
   }) => {
-    await fetch(`${WIREMOCK}/__admin/requests`, { method: 'DELETE' })
+    await clearBothJournals(page)
     // The seed's customers stub carries fixedDelayMilliseconds: 50.
     await fetch(`${WIREMOCK}/v1/customers`)
     await page.goto('/?screen=traffic')
@@ -290,7 +294,7 @@ test.describe('what the journal already knew', () => {
   })
 
   test('the stub link opens the stub that answered', async ({ page }) => {
-    await fetch(`${WIREMOCK}/__admin/requests`, { method: 'DELETE' })
+    await clearBothJournals(page)
     await fetch(`${WIREMOCK}/v1/customers`)
     await page.goto('/?screen=traffic')
 
@@ -310,4 +314,30 @@ test.describe('what the journal already knew', () => {
     await expect(page.getByRole('tab', { name: 'Overview' })).toBeVisible()
     await expect(page.locator('aside').last()).toContainText('/v1/customers')
   })
+})
+
+test('a stub that no longer exists is said, not linked', async ({ page }) => {
+  // The journal outlives the corpus: reseeding issues new ids, so yesterday's events point at
+  // stubs that are gone. Linking to one landed on "Could not load this stub", which reads as a
+  // fault rather than as history.
+  await clearBothJournals(page)
+  await fetch(`${WIREMOCK}/v1/customers`)
+  await page.goto('/?screen=traffic')
+  await expect(page.getByRole('button', { name: 'stub ↗' }).first()).toBeVisible()
+
+  // Replace the corpus wholesale, which is what an import or a colleague's reseed does.
+  await resetToSeed(page)
+  await page.reload()
+
+  const row = page.locator(ROW).filter({ hasText: '/v1/customers' }).first()
+  await expect(row).toContainText('stub gone')
+  await expect(row.getByRole('button', { name: 'stub ↗' })).toHaveCount(0)
+})
+
+test('arriving at a deleted stub by URL explains rather than erroring', async ({ page }) => {
+  await page.goto('/?stub=00000000-0000-0000-0000-000000000000')
+  const detail = page.locator('aside').last()
+  await expect(detail).toContainText('That stub is not in the corpus.')
+  // Not the generic failure, which sent people looking for a fault that was not there.
+  await expect(detail).not.toContainText('Could not load this stub')
 })

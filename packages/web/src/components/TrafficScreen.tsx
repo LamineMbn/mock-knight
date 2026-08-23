@@ -244,7 +244,7 @@ function Row({
         {event.matched ? (
           event.matchedClientKey === null ? (
             <span style={{ fontSize: 12, color: 'var(--mk-text-tertiary)' }}>—</span>
-          ) : (
+          ) : event.matchedStubPresent ? (
             // Was inert text with an arrow on it, which is worse than nothing: the server tells
             // us which stub answered, and the affordance looked clickable and was not.
             <Button
@@ -254,6 +254,19 @@ function Row({
             >
               stub ↗
             </Button>
+          ) : (
+            /*
+              The stub that served this request is no longer in the corpus — deleted, or
+              replaced by a reseed that issued new ids. The journal reaches back further than
+              the corpus does, so this is history rather than a broken link, and it is said
+              rather than drawn as a control that would land on "Could not load this stub".
+            */
+            <span
+              title="The stub that served this request is no longer in the corpus. The journal reaches back further than the corpus does."
+              style={{ fontSize: 12, color: 'var(--mk-text-tertiary)' }}
+            >
+              stub gone
+            </span>
           )
         ) : (
           <Button

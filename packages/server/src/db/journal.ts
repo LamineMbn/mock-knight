@@ -101,6 +101,11 @@ export interface ServeEventRow {
   durationMs: number | null
   /** How much of `durationMs` was a configured delay rather than work. */
   addedDelayMs: number | null
+  /**
+   * Whether `matchedClientKey` still names a stub in the corpus. False once that stub has been
+   * deleted or replaced — the journal outlives the corpus, so the key is history, not a link.
+   */
+  matchedStubPresent: boolean
 }
 
 export interface JournalQueryOptions {
@@ -186,8 +191,20 @@ export function listServeEvents(
 
   const rows = db
     .prepare(
+      /**
+       * `stub_present` answers a question the journal cannot: the stub that served a request
+       * may since have been deleted, or replaced by a reseed that issues new ids. The journal
+       * reaches back further than the corpus does, so an event's `matched_key` is a historical
+       * fact rather than a live reference — and a UI that links to it unconditionally offers a
+       * control that fails.
+       */
       `SELECT id, upstream_id, at, matched, matched_key, method, url, status, correlation,
-              duration_ms, added_delay_ms
+              duration_ms, added_delay_ms,
+              EXISTS (
+                SELECT 1 FROM mock
+                WHERE mock.profile_id = serve_event.profile_id
+                  AND mock.client_key = serve_event.matched_key
+              ) AS stub_present
        FROM serve_event WHERE ${clause}
        ORDER BY at DESC, id DESC LIMIT ? OFFSET ?`,
     )
@@ -203,6 +220,7 @@ export function listServeEvents(
     correlation: string | null
     duration_ms: number | null
     added_delay_ms: number | null
+    stub_present: number
   }[]
 
   const window = db
@@ -222,6 +240,7 @@ export function listServeEvents(
       correlation: row.correlation,
       durationMs: row.duration_ms,
       addedDelayMs: row.added_delay_ms,
+      matchedStubPresent: row.stub_present === 1,
     })),
     total,
     earliestAt: window?.earliest_at ?? null,

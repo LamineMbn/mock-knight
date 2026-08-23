@@ -149,6 +149,8 @@ export interface ServeEventRow {
   durationMs: number | null
   /** How much of that was a delay someone configured rather than work the server did. */
   addedDelayMs: number | null
+  /** Whether the stub that served this request is still in the corpus. */
+  matchedStubPresent: boolean
 }
 
 /**

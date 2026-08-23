@@ -246,16 +246,40 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
   }
 
   if (query.isError) {
+    // A 404 is not a failure, it is an answer: the corpus no longer holds that stub. It is
+    // reachable from a bookmarked URL, or from a journal entry older than the corpus, and
+    // "Could not load this stub" sent people looking for a fault that was not there.
+    const missing = query.error instanceof ApiError && query.error.status === 404
     return (
       <aside style={paneStyle}>
-        <div style={{ padding: 16, fontSize: 13, color: 'var(--mk-danger-text)' }}>
-          Could not load this stub.
-          <details style={{ marginTop: 8, color: 'var(--mk-text-secondary)' }}>
-            <summary style={{ cursor: 'pointer' }}>Details</summary>
-            <pre className="mk-mono" style={preStyle}>
-              {String(query.error)}
-            </pre>
-          </details>
+        <div
+          style={{
+            padding: 16,
+            fontSize: 13,
+            color: missing ? 'var(--mk-text-secondary)' : 'var(--mk-danger-text)',
+          }}
+        >
+          {missing ? (
+            <>
+              <strong
+                style={{ display: 'block', marginBottom: 4, color: 'var(--mk-text-primary)' }}
+              >
+                That stub is not in the corpus.
+              </strong>
+              It has been deleted, or replaced by an import that issued new ids. If you arrived from
+              the traffic log, the journal reaches back further than the corpus does.
+            </>
+          ) : (
+            <>
+              Could not load this stub.
+              <details style={{ marginTop: 8, color: 'var(--mk-text-secondary)' }}>
+                <summary style={{ cursor: 'pointer' }}>Details</summary>
+                <pre className="mk-mono" style={preStyle}>
+                  {String(query.error)}
+                </pre>
+              </details>
+            </>
+          )}
         </div>
       </aside>
     )
