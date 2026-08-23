@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../api.js'
 import { describeStanding } from '@mock-knight/core/types'
-import type { JsonObject } from '@mock-knight/core/types'
+import type { JsonObject, MockDraft } from '@mock-knight/core/types'
 import {
   Button,
   Chip,
@@ -16,6 +16,7 @@ import {
 } from './primitives.js'
 import type { Failure } from './primitives.js'
 import { ConflictDialog } from './ConflictDialog.js'
+import { MatcherForm } from './MatcherForm.js'
 
 /**
  * The detail pane — design brief §6.3.
@@ -33,7 +34,7 @@ export interface StubDetailProps {
   clientKey: string | null
 }
 
-type Tab = 'overview' | 'raw' | 'history'
+type Tab = 'overview' | 'matcher' | 'raw' | 'history'
 
 export function StubDetail({ profileId, profileName, canWrite, clientKey }: StubDetailProps) {
   const [tab, setTab] = useState<Tab>('overview')
@@ -46,6 +47,7 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
   })
 
   const loaded = query.data?.mock
+  const serverDraft = query.data?.draft ?? null
   const loadedText = useMemo(
     () => (loaded === undefined ? '' : JSON.stringify(loaded.raw, null, 2)),
     [loaded],
@@ -62,6 +64,8 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
     currentHash: string
   } | null>(null)
   const [error, setError] = useState<Failure | null>(null)
+  /** Unsaved edits made through the form tabs, as a canonical draft. */
+  const [formDraft, setFormDraft] = useState<MockDraft | null>(null)
 
   // Selecting a different stub abandons an untouched draft; a touched one is kept until the
   // user resolves it, so switching rows cannot silently discard typing.
@@ -76,11 +80,57 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
   if (shownKey !== clientKey) {
     setShownKey(clientKey)
     setDraft(null)
+    setFormDraft(null)
     setConflict(null)
     setError(null)
   }
 
-  const dirty = draft !== null && draft !== loadedText
+  /**
+   * Two edit channels, deliberately exclusive.
+   *
+   * The form edits a canonical draft and the Raw tab edits the vendor document, and the browser
+   * cannot convert between them — rendering a draft needs an adapter, which lives on the server
+   * (the layering rule). Keeping both live would mean showing two documents that disagree and
+   * silently picking one on save. So whichever channel is dirty locks the other, and the locked
+   * tab says why rather than looking inexplicably read-only.
+   */
+  const rawDirty = draft !== null && draft !== loadedText
+  const formDirty = formDraft !== null
+  const dirty = rawDirty || formDirty
+
+  /**
+   * Shared by both write channels, so a conflict opens the same merge dialog whichever tab the
+   * edit came from. Two handlers here would be two subtly different conflict stories.
+   */
+  const handleWriteError = (caught: unknown): void => {
+    // A 409 is not an error to report — it is the three-way merge's cue. Discriminate on the
+    // payload, not the status: `not_connected` is also a 409, and treating that as a merge
+    // conflict opens the dialog with no documents in it.
+    const payload = caught instanceof ApiError ? (caught.payload as { error?: string }) : null
+    if (caught instanceof ApiError && caught.status === 409 && payload?.error === 'conflict') {
+      const conflictPayload = caught.payload as {
+        current: JsonObject
+        currentHash: string
+        message: string
+        /** Present for a form write, which never had a vendor document of its own to offer. */
+        attempted?: JsonObject
+      }
+      setConflict({
+        theirs: conflictPayload.current,
+        mine: conflictPayload.attempted ?? parseDraft(draft) ?? {},
+        currentHash: conflictPayload.currentHash,
+      })
+      return
+    }
+    if (caught instanceof ApiError && payload?.error === 'not_connected') {
+      setError({
+        sentence: 'Not connected to the mock server. Reconnect, then save again.',
+        payload: null,
+      })
+      return
+    }
+    setError(describeError(caught))
+  }
 
   const save = useMutation({
     mutationFn: async ({ raw, baseHash }: { raw: JsonObject; baseHash: string }) => {
@@ -94,33 +144,24 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
       void queryClient.invalidateQueries({ queryKey: ['mock', profileId] })
       void queryClient.invalidateQueries({ queryKey: ['corpus'] })
     },
-    onError: (caught: unknown) => {
-      // A 409 is not an error to report — it is the three-way merge's cue.
-      // Discriminate on the payload, not the status: `not_connected` is also a 409, and
-      // treating it as a merge conflict opens the dialog with no documents in it.
-      const payload = caught instanceof ApiError ? (caught.payload as { error?: string }) : null
-      if (caught instanceof ApiError && caught.status === 409 && payload?.error === 'conflict') {
-        const conflictPayload = caught.payload as {
-          current: JsonObject
-          currentHash: string
-          message: string
-        }
-        setConflict({
-          theirs: conflictPayload.current,
-          mine: parseDraft(draft) ?? {},
-          currentHash: conflictPayload.currentHash,
-        })
-        return
-      }
-      if (caught instanceof ApiError && payload?.error === 'not_connected') {
-        setError({
-          sentence: 'Not connected to the mock server. Reconnect, then save again.',
-          payload: null,
-        })
-        return
-      }
-      setError(describeError(caught))
+    onError: (caught: unknown) => handleWriteError(caught),
+  })
+
+  const saveDraft = useMutation({
+    mutationFn: async ({ draft: next, baseHash }: { draft: MockDraft; baseHash: string }) => {
+      if (loaded === undefined) throw new Error('nothing loaded')
+      return api.updateMockDraft(profileId, loaded.clientKey, next, baseHash)
     },
+    onSuccess: () => {
+      setFormDraft(null)
+      setConflict(null)
+      setError(null)
+      void queryClient.invalidateQueries({ queryKey: ['mock', profileId] })
+      void queryClient.invalidateQueries({ queryKey: ['corpus'] })
+    },
+    // The same handler as the raw path, so a conflict opens the same merge dialog rather than
+    // becoming a second, subtly different conflict story.
+    onError: (caught: unknown) => handleWriteError(caught),
   })
 
   const remove = useMutation({
@@ -135,6 +176,11 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
   })
 
   const attemptSave = () => {
+    if (formDraft !== null) {
+      // The form channel: send the canonical draft and let the server patch the document.
+      saveDraft.mutate({ draft: formDraft, baseHash: loaded?.contentHash ?? '' })
+      return
+    }
     const parsed = parseDraft(draft)
     if (parsed === null) {
       setError({
@@ -222,6 +268,7 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
         {(
           [
             ['overview', 'Overview'],
+            ['matcher', 'Matcher'],
             ['raw', 'Raw JSON'],
             ['history', 'History'],
           ] as const
@@ -243,8 +290,9 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
             }}
           >
             {label}
-            {/* An unsaved draft is a filled accent dot on the tab (design brief §7.3). */}
-            {value === 'raw' && dirty && (
+            {/* An unsaved draft is a filled accent dot on the tab (design brief §7.3), on the
+                tab that actually holds the edit. */}
+            {((value === 'raw' && rawDirty) || (value === 'matcher' && formDirty)) && (
               <span
                 aria-label="unsaved changes"
                 style={{
@@ -368,25 +416,81 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
           </dl>
         ) : tab === 'history' ? (
           <History profileId={profileId} clientKey={mock.clientKey} />
+        ) : tab === 'matcher' ? (
+          serverDraft === null ? (
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--mk-text-secondary)' }}>
+              {/* Not a form with a Save that cannot work: interpreting the document needs the
+                  adapter, and without a connection there is nothing to save to. */}
+              Not connected to the mock server, so this stub cannot be read as a form. Reconnect
+              from Servers, or read the document on the Raw JSON tab.
+            </p>
+          ) : (
+            <>
+              {rawDirty && (
+                <p
+                  role="status"
+                  style={{
+                    margin: '0 0 12px',
+                    padding: '6px 8px',
+                    fontSize: 12,
+                    color: 'var(--mk-warning-text)',
+                    background: 'var(--mk-warning-bg)',
+                    border: '1px solid var(--mk-warning-border)',
+                    borderRadius: 'var(--mk-radius-sm)',
+                  }}
+                >
+                  You have unsaved edits on the Raw JSON tab, so this form is read-only until they
+                  are saved or discarded. The two edit the same stub in different shapes and cannot
+                  both be live.
+                </p>
+              )}
+              <MatcherForm
+                draft={formDraft ?? serverDraft}
+                disabled={!canWrite || rawDirty}
+                onChange={setFormDraft}
+              />
+            </>
+          )
         ) : canWrite ? (
-          <textarea
-            aria-label="Raw JSON"
-            spellCheck={false}
-            value={draft ?? loadedText}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if ((event.metaKey || event.ctrlKey) && event.key === 's') {
-                event.preventDefault()
-                if (dirty) attemptSave()
-              }
-              if (event.key === 'Escape' && dirty) {
-                event.preventDefault()
-                setDraft(null)
-              }
-            }}
-            className="mk-mono"
-            style={{ ...preStyle, width: '100%', minHeight: 340, resize: 'vertical' }}
-          />
+          <>
+            {formDirty && (
+              <p
+                role="status"
+                style={{
+                  margin: '0 0 8px',
+                  padding: '6px 8px',
+                  fontSize: 12,
+                  color: 'var(--mk-warning-text)',
+                  background: 'var(--mk-warning-bg)',
+                  border: '1px solid var(--mk-warning-border)',
+                  borderRadius: 'var(--mk-radius-sm)',
+                }}
+              >
+                You have unsaved edits on the Matcher tab. This shows the document as the server
+                holds it, and is read-only until those are saved or discarded.
+              </p>
+            )}
+            <textarea
+              aria-label="Raw JSON"
+              spellCheck={false}
+              readOnly={formDirty}
+              value={draft ?? loadedText}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === 's') {
+                  event.preventDefault()
+                  if (dirty) attemptSave()
+                }
+                if (event.key === 'Escape' && dirty) {
+                  event.preventDefault()
+                  setDraft(null)
+                  setFormDraft(null)
+                }
+              }}
+              className="mk-mono"
+              style={{ ...preStyle, width: '100%', minHeight: 340, resize: 'vertical' }}
+            />
+          </>
         ) : (
           <pre className="mk-mono" style={preStyle}>
             {loadedText}
@@ -402,7 +506,7 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
         </div>
       )}
 
-      {canWrite && tab === 'raw' && (
+      {canWrite && (tab === 'raw' || tab === 'matcher') && (
         <footer
           style={{
             display: 'flex',
@@ -417,9 +521,16 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
               <span style={{ flex: 1, fontSize: 12, color: 'var(--mk-text-secondary)' }}>
                 ⌘S save · esc discard
               </span>
-              <Button onClick={() => setDraft(null)}>Discard</Button>
+              <Button
+                onClick={() => {
+                  setDraft(null)
+                  setFormDraft(null)
+                }}
+              >
+                Discard
+              </Button>
               <Button variant="primary" disabled={save.isPending} onClick={attemptSave}>
-                {save.isPending ? 'Saving…' : 'Save'}
+                {save.isPending || saveDraft.isPending ? 'Saving…' : 'Save'}
               </Button>
             </>
           ) : (

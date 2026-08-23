@@ -4,9 +4,10 @@ import {
   AdapterHttpError,
   AdapterHostNotAllowedError,
   AdapterTransportError,
+  mockDraftSchema,
   parseQuery,
 } from '@mock-knight/core'
-import type { LoggedRequest, Mock, NearMiss } from '@mock-knight/core'
+import type { JsonObject, LoggedRequest, Mock, NearMiss } from '@mock-knight/core'
 import type { Database as Db } from 'better-sqlite3'
 import { mirrorStatus, replaceCorpus } from './db/mirror.js'
 import { getMock, searchCorpus } from './db/search.js'
@@ -72,12 +73,30 @@ const eventsQuerySchema = z.object({
   correlation: z.string().optional(),
 })
 
-const writeBodySchema = z.object({
-  /** The full vendor document. Edited directly, so nothing is reconstructed from our model. */
-  raw: z.record(z.string(), z.any()),
-  /** What the caller believed it was editing. The whole safety mechanism hangs off this. */
-  baseHash: z.string().min(1),
-})
+/**
+ * A write arrives as **either** the vendor document or a canonical draft.
+ *
+ * `raw` is the Raw JSON tab: the user edited the vendor document directly, so nothing is
+ * reconstructed from our model. `draft` is the form tabs, and it exists because the browser
+ * cannot import an adapter (the layering rule) and so cannot turn a form field back into vendor
+ * JSON. The server renders it through `adapter.render`, which *patches* the `raw` the draft
+ * carries rather than rebuilding it — the only way the form can edit a stub without dropping
+ * every field the canonical model does not know about (invariant 4).
+ *
+ * Both then go down the identical hash-checked path, so there is one write story and one
+ * conflict story rather than two.
+ */
+const writeBodySchema = z.union([
+  z.object({
+    raw: z.record(z.string(), z.any()),
+    /** What the caller believed it was editing. The whole safety mechanism hangs off this. */
+    baseHash: z.string().min(1),
+  }),
+  z.object({
+    draft: mockDraftSchema,
+    baseHash: z.string().min(1),
+  }),
+])
 
 const createBodySchema = z.object({ raw: z.record(z.string(), z.any()) })
 const deleteBodySchema = z.object({ baseHash: z.string().min(1) })
@@ -177,6 +196,14 @@ function writeResponse(
     | Awaited<ReturnType<typeof createMock>>
     | Awaited<ReturnType<typeof deleteMock>>,
   okStatus: 200 | 201 = 200,
+  /**
+   * What the caller was trying to write, echoed on a conflict.
+   *
+   * The three-way merge needs "mine", and a form write does not have one to send: the browser
+   * submitted a canonical draft and never saw the vendor document it renders to. The server
+   * did, so it hands it back rather than leaving the merge dialog with an empty side.
+   */
+  attempted?: JsonObject,
 ): Response {
   if (outcome.ok) return c.json({ mock: outcome.value }, okStatus)
   if (outcome.reason === 'conflict') {
@@ -187,6 +214,7 @@ function writeResponse(
         current: outcome.current,
         currentHash: outcome.currentHash,
         baseHash: outcome.baseHash,
+        ...(attempted === undefined ? {} : { attempted }),
       },
       409,
     )
@@ -408,8 +436,17 @@ export function createApp(options: AppOptions) {
     })
 
     .get('/api/:p/mocks/:key', (c) => {
-      const mock = getMock(db, c.req.param('p'), c.req.param('key'))
-      return mock === null ? c.json({ error: 'not_found' }, 404) : c.json({ mock })
+      const profileId = c.req.param('p')
+      const mock = getMock(db, profileId, c.req.param('key'))
+      if (mock === null) return c.json({ error: 'not_found' }, 404)
+
+      // The canonical view, for the form tabs. Only when connected: interpreting needs the
+      // adapter, and without a connection there is nothing to write to anyway, so the form
+      // being absent is the honest state rather than a form whose Save cannot work.
+      const connection = registry.get(profileId)
+      const draft =
+        connection === null ? null : connection.adapter.interpret(mock.raw as JsonObject)
+      return c.json({ mock, draft })
     })
 
     .get('/api/:p/mirror', (c) => {
@@ -533,13 +570,19 @@ export function createApp(options: AppOptions) {
         )
       }
 
+      // A draft is rendered to a patched vendor document here, where the adapter lives.
+      const raw =
+        'raw' in parsed.data
+          ? parsed.data.raw
+          : resolved.context.connection.adapter.render(parsed.data.draft)
+
       const outcome = await updateMock(resolved.context, {
         clientKey: c.req.param('key'),
         serverId: existing.serverId,
-        raw: parsed.data.raw,
+        raw,
         baseHash: parsed.data.baseHash,
       })
-      return writeResponse(c, outcome)
+      return writeResponse(c, outcome, 200, raw)
     })
 
     .post('/api/:p/mocks', async (c) => {

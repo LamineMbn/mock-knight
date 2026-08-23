@@ -1,4 +1,9 @@
-import type { PriorityStanding, QueryPlan, ScenarioAnalysis } from '@mock-knight/core/types'
+import type {
+  MockDraft,
+  PriorityStanding,
+  QueryPlan,
+  ScenarioAnalysis,
+} from '@mock-knight/core/types'
 export type { ScenarioAnalysis }
 
 /**
@@ -292,6 +297,20 @@ export const api = {
         body: JSON.stringify({ raw, baseHash }),
       },
     ),
+  /**
+   * The form tabs' write. Sends the canonical draft rather than vendor JSON, because the
+   * browser has no adapter to render one; the server patches the retained document with it.
+   * Same hash check, same conflict response as the raw path.
+   */
+  updateMockDraft: (profileId: string, clientKey: string, draft: MockDraft, baseHash: string) =>
+    call<{ mock: MockListItem & { raw: unknown } }>(
+      `/api/${profileId}/mocks/${encodeURIComponent(clientKey)}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ draft, baseHash }),
+      },
+    ),
   deleteMock: (profileId: string, clientKey: string, baseHash: string) =>
     call<{ deleted: true }>(`/api/${profileId}/mocks/${encodeURIComponent(clientKey)}`, {
       method: 'DELETE',
@@ -303,7 +322,12 @@ export const api = {
       `/api/${profileId}/audit${clientKey === undefined ? '' : `?key=${encodeURIComponent(clientKey)}`}`,
     ),
   mock: (profileId: string, clientKey: string) =>
-    call<{ mock: MockListItem & { raw: unknown } }>(
+    /**
+     * `draft` is the canonical view the form tabs edit. It is `null` when the profile is not
+     * connected — interpreting needs the adapter, and with no connection there is nothing to
+     * save to, so an absent form is the honest state rather than one whose Save cannot work.
+     */
+    call<{ mock: MockListItem & { raw: unknown }; draft: MockDraft | null }>(
       `/api/${profileId}/mocks/${encodeURIComponent(clientKey)}`,
     ),
 }

@@ -217,3 +217,99 @@ test('the tightest setting pins the discriminating header but never a credential
   await expect(generated).not.toHaveValue(/super-secret/)
   await expect(create).toContainText('credential')
 })
+
+/**
+ * The Matcher tab — FR-EDIT-1, FR-EDIT-2.
+ *
+ * Until this existed, changing a stub meant hand-writing WireMock JSON. These drive the form
+ * and read the result back off WireMock, because a form that updates our own mirror and not the
+ * server is the failure that would look most like success.
+ */
+async function openMatcher(page: import('@playwright/test').Page, query: string) {
+  await page.goto(`/?q=${encodeURIComponent(query)}`)
+  await expect(page.locator(ROW).first()).toBeVisible()
+  await page.locator(ROW).first().click()
+  await expect(page.getByRole('tab', { name: 'Matcher' })).toBeVisible()
+  await page.getByRole('tab', { name: 'Matcher' }).click()
+}
+
+test('the form shows the matcher as fields, not as JSON', async ({ page }) => {
+  await openMatcher(page, 'url:/v1/customers')
+  await expect(page.getByLabel('Method')).toHaveValue('GET')
+  await expect(page.getByLabel('URL match kind')).toHaveValue('urlPath')
+  await expect(page.getByLabel('URL', { exact: true })).toHaveValue('/v1/customers')
+})
+
+test('editing a header matcher in the form reaches the mock server', async ({ page }) => {
+  // The case this corpus actually has: stubs told apart by a request header, three levels down
+  // in the JSON where a misplaced brace is a 422 rather than a caught mistake.
+  await openMatcher(page, 'header:X-Tenant')
+  await expect(page.getByLabel('Request headers name')).toHaveValue('X-Tenant')
+  await expect(page.getByLabel('Value')).toHaveValue('acme')
+
+  await page.getByLabel('Value').fill('globex')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0)
+
+  const all = await mappings()
+  const edited = all.find((m) => m.name === 'orders create 500') as
+    (Mapping & { request?: { headers?: Record<string, { equalTo?: string }> } }) | undefined
+  expect(edited?.request?.headers?.['X-Tenant']?.equalTo).toBe('globex')
+})
+
+test('a form edit keeps fields the form cannot show', async ({ page }) => {
+  // `postServeActions` is not in the canonical model, so no form can render it. WireMock
+  // replaces a mapping wholesale on PUT, so a rebuild rather than a patch would delete it.
+  await openMatcher(page, 'method:DELETE')
+  await page.getByLabel('URL', { exact: true }).fill('/v1/carts/10')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0)
+
+  const all = (await mappings()) as (Mapping & { postServeActions?: unknown })[]
+  const edited = all.find((m) => m.request?.url === '/v1/carts/10')
+  expect(edited).toBeDefined()
+  expect(edited?.postServeActions).toEqual([{ name: 'webhook', parameters: { url: 'http://x' } }])
+})
+
+test('the two edit channels lock each other rather than disagreeing silently', async ({ page }) => {
+  // The form edits a canonical draft and Raw edits the vendor document; the browser cannot
+  // convert between them. Showing both live would mean two documents that disagree and a
+  // silent choice on save.
+  await openMatcher(page, 'url:/v1/customers')
+  await page.getByLabel('URL', { exact: true }).fill('/v1/customers-changed')
+
+  await page.getByRole('tab', { name: 'Raw JSON' }).click()
+  await expect(page.getByText(/unsaved edits on the Matcher tab/)).toBeVisible()
+  await expect(page.getByLabel('Raw JSON')).toHaveAttribute('readonly', '')
+
+  // Discarding releases the lock.
+  await page.getByRole('button', { name: 'Discard' }).click()
+  await expect(page.getByLabel('Raw JSON')).not.toHaveAttribute('readonly', '')
+})
+
+test('an operator the form cannot edit is shown, not hidden', async ({ page }) => {
+  // The operator vocabulary is open by design — backends add matchers between minors — so an
+  // unrecognised one must round-trip visibly rather than vanish from a form that ignored it.
+  await fetch(`${WIREMOCK}/__admin/mappings`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: 'exotic matcher',
+      request: {
+        method: 'GET',
+        urlPath: '/v1/exotic',
+        headers: { 'X-Odd': { matchesXPath: '//a' } },
+      },
+      response: { status: 200 },
+    }),
+  })
+  const profiles = (await (await page.request.get('/api/profiles')).json()) as {
+    profiles: { id: string }[]
+  }
+  await page.request.post(`/api/${profiles.profiles[0]!.id}/refresh`)
+
+  await openMatcher(page, 'url:/v1/exotic')
+  await expect(page.getByText('matchesXPath')).toBeVisible()
+  // Rendered as a chip rather than a dropdown, so it cannot be silently replaced.
+  await expect(page.getByLabel('Operator')).toHaveCount(0)
+})

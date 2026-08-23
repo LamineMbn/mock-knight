@@ -272,3 +272,72 @@ describe('profiles that must not be written to', () => {
     expect(result.status).toBe(404)
   })
 })
+
+describe('writing a canonical draft instead of raw JSON', () => {
+  /**
+   * The form tabs cannot send vendor JSON — the browser has no adapter (layering rule) — so
+   * they send the canonical draft and the server renders it. The thing that must hold is
+   * invariant 4: rendering *patches* the retained document, so a field the canonical model has
+   * never heard of survives an edit made through a form that cannot display it.
+   */
+  const draftOf = async (query: string) => {
+    const list = await json(`/api/${profileId}/mocks?q=${encodeURIComponent(query)}`)
+    const key = list.body.items[0].clientKey as string
+    const detail = await json(`/api/${profileId}/mocks/${key}`)
+    return { key, draft: detail.body.draft, hash: detail.body.mock.contentHash as string }
+  }
+
+  it('hands the form a canonical draft alongside the raw document', async () => {
+    const { draft } = await draftOf('method:DELETE')
+    expect(draft).not.toBeNull()
+    expect(draft.request.method).toBe('DELETE')
+    // The draft carries the vendor document, which is what render() patches.
+    expect(draft.raw).toBeTypeOf('object')
+  })
+
+  it('applies a form edit to the real server', async () => {
+    const { key, draft, hash } = await draftOf('customers')
+    const edited = { ...draft, response: { ...draft.response, status: 418 } }
+
+    const result = await json(
+      `/api/${profileId}/mocks/${key}`,
+      put('', { draft: edited, baseHash: hash }),
+    )
+    expect(result.status).toBe(200)
+
+    const upstream = await readMappings(WIREMOCK_URL)
+    const served = upstream.mappings.find((m) => m.name === 'customers list')
+    expect(served!.response!.status).toBe(418)
+  })
+
+  it('keeps a field the canonical model never modelled', async () => {
+    // `postServeActions` is not in the canonical model, so a form cannot show it. Rendering the
+    // draft must still not delete it — WireMock replaces a mapping wholesale on PUT, so a
+    // rebuild rather than a patch would drop it silently.
+    const { key, draft, hash } = await draftOf('method:DELETE')
+    const edited = { ...draft, response: { ...draft.response, status: 205 } }
+
+    const result = await json(
+      `/api/${profileId}/mocks/${key}`,
+      put('', { draft: edited, baseHash: hash }),
+    )
+    expect(result.status).toBe(200)
+
+    const upstream = await readMappings(WIREMOCK_URL)
+    const served = upstream.mappings.find((m) => m.request?.url === '/v1/carts/9')
+    expect(served!.postServeActions).toEqual([{ name: 'webhook', parameters: { url: 'http://x' } }])
+    expect(served!.response!.status).toBe(205)
+  })
+
+  it('refuses a stale draft the same way it refuses stale raw', async () => {
+    // One conflict story, not two: the draft path must not become a way around the hash check.
+    const { key, draft } = await draftOf('customers')
+    const edited = { ...draft, response: { ...draft.response, status: 500 } }
+    const result = await json(
+      `/api/${profileId}/mocks/${key}`,
+      put('', { draft: edited, baseHash: 'sha256-nonsense' }),
+    )
+    expect(result.status).toBe(409)
+    expect(result.body.error).toBe('conflict')
+  })
+})
