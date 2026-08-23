@@ -204,11 +204,29 @@ const ADD_SERVE_TIMING = `
 ALTER TABLE serve_event ADD COLUMN added_delay_ms INTEGER;
 `
 
+/**
+ * A second, id-independent identity for a stub.
+ *
+ * `client_key` is the backend's id, and WireMock hands out a new one to any mapping imported
+ * without one — so an import silently renames every stub from this tool's point of view and the
+ * journal's references stop resolving. `fingerprint` hashes what a stub *does*, which an import
+ * does not change, and lets an old event find the stub that is still serving its requests.
+ *
+ * Additive; the mirror survives. Rows from before this stay null until the next refresh, and a
+ * null fingerprint simply never matches, which is the safe direction.
+ */
+const ADD_FINGERPRINT = `
+ALTER TABLE mock ADD COLUMN fingerprint TEXT;
+ALTER TABLE serve_event ADD COLUMN matched_fingerprint TEXT;
+CREATE INDEX mock_fingerprint ON mock(profile_id, fingerprint);
+`
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: 'initial mirror schema', sql: INITIAL },
   { version: 2, name: 'index request header matchers', sql: ADD_HEADER_MATCHERS },
   { version: 3, name: 'index url and method for overlap detection', sql: ADD_PATH_INDEX },
   { version: 4, name: 'record serve timing', sql: ADD_SERVE_TIMING },
+  { version: 5, name: 'identify a stub by behaviour as well as by id', sql: ADD_FINGERPRINT },
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version

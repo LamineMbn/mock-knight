@@ -316,6 +316,42 @@ test.describe('what the journal already knew', () => {
   })
 })
 
+test('the stub link survives an import that reissued every id', async ({ page }) => {
+  // The reported bug. WireMock gives a fresh id to any mapping imported without one, so an
+  // import renames every stub from this tool's point of view and the journal's references stop
+  // resolving — while the stubs themselves are plainly still there. The event is tied back by
+  // what the stub *does*, which an import does not change.
+  await clearBothJournals(page)
+  await fetch(`${WIREMOCK}/v1/customers`)
+  await page.goto('/?screen=traffic')
+  await expect(page.getByRole('button', { name: 'stub ↗' }).first()).toBeVisible()
+
+  const before = (await (await fetch(`${WIREMOCK}/__admin/mappings`)).json()) as {
+    mappings: { id: string; request?: { urlPath?: string } }[]
+  }
+  const oldId = before.mappings.find((m) => m.request?.urlPath === '/v1/customers')!.id
+
+  // Re-import the seed with no ids: the same stubs, all renamed.
+  await resetToSeed(page)
+  const after = (await (await fetch(`${WIREMOCK}/__admin/mappings`)).json()) as {
+    mappings: { id: string; request?: { urlPath?: string } }[]
+  }
+  const newId = after.mappings.find((m) => m.request?.urlPath === '/v1/customers')!.id
+  expect(newId).not.toBe(oldId)
+
+  await page.goto('/?screen=traffic')
+  await page
+    .locator(ROW)
+    .filter({ hasText: '/v1/customers' })
+    .getByRole('button', { name: 'stub ↗' })
+    .first()
+    .click()
+
+  // Opens the stub that is serving those requests now, under its new id.
+  await expect(page).toHaveURL(new RegExp(`stub=${newId}`))
+  await expect(page.locator('aside').last()).toContainText('/v1/customers')
+})
+
 test('the stub link works even when the mirror has not seen that stub', async ({ page }) => {
   // The case that made this look broken: the mirror is a cache, and anything that changes the
   // corpus outside this tool leaves it stale — an import reissues every id. The event's key was

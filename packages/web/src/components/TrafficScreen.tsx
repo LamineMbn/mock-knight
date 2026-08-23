@@ -256,11 +256,19 @@ function Row({
             */
             <Button
               variant="quiet"
-              onClick={() => onOpenStub(event.matchedClientKey!, !event.matchedStubInMirror)}
+              onClick={() =>
+                // The resolved key where we have one — after an import that is the stub with the
+                // same behaviour, not the id the event recorded. Falling back to the recorded id
+                // lets the detail pane give the honest answer when nothing resolved.
+                onOpenStub(
+                  event.resolvedStubKey ?? event.matchedClientKey!,
+                  event.resolvedStubKey === null,
+                )
+              }
               title={
-                event.matchedStubInMirror
+                event.resolvedStubKey !== null
                   ? `Open the stub that answered ${event.method ?? ''} ${event.url ?? ''}`
-                  : 'This stub is not in the local mirror. Opening it refreshes from the server first.'
+                  : 'The mirror cannot place this stub. Opening it refreshes from the server first.'
               }
             >
               stub ↗

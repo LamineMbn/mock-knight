@@ -1,4 +1,4 @@
-import { clientKeyFor, explainMatch, setKey } from '@mock-knight/core'
+import { behaviourFingerprint, clientKeyFor, explainMatch, setKey } from '@mock-knight/core'
 import type {
   Json,
   JsonObject,
@@ -100,7 +100,10 @@ function asNumber(value: unknown): number | null {
 export function toServeEvent(raw: JsonObject, correlationHeader: string | null): ServeEvent {
   const request = toLoggedRequest(asObject(raw['request']))
   const stub = raw['stubMapping']
-  const matchedClientKey = isObject(stub) ? toCanonical(stub).clientKey : null
+  // The serve event embeds the whole mapping, so both identities can be taken from it: the id
+  // it had when it served, and what it did — which is what survives an import.
+  const servedBy = isObject(stub) ? toCanonical(stub) : null
+  const matchedClientKey = servedBy?.clientKey ?? null
 
   let correlation: string | null = null
   if (correlationHeader !== null) {
@@ -130,6 +133,8 @@ export function toServeEvent(raw: JsonObject, correlationHeader: string | null):
     response: toLoggedResponse(raw['response']),
     matched: raw['wasMatched'] === true,
     matchedClientKey: raw['wasMatched'] === true ? matchedClientKey : null,
+    matchedFingerprint:
+      raw['wasMatched'] === true && servedBy !== null ? behaviourFingerprint(servedBy) : null,
     correlation,
     nearMisses: null,
     raw,

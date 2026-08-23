@@ -150,10 +150,11 @@ export interface ServeEventRow {
   /** How much of that was a delay someone configured rather than work the server did. */
   addedDelayMs: number | null
   /**
-   * Whether the serving stub is in the local mirror. False is usually a stale mirror rather
-   * than a deleted stub, so the UI refreshes before concluding anything.
+   * The stub in the corpus now that this event's stub corresponds to — its own key, or the one
+   * with matching behaviour after an import reissued ids. `null` when neither resolves, which
+   * is usually a stale mirror rather than a deleted stub.
    */
-  matchedStubInMirror: boolean
+  resolvedStubKey: string | null
 }
 
 /**

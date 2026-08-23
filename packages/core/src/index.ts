@@ -9,3 +9,4 @@
 export * from './types.js'
 export * from './canonical.js'
 export * from './expose.js'
+export * from './fingerprint.js'

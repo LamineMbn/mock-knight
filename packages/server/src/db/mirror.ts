@@ -1,4 +1,4 @@
-import { canonicalJson } from '@mock-knight/core'
+import { behaviourFingerprint, canonicalJson } from '@mock-knight/core'
 import type { Mock } from '@mock-knight/core'
 import type { Database as Db } from 'better-sqlite3'
 
@@ -118,6 +118,7 @@ interface MockRow {
   headers: string | null
   header_text: string | null
   content_hash: string
+  fingerprint: string
   raw: string
   body_excerpt: string | null
   body_truncated: number
@@ -152,6 +153,8 @@ export function toRow(profileId: string, mock: Mock, fetchedAt: string): MockRow
     headers: headers.length > 0 ? JSON.stringify(headers) : null,
     header_text: headerSearchText(headers),
     content_hash: mock.contentHash,
+    // Identity that an import cannot change; see core/fingerprint.ts.
+    fingerprint: behaviourFingerprint(mock),
     raw: JSON.stringify(mock.raw),
     body_excerpt: excerpt,
     body_truncated: truncated ? 1 : 0,
@@ -163,12 +166,12 @@ const INSERT_MOCK = `
 INSERT INTO mock (
   profile_id, client_key, server_id, name, folder, folder_source, tags, method, url_kind,
   url_value, status, priority, enabled, scenario, required_state, new_state, has_delay,
-  has_fault, is_proxy, body_file, headers, header_text, content_hash, raw, body_excerpt,
+  has_fault, is_proxy, body_file, headers, header_text, content_hash, fingerprint, raw, body_excerpt,
   body_truncated, fetched_at
 ) VALUES (
   @profile_id, @client_key, @server_id, @name, @folder, @folder_source, @tags, @method, @url_kind,
   @url_value, @status, @priority, @enabled, @scenario, @required_state, @new_state, @has_delay,
-  @has_fault, @is_proxy, @body_file, @headers, @header_text, @content_hash, @raw, @body_excerpt,
+  @has_fault, @is_proxy, @body_file, @headers, @header_text, @content_hash, @fingerprint, @raw, @body_excerpt,
   @body_truncated, @fetched_at
 )`
 

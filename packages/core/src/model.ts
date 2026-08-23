@@ -260,6 +260,11 @@ export const serveEventSchema = z.object({
   matched: z.boolean(),
   /** `clientKey` of the serving stub — null when the backend offers no attribution. */
   matchedClientKey: z.string().nullable(),
+  /**
+   * `behaviourFingerprint` of the serving stub, so the event can still be tied to it after an
+   * import has changed every id. A hint, not proof — see fingerprint.ts.
+   */
+  matchedFingerprint: z.string().nullable().default(null),
   correlation: z.string().nullable().default(null),
   nearMisses: z.array(nearMissSchema).nullable().default(null),
   raw: jsonObjectSchema,
