@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.1
+
+Fixes a reported bug: clicking the stub that served a request opened the corpus without opening
+the stub.
+
+- **A stub is now identified by what it does, as well as by its id.** WireMock assigns a fresh
+  id to any mapping imported without one — and creates a duplicate rather than updating, so two
+  imports of the same stub leave two stubs. `client_key` is that id, so an import run outside
+  Mock Knight renamed every stub from its point of view and the journal filled with references
+  nothing held. Events now also record a hash of the stub's matcher, response, scenario binding
+  and priority, which an import does not change, and resolve through it when the id is gone.
+  The match must be unique: two stubs may legitimately behave identically, and ambiguity is
+  reported rather than guessed at.
+- **Response time is shown in the traffic log**, with any configured delay disclosed separately.
+  It had been a database column written as `null` on every row since the first release, while
+  the server reported the timing all along. A slow mock is usually slow on purpose, and a total
+  without that context reads as a problem rather than a setting.
+- Opening a stub that genuinely is not in the corpus explains that, instead of reporting a
+  failure that sends you looking for a fault that is not there.
+
+Migrations 4 and 5 are additive; the local mirror survives them. Rows recorded before this
+release have no timing and no fingerprint, which reads as "not recorded" rather than as zero or
+as a false match.
+
 ## 0.2.0
 
 Everything published as 0.1.0 reported its version as `0.0.0` — the number was a literal in the
