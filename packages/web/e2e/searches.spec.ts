@@ -94,3 +94,78 @@ test('an empty search is not offered a name', async ({ page }) => {
   await expect(page.locator(ROW).first()).toBeVisible()
   await expect(page.getByRole('button', { name: 'Save search' })).toHaveCount(0)
 })
+
+test('the search box can be cleared without selecting the text', async ({ page }) => {
+  // Design brief §6.2 asks for this and it was missing. Clearing meant selecting a long
+  // structured query and deleting it — worst on exactly the queries this box is for.
+  await page.goto('/?q=method%3AGET+status%3A2xx')
+  await expect(page.getByLabel('Search stubs')).toHaveValue('method:GET status:2xx')
+
+  await page.getByRole('button', { name: 'Clear the search' }).click()
+  await expect(page.getByLabel('Search stubs')).toHaveValue('')
+  await expect(page).not.toHaveURL(/[?&]q=/)
+  // The control goes away with nothing to clear.
+  await expect(page.getByRole('button', { name: 'Clear the search' })).toHaveCount(0)
+})
+
+test('escape clears the search box too', async ({ page }) => {
+  await page.goto('/?q=method%3AGET')
+  await page.getByLabel('Search stubs').focus()
+  await page.keyboard.press('Escape')
+  await expect(page.getByLabel('Search stubs')).toHaveValue('')
+})
+
+test('an applied search can be updated in place, or saved as a new one', async ({ page }) => {
+  await page.goto('/?q=method%3AGET')
+  await page.getByRole('button', { name: 'Save search' }).click()
+  await page.getByLabel('Name this search').fill('reads')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByTitle(/This search is saved/)).toHaveText('reads')
+
+  // Apply it, then refine the query — the case that previously required retyping the name.
+  await page.goto('/?q=')
+  await page.getByLabel('Saved searches').selectOption({ label: 'reads' })
+  await page.getByLabel('Search stubs').fill('method:GET status:404')
+  await page.getByLabel('Search stubs').press('Enter')
+
+  await expect(page.getByRole('button', { name: 'Update reads' })).toBeVisible()
+  // And re-saving under a different name is still available, relabelled so the two are distinct.
+  await expect(page.getByRole('button', { name: 'Save as new' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Update reads' }).click()
+  // Now it is the saved query, so the chip returns and Update has nothing to do.
+  await expect(page.getByTitle(/This search is saved/)).toHaveText('reads')
+  await expect(page.getByRole('button', { name: 'Update reads' })).toHaveCount(0)
+
+  await page.goto('/?q=')
+  await page.getByLabel('Saved searches').selectOption({ label: 'reads' })
+  await expect(page.getByLabel('Search stubs')).toHaveValue('method:GET status:404')
+})
+
+test('Update is not offered for a query that was typed rather than recalled', async ({ page }) => {
+  // It would have to guess which saved search the person meant, and guessing wrong overwrites
+  // one they did not name.
+  await page.goto('/?q=method%3APOST')
+  await page.getByRole('button', { name: 'Save search' }).click()
+  await page.getByLabel('Name this search').fill('writes')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+
+  await page.goto('/?q=method%3APUT')
+  await expect(page.getByRole('button', { name: /^Update/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Save search' })).toBeVisible()
+})
+
+test('a search you just saved can be updated straight away', async ({ page }) => {
+  // The commonest flow: save a query, notice it needs one more filter, want to keep the name.
+  // Without treating a save as an application, this offered only "Save search" and a name to
+  // reinvent.
+  await page.goto('/?q=method%3AGET')
+  await page.getByRole('button', { name: 'Save search' }).click()
+  await page.getByLabel('Name this search').fill('reads again')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByTitle(/This search is saved/)).toHaveText('reads again')
+
+  await page.getByLabel('Search stubs').fill('method:GET status:404')
+  await page.getByLabel('Search stubs').press('Enter')
+  await expect(page.getByRole('button', { name: 'Update reads again' })).toBeVisible()
+})

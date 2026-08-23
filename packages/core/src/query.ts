@@ -329,3 +329,53 @@ export function parseQuery(input: string, options: ParseQueryOptions): QueryPlan
     isEmpty: filters.length === 0 && terms.length === 0 && rejected.length === 0,
   }
 }
+
+/**
+ * A filter as a short phrase, for the pills under the search box.
+ *
+ * Those pills exist so someone can see what the app *actually applied*, which the raw query text
+ * cannot show once it has been parsed (design brief §6.11). They were rendering
+ * `` `${field}: ${value}` ``, which dropped the operator and, for headers, the name — so
+ * `header:X-Tenant` read as "header: null" and `priority:<5` read as "priority: 5", both of
+ * which describe a filter that was not applied. A pill that misreports the filter is worse than
+ * no pill: it is a wrong answer to the exact question it was added to answer.
+ */
+export function describeFilter(filter: QueryFilter): string {
+  switch (filter.field) {
+    case 'method':
+      return `method: ${filter.value}`
+    case 'url':
+    case 'body':
+    case 'scenario':
+    case 'tag':
+    case 'folder':
+      switch (filter.op) {
+        case 'contains':
+          return `${filter.field} contains ${filter.value}`
+        case 'glob':
+          return `${filter.field} matches ${filter.value}`
+        default:
+          return `${filter.field}: ${filter.value}`
+      }
+    case 'status':
+      // `class` means a leading digit, and "status: 5" is not what was asked for.
+      return filter.op === 'class' ? `status: ${filter.value}xx` : `status: ${filter.value}`
+    case 'priority': {
+      const symbol = { eq: ':', lt: ' <', lte: ' ≤', gt: ' >', gte: ' ≥' }[filter.op]
+      return `priority${symbol} ${filter.value}`
+    }
+    case 'unused':
+    case 'disabled':
+      // The negative case is a real query and reads as nonsense rendered as "unused: false".
+      return filter.value ? filter.field : `not ${filter.field}`
+    case 'header':
+      switch (filter.op) {
+        case 'present':
+          return `header: ${filter.name} (any value)`
+        case 'glob':
+          return `header: ${filter.name} matches ${filter.value}`
+        default:
+          return `header: ${filter.name} = ${filter.value}`
+      }
+  }
+}

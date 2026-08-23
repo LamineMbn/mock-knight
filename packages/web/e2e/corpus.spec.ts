@@ -278,3 +278,17 @@ test.describe('the list fits the pane it is given', () => {
     expect(await headers(page)).toContain('Last served')
   })
 })
+
+test('the query pills report what was actually applied', async ({ page }) => {
+  // Their whole job (§6.11). They rendered `field: value`, which dropped the operator and the
+  // header name — so `header:X-Tenant` read as "header: null" and `priority:<5` as
+  // "priority: 5", each describing a filter that was not applied.
+  await page.goto('/?q=' + encodeURIComponent('header:X-Tenant status:5xx priority:<5'))
+  await expect(page.locator(ROW).first()).toBeVisible()
+
+  const pills = page.locator('form').first()
+  await expect(pills).toContainText('header: x-tenant (any value)')
+  await expect(pills).toContainText('status: 5xx')
+  await expect(pills).toContainText('priority < 5')
+  await expect(pills).not.toContainText('null')
+})

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api.js'
+import type { SavedSearch } from '../api.js'
 import { Button } from './primitives.js'
 
 /**
@@ -16,11 +17,14 @@ import { Button } from './primitives.js'
 export function SavedSearches({
   profileId,
   query,
+  appliedId,
   onApply,
 }: {
   profileId: string
   query: string
-  onApply: (query: string) => void
+  /** The saved search the current query came from, if any. Enables Update rather than re-save. */
+  appliedId: number | null
+  onApply: (saved: SavedSearch) => void
 }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
@@ -32,12 +36,20 @@ export function SavedSearches({
   })
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['searches', profileId] })
+  const update = useMutation({
+    mutationFn: () => api.saveSearch(profileId, applied!.name, query),
+    onSuccess: () => void invalidate(),
+  })
   const save = useMutation({
     mutationFn: () => api.saveSearch(profileId, name.trim(), query),
-    onSuccess: () => {
+    onSuccess: (result) => {
       setName('')
       setOpen(false)
       void invalidate()
+      // Having just saved it, you are on it — so editing the query next offers Update rather
+      // than only "save another one under a name you have to invent". This is the commonest
+      // flow of all and it was the one that did not work.
+      onApply(result.search)
     },
   })
   const remove = useMutation({
@@ -47,12 +59,35 @@ export function SavedSearches({
 
   const saved = searches.data?.searches ?? []
   const existing = saved.find((candidate) => candidate.query === query)
+  /**
+   * The search this query came from, once it has been edited away from what was saved.
+   *
+   * Without this the only route back was retyping the exact name into the save box and relying
+   * on the upsert, which means remembering a name the app already knew.
+   */
+  const applied = saved.find((candidate) => candidate.id === appliedId)
+  const edited = applied !== undefined && applied.query !== query && query !== ''
 
   return (
     <div style={{ position: 'relative', display: 'flex', gap: 6 }}>
+      {edited && (
+        // Offered before "Save search", because after tweaking a saved query updating it is
+        // almost always the intention and re-saving under a new name is the exception.
+        <Button
+          variant="primary"
+          disabled={update.isPending}
+          onClick={() => update.mutate()}
+          title={`Replace “${applied!.name}” with the query in the box`}
+        >
+          {update.isPending ? 'Updating…' : `Update ${applied!.name}`}
+        </Button>
+      )}
+
       {/* Saving an empty search would save "everything", which is not worth a name. */}
       {query !== '' && existing === undefined && (
-        <Button onClick={() => setOpen((was) => !was)}>Save search</Button>
+        <Button onClick={() => setOpen((was) => !was)}>
+          {edited ? 'Save as new' : 'Save search'}
+        </Button>
       )}
       {existing !== undefined && (
         // A button, not a chip. It was inert, which left no way back into the panel to rename
@@ -86,7 +121,7 @@ export function SavedSearches({
           value=""
           onChange={(event) => {
             const chosen = saved.find((candidate) => String(candidate.id) === event.target.value)
-            if (chosen !== undefined) onApply(chosen.query)
+            if (chosen !== undefined) onApply(chosen)
           }}
           style={{
             height: 26,

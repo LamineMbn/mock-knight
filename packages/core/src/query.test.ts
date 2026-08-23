@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { LOCAL_ENVIRONMENT_CAPABILITIES, resolveCapabilities } from './capabilities.js'
 import type { CapabilityBit } from './capabilities.js'
-import { QUERY_FIELDS, QUERY_FIELD_CAPABILITY, parseQuery } from './query.js'
+import { QUERY_FIELDS, QUERY_FIELD_CAPABILITY, describeFilter, parseQuery } from './query.js'
 
 function withBackend(...bits: CapabilityBit[]) {
   return { capabilities: resolveCapabilities({ backend: bits, environment: [] }) }
@@ -290,5 +290,42 @@ describe('parseQuery — header matchers', () => {
     const plan = parseQuery('header:X-Mock=a', withBackend())
     expect(plan.rejected).toEqual([])
     expect(plan.filters).toHaveLength(1)
+  })
+})
+
+describe('describeFilter', () => {
+  const describe1 = (query: string): string[] =>
+    parseQuery(
+      query,
+      withBackend('journal.read', 'mock.enableDisable', 'mock.priority'),
+    ).filters.map(describeFilter)
+
+  it('keeps the header name, which the pills used to drop entirely', () => {
+    // Rendered as "header: null" before, which names a filter nobody asked for.
+    expect(describe1('header:X-Tenant')).toEqual(['header: x-tenant (any value)'])
+    expect(describe1('header:X-Tenant=acme')).toEqual(['header: x-tenant = acme'])
+  })
+
+  it('renders a status class as a class', () => {
+    expect(describe1('status:5xx')).toEqual(['status: 5xx'])
+    expect(describe1('status:404')).toEqual(['status: 404'])
+  })
+
+  it('keeps a comparison operator, which changes what matched', () => {
+    expect(describe1('priority:<5')).toEqual(['priority < 5'])
+    expect(describe1('priority:>=2')).toEqual(['priority ≥ 2'])
+    expect(describe1('priority:3')).toEqual(['priority: 3'])
+  })
+
+  it('reads a negative boolean as a negative', () => {
+    expect(describe1('unused:true')).toEqual(['unused'])
+    expect(describe1('unused:false')).toEqual(['not unused'])
+  })
+
+  it('says which kind of string match was applied', () => {
+    // A bare value is a substring match, not an exact one — worth saying, because "url:
+    // /v1/orders" reads as exact and would explain a result set that looks too large.
+    expect(describe1('url:/v1/orders')).toEqual(['url contains /v1/orders'])
+    expect(describe1('url:*orders*')).toEqual(['url matches *orders*'])
   })
 })

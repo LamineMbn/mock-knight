@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api.js'
 import type { Profile } from './api.js'
+import { describeFilter } from '@mock-knight/core/types'
 import type { QueryPlan } from '@mock-knight/core/types'
 import { CorpusList } from './components/CorpusList.js'
 import { NewStub } from './components/NewStub.js'
@@ -87,6 +88,19 @@ export function App() {
   const [draft, setDraft] = useState(query)
   const [expandedFolders, setExpandedFolders] = useState<ReadonlySet<string>>(new Set())
   const [creating, setCreating] = useState(false)
+  /**
+   * Which saved search the current query came from, so it can be *updated* rather than only
+   * re-saved under a retyped name. Not derivable once the query has been edited away from it,
+   * which is precisely when the offer is useful.
+   */
+  const [appliedSearchId, setAppliedSearchId] = useState<number | null>(null)
+
+  /** Empty the box and forget which saved search it came from, in one place. */
+  const clearSearch = useCallback(() => {
+    setDraft('')
+    setAppliedSearchId(null)
+    setUrlState({ query: '' })
+  }, [setUrlState])
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
@@ -201,7 +215,10 @@ export function App() {
         label: saved.name,
         section: 'Saved searches',
         hint: saved.query,
-        run: () => setUrlState({ screen: 'corpus', query: saved.query }),
+        run: () => {
+          setAppliedSearchId(saved.id)
+          setUrlState({ screen: 'corpus', query: saved.query })
+        },
       })),
       go('corpus', 'Corpus'),
       go('traffic', 'Traffic'),
@@ -365,23 +382,60 @@ export function App() {
               }}
               style={{ padding: 8, borderBottom: '1px solid var(--mk-border-default)' }}
             >
-              <input
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder="Search paths and bodies, or filter: method:POST status:5xx scenario:checkout"
-                aria-label="Search stubs"
-                style={{
-                  width: '100%',
-                  height: 30,
-                  padding: '0 10px',
-                  fontSize: 13,
-                  fontFamily: 'inherit',
-                  color: 'var(--mk-text-primary)',
-                  background: 'var(--mk-bg-surface)',
-                  border: '1px solid var(--mk-border-strong)',
-                  borderRadius: 'var(--mk-radius-sm)',
-                }}
-              />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    // esc clears, the same key that cancels everywhere else (§8).
+                    if (event.key === 'Escape' && draft !== '') {
+                      event.preventDefault()
+                      clearSearch()
+                    }
+                  }}
+                  placeholder="Search paths and bodies, or filter: method:POST status:5xx scenario:checkout"
+                  aria-label="Search stubs"
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    height: 30,
+                    padding: '0 10px',
+                    fontSize: 13,
+                    fontFamily: 'inherit',
+                    color: 'var(--mk-text-primary)',
+                    background: 'var(--mk-bg-surface)',
+                    border: '1px solid var(--mk-border-strong)',
+                    borderRadius: 'var(--mk-radius-sm)',
+                  }}
+                />
+                {/*
+                  Design brief §6.2 asks for this and it was missing: clearing a query meant
+                  selecting the text and deleting it, which is worst on exactly the long
+                  structured queries this box is for.
+                */}
+                {draft !== '' && (
+                  <button
+                    type="button"
+                    onClick={clearSearch}
+                    aria-label="Clear the search"
+                    title="Clear the search (esc)"
+                    style={{
+                      width: 30,
+                      height: 30,
+                      flex: '0 0 30px',
+                      font: 'inherit',
+                      fontSize: 14,
+                      cursor: 'pointer',
+                      color: 'var(--mk-text-secondary)',
+                      background: 'var(--mk-bg-surface)',
+                      border: '1px solid var(--mk-border-strong)',
+                      borderRadius: 'var(--mk-radius-sm)',
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 6 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <QueryPlanPills plan={corpus.data?.plan} strategy={corpus.data?.textStrategy} />
@@ -389,9 +443,11 @@ export function App() {
                 <SavedSearches
                   profileId={profile.id}
                   query={query}
+                  appliedId={appliedSearchId}
                   onApply={(saved) => {
-                    setDraft(saved)
-                    setUrlState({ query: saved })
+                    setDraft(saved.query)
+                    setAppliedSearchId(saved.id)
+                    setUrlState({ query: saved.query })
                   }}
                 />
               </div>
@@ -687,7 +743,9 @@ function QueryPlanPills({
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6, alignItems: 'center' }}>
       {plan.filters.map((filter, index) => (
         <Chip key={`${filter.field}-${index}`} tone="accent">
-          {filter.field}: {String(filter.value)}
+          {/* Rendered by core, so the pill says what was applied rather than an approximation
+              of it — see describeFilter. */}
+          {describeFilter(filter)}
         </Chip>
       ))}
       {plan.rejected.map((rejection, index) => (
