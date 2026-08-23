@@ -68,12 +68,14 @@ function Row({
   onFocus,
   onExplain,
   onCorrelation,
+  onOpenStub,
 }: {
   event: ServeEventRow
   focused: boolean
   onFocus: () => void
   onExplain: (id: number) => void
   onCorrelation: (correlation: string) => void
+  onOpenStub: (clientKey: string) => void
 }) {
   const ref = useRef<HTMLTableRowElement>(null)
   useEffect(() => {
@@ -201,6 +203,37 @@ function Row({
         <StatusCode status={event.status} />
       </td>
       <td
+        className="mk-tabular"
+        style={{
+          padding: '4px 8px',
+          textAlign: 'right',
+          fontSize: 11,
+          whiteSpace: 'nowrap',
+          color: 'var(--mk-text-tertiary)',
+        }}
+      >
+        {/*
+          An em-dash, not "0ms": rows recorded before the timing column existed, and backends
+          that report nothing, genuinely have no number — and "0ms" would read as instant.
+
+          When part of it was a configured delay, say so. A 2,000ms mock is not a performance
+          problem when 2,000ms of it is a setting, and that is the single most likely
+          misreading of this column on a mock server.
+        */}
+        {event.durationMs === null ? (
+          '—'
+        ) : event.addedDelayMs !== null && event.addedDelayMs > 0 ? (
+          <span title={`${event.addedDelayMs}ms of this was a delay configured on the stub`}>
+            {event.durationMs}ms <span aria-hidden="true">⏱</span>
+            <span style={{ position: 'absolute', left: -9999 }}>
+              , including {event.addedDelayMs}ms of configured delay
+            </span>
+          </span>
+        ) : (
+          `${event.durationMs}ms`
+        )}
+      </td>
+      <td
         style={{
           padding: '4px 8px',
           width: ACTION_COLUMN,
@@ -209,9 +242,19 @@ function Row({
         }}
       >
         {event.matched ? (
-          <span style={{ fontSize: 12, color: 'var(--mk-text-tertiary)' }}>
-            {event.matchedClientKey === null ? '—' : 'stub ↗'}
-          </span>
+          event.matchedClientKey === null ? (
+            <span style={{ fontSize: 12, color: 'var(--mk-text-tertiary)' }}>—</span>
+          ) : (
+            // Was inert text with an arrow on it, which is worse than nothing: the server tells
+            // us which stub answered, and the affordance looked clickable and was not.
+            <Button
+              variant="quiet"
+              onClick={() => onOpenStub(event.matchedClientKey!)}
+              title={`Open the stub that answered ${event.method ?? ''} ${event.url ?? ''}`}
+            >
+              stub ↗
+            </Button>
+          )
         ) : (
           <Button
             variant="quiet"
@@ -227,7 +270,13 @@ function Row({
   )
 }
 
-export function TrafficScreen({ profile }: { profile: Profile }) {
+export function TrafficScreen({
+  profile,
+  onOpenStub,
+}: {
+  profile: Profile
+  onOpenStub: (clientKey: string) => void
+}) {
   const profileId = profile.id
   const baseUrl = profile.baseUrl
   const queryClient = useQueryClient()
@@ -631,6 +680,7 @@ export function TrafficScreen({ profile }: { profile: Profile }) {
                   focused={event.id === focusedId}
                   onFocus={() => setFocusedId(event.id)}
                   onExplain={setExplaining}
+                  onOpenStub={onOpenStub}
                   onCorrelation={(correlation) =>
                     // Replaces the other filters rather than adding to them: following one
                     // request means seeing all of it, not the part that also matched a path box.

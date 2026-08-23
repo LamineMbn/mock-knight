@@ -145,6 +145,10 @@ export interface ServeEventRow {
   url: string | null
   status: number | null
   correlation: string | null
+  /** What the server said it took. `null` where it said nothing — never a fabricated zero. */
+  durationMs: number | null
+  /** How much of that was a delay someone configured rather than work the server did. */
+  addedDelayMs: number | null
 }
 
 /**

@@ -22,10 +22,10 @@ export interface JournalIngestResult {
 
 const INSERT_EVENT = `
 INSERT INTO serve_event (
-  profile_id, upstream_id, at, matched, matched_key, method, url, status, duration_ms,
+  profile_id, upstream_id, at, matched, matched_key, method, url, status, duration_ms, added_delay_ms,
   correlation, raw
 ) VALUES (
-  @profile_id, @upstream_id, @at, @matched, @matched_key, @method, @url, @status, @duration_ms,
+  @profile_id, @upstream_id, @at, @matched, @matched_key, @method, @url, @status, @duration_ms, @added_delay_ms,
   @correlation, @raw
 )
 ON CONFLICT (profile_id, upstream_id) DO NOTHING`
@@ -64,7 +64,8 @@ export function recordServeEvents(
         method: safe.request.method,
         url: safe.request.url,
         status: safe.response?.status ?? null,
-        duration_ms: null,
+        duration_ms: safe.timing?.totalMs ?? null,
+        added_delay_ms: safe.timing?.addedDelayMs ?? null,
         correlation: safe.correlation,
         raw: JSON.stringify(safe.raw),
       })
@@ -96,6 +97,10 @@ export interface ServeEventRow {
   url: string | null
   status: number | null
   correlation: string | null
+  /** What the server reported it took. `null` for rows recorded before v4, and where it said nothing. */
+  durationMs: number | null
+  /** How much of `durationMs` was a configured delay rather than work. */
+  addedDelayMs: number | null
 }
 
 export interface JournalQueryOptions {
@@ -181,7 +186,8 @@ export function listServeEvents(
 
   const rows = db
     .prepare(
-      `SELECT id, upstream_id, at, matched, matched_key, method, url, status, correlation
+      `SELECT id, upstream_id, at, matched, matched_key, method, url, status, correlation,
+              duration_ms, added_delay_ms
        FROM serve_event WHERE ${clause}
        ORDER BY at DESC, id DESC LIMIT ? OFFSET ?`,
     )
@@ -195,6 +201,8 @@ export function listServeEvents(
     url: string | null
     status: number | null
     correlation: string | null
+    duration_ms: number | null
+    added_delay_ms: number | null
   }[]
 
   const window = db
@@ -212,6 +220,8 @@ export function listServeEvents(
       url: row.url,
       status: row.status,
       correlation: row.correlation,
+      durationMs: row.duration_ms,
+      addedDelayMs: row.added_delay_ms,
     })),
     total,
     earliestAt: window?.earliest_at ?? null,

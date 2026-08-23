@@ -266,3 +266,48 @@ test.describe('filtering the log', () => {
     await expect(page.locator(ROW).first()).toContainText('/v1/nothing-here')
   })
 })
+
+/**
+ * Data the journal captured and never showed.
+ *
+ * Both of these were stored end to end and then thrown away at the last step — the pattern this
+ * whole pass exists to close. `duration_ms` was a column written as `null` on every row while
+ * WireMock reported the timing, and the "stub ↗" affordance was inert text with an arrow on it.
+ */
+test.describe('what the journal already knew', () => {
+  test('shows how long the server took, and says when the delay was configured', async ({
+    page,
+  }) => {
+    await fetch(`${WIREMOCK}/__admin/requests`, { method: 'DELETE' })
+    // The seed's customers stub carries fixedDelayMilliseconds: 50.
+    await fetch(`${WIREMOCK}/v1/customers`)
+    await page.goto('/?screen=traffic')
+
+    const row = page.locator(ROW).filter({ hasText: '/v1/customers' }).first()
+    await expect(row).toContainText(/\d+ms/)
+    // The number is real, not a fabricated zero, and the configured part is disclosed.
+    await expect(row).toContainText('including 50ms of configured delay')
+  })
+
+  test('the stub link opens the stub that answered', async ({ page }) => {
+    await fetch(`${WIREMOCK}/__admin/requests`, { method: 'DELETE' })
+    await fetch(`${WIREMOCK}/v1/customers`)
+    await page.goto('/?screen=traffic')
+
+    const link = page
+      .locator(ROW)
+      .filter({ hasText: '/v1/customers' })
+      .getByRole('button', { name: 'stub ↗' })
+      .first()
+    await expect(link).toBeVisible()
+    await link.click()
+
+    // Lands on the corpus with that stub open, rather than doing nothing at all. The param is
+    // `stub`, and `screen` is omitted when it is the default — so assert on what the URL says,
+    // not on what the state is called.
+    await expect(page).toHaveURL(/[?&]stub=/)
+    await expect(page).not.toHaveURL(/screen=traffic/)
+    await expect(page.getByRole('tab', { name: 'Overview' })).toBeVisible()
+    await expect(page.locator('aside').last()).toContainText('/v1/customers')
+  })
+})

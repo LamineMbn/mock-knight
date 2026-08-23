@@ -92,6 +92,11 @@ function toLoggedResponse(raw: Json | undefined): LoggedResponse | null {
 /**
  * @param correlationHeader per-profile header name that groups a test run's traffic (FR-TRAF-8).
  */
+/** A number, or `null` — never a coerced zero, which would read as "instant". */
+function asNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
 export function toServeEvent(raw: JsonObject, correlationHeader: string | null): ServeEvent {
   const request = toLoggedRequest(asObject(raw['request']))
   const stub = raw['stubMapping']
@@ -106,10 +111,21 @@ export function toServeEvent(raw: JsonObject, correlationHeader: string | null):
     }
   }
 
+  // WireMock reports `timing: { addedDelay, processTime, responseSendTime, serveTime, totalTime }`.
+  // Only the two that mean something to a reader are kept; the rest stay in `raw`.
+  const timingRaw = raw['timing']
+  const timing = isObject(timingRaw)
+    ? {
+        totalMs: asNumber(timingRaw['totalTime']),
+        addedDelayMs: asNumber(timingRaw['addedDelay']),
+      }
+    : null
+
   return {
     id: asString(raw['id']) ?? clientKeyFor(raw, null),
     // WireMock stamps the time on the request, not on the event.
     at: asString(asObject(raw['request'])['loggedDateString']) ?? new Date(0).toISOString(),
+    timing,
     request,
     response: toLoggedResponse(raw['response']),
     matched: raw['wasMatched'] === true,

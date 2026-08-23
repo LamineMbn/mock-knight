@@ -297,7 +297,10 @@ export function App() {
 
       {screen === 'traffic' ? (
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          <TrafficScreen profile={profile} />
+          <TrafficScreen
+            profile={profile}
+            onOpenStub={(clientKey) => setUrlState({ screen: 'corpus', selectedKey: clientKey })}
+          />
         </div>
       ) : screen === 'profiles' ? (
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>

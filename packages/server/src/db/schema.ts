@@ -188,10 +188,27 @@ const ADD_PATH_INDEX = `
 CREATE INDEX mock_path ON mock(profile_id, url_value, method);
 `
 
+/**
+ * Room for the timing WireMock already reports.
+ *
+ * `duration_ms` has existed since v1 and was written as `null` on every row — a column that
+ * looks like data and never held any. The upstream event carries `timing.totalTime` and
+ * `timing.addedDelay`, and the second one matters: on a mock server a slow response is usually
+ * deliberate, so a total without the configured delay beside it reads as a problem when it is a
+ * setting.
+ *
+ * Additive and nullable, so the mirror survives. Rows ingested before this stay `null`, which
+ * is the honest value for "we did not record it".
+ */
+const ADD_SERVE_TIMING = `
+ALTER TABLE serve_event ADD COLUMN added_delay_ms INTEGER;
+`
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: 'initial mirror schema', sql: INITIAL },
   { version: 2, name: 'index request header matchers', sql: ADD_HEADER_MATCHERS },
   { version: 3, name: 'index url and method for overlap detection', sql: ADD_PATH_INDEX },
+  { version: 4, name: 'record serve timing', sql: ADD_SERVE_TIMING },
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version

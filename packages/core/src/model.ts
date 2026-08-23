@@ -237,9 +237,24 @@ export const nearMissSchema = z.object({
 })
 export type NearMiss = z.infer<typeof nearMissSchema>
 
+/**
+ * How long the server took, and how much of that it was told to take.
+ *
+ * Both, because reporting only the total is misleading on the one tool where a slow response is
+ * usually deliberate: a 2,000ms mock is not a performance problem when 2,000ms of it is the
+ * fixed delay someone configured. `addedDelayMs` is what lets the UI say so.
+ */
+export const serveTimingSchema = z.object({
+  totalMs: z.number().nullable().default(null),
+  addedDelayMs: z.number().nullable().default(null),
+})
+export type ServeTiming = z.infer<typeof serveTimingSchema>
+
 export const serveEventSchema = z.object({
   id: z.string(),
   at: z.string(),
+  /** `null` where the backend does not report it; never a fabricated zero. */
+  timing: serveTimingSchema.nullable().default(null),
   request: loggedRequestSchema,
   response: loggedResponseSchema.nullable(),
   matched: z.boolean(),
