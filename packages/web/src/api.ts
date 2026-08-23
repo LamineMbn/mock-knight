@@ -164,6 +164,13 @@ export interface ServeEventRow {
  * to an input whose empty state is the empty string; a second representation of "unset" is one
  * more thing to get wrong.
  */
+/** A query worth keeping — FR-FIND-6. Per profile, since a query names that server's shape. */
+export interface SavedSearch {
+  id: number
+  name: string
+  query: string
+}
+
 export interface JournalFilters {
   matched: 'all' | 'matched' | 'unmatched'
   method: string
@@ -362,6 +369,15 @@ export const api = {
     call<{ entries: AuditRow[]; scope: string }>(
       `/api/${profileId}/audit${clientKey === undefined ? '' : `?key=${encodeURIComponent(clientKey)}`}`,
     ),
+  searches: (profileId: string) => call<{ searches: SavedSearch[] }>(`/api/${profileId}/searches`),
+  saveSearch: (profileId: string, name: string, query: string) =>
+    call<{ search: SavedSearch }>(`/api/${profileId}/searches`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name, query }),
+    }),
+  deleteSearch: (profileId: string, id: number) =>
+    call<{ deleted: true }>(`/api/${profileId}/searches/${id}`, { method: 'DELETE' }),
   mock: (profileId: string, clientKey: string) =>
     /**
      * `draft` is the canonical view the form tabs edit. It is `null` when the profile is not

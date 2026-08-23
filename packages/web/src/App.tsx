@@ -5,6 +5,7 @@ import type { Profile } from './api.js'
 import type { QueryPlan } from '@mock-knight/core/types'
 import { CorpusList } from './components/CorpusList.js'
 import { NewStub } from './components/NewStub.js'
+import { SavedSearches } from './components/SavedSearches.js'
 import { CommandPalette } from './components/CommandPalette.js'
 import { Shortcuts, modifierKey } from './components/Shortcuts.js'
 import type { Command } from './components/CommandPalette.js'
@@ -145,6 +146,13 @@ export function App() {
     },
   })
 
+  const searches = useQuery({
+    queryKey: ['searches', profile?.id],
+    queryFn: () => api.searches(profile!.id),
+    enabled: profile !== undefined,
+  })
+  const savedSearches = searches.data?.searches ?? []
+
   const commands = useMemo<Command[]>(() => {
     if (profile === undefined) return []
     const go = (name: Screen, label: string): Command => ({
@@ -188,6 +196,13 @@ export function App() {
               run: () => setUrlState({ screen: 'traffic' }),
             },
           ]),
+      ...savedSearches.map((saved): Command => ({
+        id: `search:${saved.id}`,
+        label: saved.name,
+        section: 'Saved searches',
+        hint: saved.query,
+        run: () => setUrlState({ screen: 'corpus', query: saved.query }),
+      })),
       go('corpus', 'Corpus'),
       go('traffic', 'Traffic'),
       go('scenarios', 'Scenarios'),
@@ -203,7 +218,7 @@ export function App() {
           run: () => setUrlState({ profileId: candidate.id, query: '', selectedKey: null }),
         })),
     ]
-  }, [profile, screen, all, setUrlState, refresh])
+  }, [profile, screen, all, setUrlState, refresh, savedSearches])
 
   /**
    * Which facet tokens are on, read from the URL rather than from the server's echoed plan.
@@ -367,7 +382,19 @@ export function App() {
                   borderRadius: 'var(--mk-radius-sm)',
                 }}
               />
-              <QueryPlanPills plan={corpus.data?.plan} strategy={corpus.data?.textStrategy} />
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 6 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <QueryPlanPills plan={corpus.data?.plan} strategy={corpus.data?.textStrategy} />
+                </div>
+                <SavedSearches
+                  profileId={profile.id}
+                  query={query}
+                  onApply={(saved) => {
+                    setDraft(saved)
+                    setUrlState({ query: saved })
+                  }}
+                />
+              </div>
             </form>
 
             <CorpusList

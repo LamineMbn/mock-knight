@@ -25,7 +25,7 @@ export interface Command {
   readonly id: string
   readonly label: string
   /** Grouped in the order the brief gives: actions, then navigation, then profiles. */
-  readonly section: 'Actions' | 'Go to' | 'Switch profile'
+  readonly section: 'Actions' | 'Go to' | 'Saved searches' | 'Switch profile'
   readonly hint?: string
   readonly shortcut?: string
   /** Rendered in `danger-text`, and expected to open a confirmation rather than act. */
@@ -188,7 +188,7 @@ export function CommandPalette({
   }, [index, rows.length])
 
   const sections = useMemo(() => {
-    const order = ['Actions', 'Go to', 'Switch profile', 'Search stubs']
+    const order = ['Actions', 'Go to', 'Saved searches', 'Switch profile', 'Search stubs']
     const grouped = new Map<string, { row: Row; position: number }[]>()
     rows.forEach((row, position) => {
       const bucket = grouped.get(row.section) ?? []

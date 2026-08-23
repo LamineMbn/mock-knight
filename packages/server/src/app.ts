@@ -11,6 +11,12 @@ import type { JsonObject, LoggedRequest, Mock, NearMiss } from '@mock-knight/cor
 import type { Database as Db } from 'better-sqlite3'
 import { mirrorStatus, replaceCorpus } from './db/mirror.js'
 import { getMock, searchCorpus } from './db/search.js'
+import {
+  deleteSavedSearch,
+  listSavedSearches,
+  saveSearch,
+  savedSearchInputSchema,
+} from './searches.js'
 import { getServeEventRaw, listServeEvents, recordServeEvents } from './db/journal.js'
 import { listAudit, recordAudit } from './db/audit.js'
 import { createMock, deleteMock, updateMock } from './writes.js'
@@ -459,6 +465,37 @@ export function createApp(options: AppOptions) {
       const draft =
         connection === null ? null : connection.adapter.interpret(mock.raw as JsonObject)
       return c.json({ mock, draft })
+    })
+
+    /**
+     * Saved searches — FR-FIND-6. Scoped to the profile in the path; there is no route that
+     * reaches another profile's, which is why the store takes the id rather than trusting one
+     * in the body.
+     */
+    .get('/api/:p/searches', (c) => {
+      const profileId = c.req.param('p')
+      if (getProfile(db, profileId) === null) return c.json({ error: 'not_found' }, 404)
+      return c.json({ searches: listSavedSearches(db, profileId) })
+    })
+
+    .post('/api/:p/searches', async (c) => {
+      const profileId = c.req.param('p')
+      if (getProfile(db, profileId) === null) return c.json({ error: 'not_found' }, 404)
+      const parsed = savedSearchInputSchema.safeParse(await c.req.json())
+      if (!parsed.success) {
+        return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400)
+      }
+      return c.json({ search: saveSearch(db, profileId, parsed.data) }, 201)
+    })
+
+    .delete('/api/:p/searches/:id', (c) => {
+      const profileId = c.req.param('p')
+      if (getProfile(db, profileId) === null) return c.json({ error: 'not_found' }, 404)
+      const id = Number(c.req.param('id'))
+      if (!Number.isInteger(id)) return c.json({ error: 'not_found' }, 404)
+      return deleteSavedSearch(db, profileId, id)
+        ? c.json({ deleted: true as const })
+        : c.json({ error: 'not_found' }, 404)
     })
 
     .get('/api/:p/mirror', (c) => {

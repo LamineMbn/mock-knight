@@ -49,7 +49,7 @@ async function openRawEditor(page: import('@playwright/test').Page) {
 test('an edit saves through to the mock server', async ({ page }) => {
   const editor = await openRawEditor(page)
   await editor.fill((await editor.inputValue()).replace(/"status":\s*404/, '"status": 503'))
-  await page.getByRole('button', { name: 'Save' }).click()
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
 
   await expect
     .poll(async () => customers(await mappings())?.response?.status, { timeout: 5000 })
@@ -73,7 +73,7 @@ test('an unsaved edit is marked, and discard restores the loaded document', asyn
 test('invalid JSON is refused locally rather than sent', async ({ page }) => {
   const editor = await openRawEditor(page)
   await editor.fill('{ this is not json')
-  await page.getByRole('button', { name: 'Save' }).click()
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
 
   await expect(page.getByRole('alert')).toContainText('not valid JSON')
   expect(customers(await mappings())?.response?.status).toBe(404)
@@ -95,7 +95,7 @@ test('a concurrent edit produces a merge, not a lost update', async ({ page }) =
   })
 
   await editor.fill((await editor.inputValue()).replace(/"status":\s*404/, '"status": 500'))
-  await page.getByRole('button', { name: 'Save' }).click()
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
 
   const dialog = page.getByRole('dialog', { name: 'Resolve conflicting edits' })
   await expect(dialog).toBeVisible()
