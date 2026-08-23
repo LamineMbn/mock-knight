@@ -1,3 +1,4 @@
+import { setKey } from './set-key.js'
 import type { LoggedRequest, Matcher, MockDraft } from './model.js'
 
 /**
@@ -91,7 +92,7 @@ export function stubFromRequest(
         notes.push(`Left out ${name}: it carries a credential, which should not go into a stub.`)
         continue
       }
-      headers[name] = [{ operator: 'equalTo', value: singleValue(value), options: {} }]
+      setKey(headers, name, [{ operator: 'equalTo', value: singleValue(value), options: {} }])
     }
     const pinned = Object.keys(headers)
     if (pinned.length > 0) {
@@ -104,7 +105,7 @@ export function stubFromRequest(
     for (const [name, values] of Object.entries(request.queryParameters)) {
       const first = values[0]
       if (first !== undefined) {
-        queryParameters[name] = [{ operator: 'equalTo', value: first, options: {} }]
+        setKey(queryParameters, name, [{ operator: 'equalTo', value: first, options: {} }])
       }
     }
   }

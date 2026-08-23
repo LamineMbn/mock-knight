@@ -1,4 +1,5 @@
 import type { Json, JsonObject } from './types.js'
+import { setKey } from './set-key.js'
 import type {
   LoggedRequest,
   Matcher,
@@ -243,7 +244,7 @@ function readNestedMatcher(raw: Json): Matcher {
   const keys = Object.keys(raw)
   const operator = keys.find((key) => key !== 'caseInsensitive') ?? 'anything'
   const options: JsonObject = {}
-  for (const key of keys) if (key !== operator) options[key] = raw[key]!
+  for (const key of keys) if (key !== operator) setKey(options, key, raw[key]!)
   return { operator, value: raw[operator] ?? null, options }
 }
 

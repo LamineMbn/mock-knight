@@ -1,4 +1,5 @@
 import type { Json, JsonObject } from './types.js'
+import { setKey } from './set-key.js'
 
 /**
  * Three-way merge for stub documents — the machinery behind design brief §6.8.
@@ -71,7 +72,8 @@ function sortDeep(value: Json): Json {
   if (Array.isArray(value)) return value.map(sortDeep)
   if (isPlainObject(value)) {
     const out: JsonObject = {}
-    for (const key of Object.keys(value).sort()) out[key] = sortDeep(value[key] as Json)
+    // setKey, not `out[key] =`: a `__proto__` key would be dropped from the merged document.
+    for (const key of Object.keys(value).sort()) setKey(out, key, sortDeep(value[key] as Json))
     return out
   }
   return value
@@ -83,10 +85,12 @@ function setPath(target: JsonObject, path: string, value: Json): void {
   for (let index = 0; index < segments.length - 1; index++) {
     const key = segments[index]!
     const existing = node[key]
-    if (!isPlainObject(existing)) node[key] = {}
+    if (!isPlainObject(existing)) setKey(node, key, {})
     node = node[key] as JsonObject
   }
-  node[segments[segments.length - 1]!] = value
+  // The leaf write, which is the one that actually carried the value. Missing it meant the
+  // intermediate objects were created correctly and the field itself still vanished.
+  setKey(node, segments[segments.length - 1]!, value)
 }
 
 /**

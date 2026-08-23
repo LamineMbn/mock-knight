@@ -3,6 +3,7 @@ import {
   canonicalJson,
   clientKeyFor,
   contentHash,
+  setKey,
 } from '@mock-knight/core'
 import type {
   Json,
@@ -94,7 +95,7 @@ function readMatcher(raw: Json): Matcher {
   const operator = PREDICATE_KEYS.find((key) => keys.includes(key)) ?? keys[0]
   if (operator === undefined) return { operator: 'anything', value: null, options: {} }
   const options: JsonObject = {}
-  for (const key of keys) if (key !== operator) options[key] = raw[key]!
+  for (const key of keys) if (key !== operator) setKey(options, key, raw[key]!)
   return { operator, value: raw[operator] ?? null, options }
 }
 
@@ -107,7 +108,7 @@ function readMatcherList(raw: Json | undefined): Matcher[] {
 function readMatcherMap(raw: Json | undefined): Record<string, Matcher[]> {
   const source = asObject(raw)
   const out: Record<string, Matcher[]> = {}
-  for (const [key, value] of Object.entries(source)) out[key] = readMatcherList(value)
+  for (const [key, value] of Object.entries(source)) setKey(out, key, readMatcherList(value))
   return out
 }
 
@@ -261,21 +262,21 @@ function writeMatcherMap(target: JsonObject, key: string, map: Record<string, Ma
     return
   }
   const out: JsonObject = {}
-  for (const [name, matchers] of entries) out[name] = writeMatcherList(matchers)
-  target[key] = out
+  for (const [name, matchers] of entries) setKey(out, name, writeMatcherList(matchers))
+  setKey(target, key, out)
 }
 
 /** Write a value, or remove the key entirely — WireMock treats absent and null differently. */
 function writeOrDelete(target: JsonObject, key: string, value: Json | null): void {
   if (value === null) delete target[key]
-  else target[key] = value
+  else setKey(target, key, value)
 }
 
 function ensureObject(target: JsonObject, key: string): JsonObject {
   const existing = target[key]
   if (isObject(existing)) return existing
   const created: JsonObject = {}
-  target[key] = created
+  setKey(target, key, created)
   return created
 }
 

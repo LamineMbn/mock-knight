@@ -125,3 +125,45 @@ describe('clientKeyFor', () => {
     expect(clientKeyFor(raw, '')).toMatch(/^h_/)
   })
 })
+
+describe('keys that collide with Object.prototype', () => {
+  /**
+   * Found by the property test above, on CI, at seed 22 — which is the whole argument for
+   * having it. `__proto__` is a legitimate JSON key and a mock corpus can absolutely contain
+   * one: any stub whose response body is arbitrary JSON, and every stub written to reproduce a
+   * prototype-pollution bug.
+   *
+   * These are the deterministic version, so the regression cannot depend on a lucky seed.
+   */
+  it('keeps a __proto__ key instead of silently setting a prototype', () => {
+    // Built with JSON.parse on purpose: an object *literal* with __proto__ sets the
+    // prototype rather than creating a key, so the obvious fixture would assert nothing.
+    const source = JSON.parse('{"__proto__":"not a prototype"}') as JsonObject
+    expect(Object.hasOwn(source, '__proto__')).toBe(true)
+
+    const out = canonicalize(source) as JsonObject
+    expect(Object.hasOwn(out, '__proto__')).toBe(true)
+    expect(canonicalJson(source)).toBe('{\n  "__proto__": "not a prototype"\n}')
+    expect(JSON.parse(canonicalJson(source))).toEqual(source)
+  })
+
+  it('does not let a __proto__ key change the prototype of the canonical object', () => {
+    const source = JSON.parse('{"__proto__":{"polluted":true}}') as JsonObject
+    const out = canonicalize(source) as JsonObject
+    expect(Object.getPrototypeOf(out)).toBe(Object.prototype)
+    expect(({} as Record<string, unknown>)['polluted']).toBeUndefined()
+  })
+
+  it('gives two stubs that differ only by a __proto__ key different hashes', () => {
+    // The reason this mattered: contentHash feeds client_key, so a collision here is two
+    // distinct stubs sharing one identity in the mirror and the UI.
+    const withKey = JSON.parse('{"a":1,"__proto__":"x"}') as JsonObject
+    const without = JSON.parse('{"a":1}') as JsonObject
+    expect(contentHash(withKey)).not.toBe(contentHash(without))
+  })
+
+  it('handles the other inherited names, which never had the same problem', () => {
+    const source = JSON.parse('{"constructor":1,"toString":2,"hasOwnProperty":3}') as JsonObject
+    expect(JSON.parse(canonicalJson(source))).toEqual(source)
+  })
+})

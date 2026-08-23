@@ -1,3 +1,4 @@
+import { setKey } from '@mock-knight/core'
 import type { ServeEvent } from '@mock-knight/core'
 import type { Database as Db } from 'better-sqlite3'
 
@@ -35,7 +36,8 @@ function redact(event: ServeEvent, headerNames: readonly string[]): ServeEvent {
   const wanted = new Set(headerNames.map((name) => name.toLowerCase()))
   const headers: Record<string, string | string[]> = {}
   for (const [key, value] of Object.entries(event.request.headers)) {
-    headers[key] = wanted.has(key.toLowerCase()) ? '«redacted»' : value
+    // setKey: a header literally named `__proto__` must not vanish from the stored journal.
+    setKey(headers, key, wanted.has(key.toLowerCase()) ? '«redacted»' : value)
   }
   return { ...event, request: { ...event.request, headers } }
 }

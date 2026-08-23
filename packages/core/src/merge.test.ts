@@ -178,3 +178,18 @@ describe('resolveConflict', () => {
     expect(JSON.stringify(result.merged)).toBe(before)
   })
 })
+
+describe('keys that collide with Object.prototype', () => {
+  it('carries a __proto__ key through a merge instead of dropping it', () => {
+    // `target[key] = value` sets the prototype for this one key name, so the field vanished
+    // from the merged document — a silent loss, which invariant 4 exists to prevent.
+    const base = JSON.parse('{"a":1}') as JsonObject
+    const theirs = JSON.parse('{"a":1}') as JsonObject
+    const mine = JSON.parse('{"a":1,"__proto__":"kept"}') as JsonObject
+
+    const result = threeWayMerge(base, theirs, mine)
+    expect(result.conflicts).toHaveLength(0)
+    expect(Object.hasOwn(result.merged, '__proto__')).toBe(true)
+    expect(Object.getPrototypeOf(result.merged)).toBe(Object.prototype)
+  })
+})

@@ -17,6 +17,7 @@ import { WireMockAdapter } from '@mock-knight/adapter-wiremock'
 import type { Database as Db } from 'better-sqlite3'
 import { recordConnection } from './profiles.js'
 import type { Profile } from './profiles.js'
+import { setKey } from '@mock-knight/core'
 
 /**
  * Live connections, one per profile.
@@ -89,7 +90,8 @@ export function resolveAuth(profile: Profile, env: NodeJS.ProcessEnv = process.e
       const headers: Record<string, string> = {}
       for (const pair of profile.authRef.split(',')) {
         const [header, variable] = pair.split('=')
-        if (header !== undefined && variable !== undefined) headers[header] = env[variable] ?? ''
+        if (header !== undefined && variable !== undefined)
+          setKey(headers, header, env[variable] ?? '')
       }
       return { kind: 'headers', headers }
     }

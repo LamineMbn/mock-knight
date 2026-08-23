@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { Json, JsonObject } from './types.js'
+import { setKey } from './set-key.js'
 
 /**
  * Canonical serialisation.
@@ -76,7 +77,10 @@ function normalise(value: unknown, path: readonly (string | number)[]): Json | u
       // Sort by UTF-16 code unit: the same total order in every JS engine, on every run.
       for (const key of Object.keys(source).sort()) {
         const normalised = normalise(source[key], [...path, key])
-        if (normalised !== undefined) out[key] = normalised
+        if (normalised === undefined) continue
+        // Not `out[key] = …`: see set-key.ts. `__proto__` would set the prototype instead of
+        // creating a property, and the key would vanish from the hash that becomes client_key.
+        setKey(out, key, normalised)
       }
       return out
     }

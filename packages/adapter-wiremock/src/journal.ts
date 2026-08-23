@@ -1,4 +1,4 @@
-import { clientKeyFor, explainMatch } from '@mock-knight/core'
+import { clientKeyFor, explainMatch, setKey } from '@mock-knight/core'
 import type {
   Json,
   JsonObject,
@@ -35,9 +35,13 @@ function asString(value: Json | undefined): string | null {
 function headerMap(raw: Json | undefined): Record<string, string | string[]> {
   const out: Record<string, string | string[]> = {}
   for (const [key, value] of Object.entries(asObject(raw))) {
-    if (typeof value === 'string') out[key] = value
+    if (typeof value === 'string') setKey(out, key, value)
     else if (Array.isArray(value))
-      out[key] = value.filter((v): v is string => typeof v === 'string')
+      setKey(
+        out,
+        key,
+        value.filter((v): v is string => typeof v === 'string'),
+      )
   }
   return out
 }
@@ -48,12 +52,16 @@ export function toLoggedRequest(raw: JsonObject): LoggedRequest {
   for (const [name, entry] of Object.entries(asObject(raw['queryParams']))) {
     const values = isObject(entry) ? entry['values'] : undefined
     if (Array.isArray(values)) {
-      queryParameters[name] = values.filter((v): v is string => typeof v === 'string')
+      setKey(
+        queryParameters,
+        name,
+        values.filter((v): v is string => typeof v === 'string'),
+      )
     }
   }
   const cookies: Record<string, string> = {}
   for (const [name, value] of Object.entries(asObject(raw['cookies']))) {
-    if (typeof value === 'string') cookies[name] = value
+    if (typeof value === 'string') setKey(cookies, name, value)
   }
 
   return {
