@@ -147,6 +147,25 @@ export interface ServeEventRow {
   correlation: string | null
 }
 
+/**
+ * What the Traffic screen filters by — FR-TRAF-2.
+ *
+ * Empty string means "no filter" rather than `undefined`, because every one of these is bound
+ * to an input whose empty state is the empty string; a second representation of "unset" is one
+ * more thing to get wrong.
+ */
+export interface JournalFilters {
+  matched: 'all' | 'matched' | 'unmatched'
+  method: string
+  path: string
+  /** A leading digit as a string: '2', '4', '5'. */
+  statusClass: string
+  /** One request's correlation id, for following it through a system. */
+  correlation: string
+  /** Set only when the log has been narrowed to one stub's traffic. */
+  clientKey?: string
+}
+
 export interface JournalPage {
   items: ServeEventRow[]
   total: number
@@ -262,11 +281,16 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ confirm }),
     }),
-  events: (profileId: string, matched: 'all' | 'matched' | 'unmatched', limit = 200) =>
-    call<JournalPage>(
-      `/api/${profileId}/events?limit=${limit}` +
-        (matched === 'all' ? '' : `&matched=${matched === 'matched'}`),
-    ),
+  events: (profileId: string, filters: JournalFilters, limit = 200) => {
+    const search = new URLSearchParams({ limit: String(limit) })
+    if (filters.matched !== 'all') search.set('matched', String(filters.matched === 'matched'))
+    if (filters.method !== '') search.set('method', filters.method)
+    if (filters.path !== '') search.set('path', filters.path)
+    if (filters.statusClass !== '') search.set('statusClass', filters.statusClass)
+    if (filters.correlation !== '') search.set('correlation', filters.correlation)
+    if (filters.clientKey !== undefined) search.set('clientKey', filters.clientKey)
+    return call<JournalPage>(`/api/${profileId}/events?${search.toString()}`)
+  },
   explain: (profileId: string, eventId: number) =>
     call<Explanation>(`/api/${profileId}/explain`, {
       method: 'POST',

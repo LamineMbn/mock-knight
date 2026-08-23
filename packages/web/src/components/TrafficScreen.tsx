@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api.js'
-import type { Profile, ServeEventRow } from '../api.js'
+import type { JournalFilters, Profile, ServeEventRow } from '../api.js'
 import { MatchExplainer } from './MatchExplainer.js'
 import { Button, MethodChip, MiddleEllipsis, Skeleton, StatusCode } from './primitives.js'
 
@@ -26,6 +26,28 @@ import { Button, MethodChip, MiddleEllipsis, Skeleton, StatusCode } from './prim
 
 type Filter = 'all' | 'matched' | 'unmatched'
 
+const NO_FILTERS: JournalFilters = {
+  matched: 'all',
+  method: '',
+  path: '',
+  statusClass: '',
+  correlation: '',
+}
+
+const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
+
+const filterField: React.CSSProperties = {
+  height: 26,
+  padding: '0 6px',
+  font: 'inherit',
+  fontSize: 13,
+  color: 'var(--mk-text-primary)',
+  background: 'var(--mk-bg-surface)',
+  border: '1px solid var(--mk-border-strong)',
+  borderRadius: 'var(--mk-radius-sm)',
+  minWidth: 0,
+}
+
 function relative(at: string): string {
   const seconds = Math.max(0, Math.round((Date.now() - new Date(at).getTime()) / 1000))
   if (seconds < 60) return `${seconds}s ago`
@@ -45,11 +67,13 @@ function Row({
   focused,
   onFocus,
   onExplain,
+  onCorrelation,
 }: {
   event: ServeEventRow
   focused: boolean
   onFocus: () => void
   onExplain: (id: number) => void
+  onCorrelation: (correlation: string) => void
 }) {
   const ref = useRef<HTMLTableRowElement>(null)
   useEffect(() => {
@@ -135,8 +159,42 @@ function Row({
         className="mk-mono"
         style={{ padding: '4px 8px', fontSize: 12, maxWidth: 0, width: '100%' }}
       >
-        <span style={{ display: 'flex', minWidth: 0 }}>
+        <span style={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: 6 }}>
           <MiddleEllipsis text={event.url ?? '—'} tailChars={18} />
+          {event.correlation !== null && (
+            /**
+             * The correlation header this profile is configured to read. It has been stored on
+             * every event since the journal existed and was never shown, which made it useless:
+             * following one request through a system is the reason to configure it at all.
+             * Click to see only that request's traffic.
+             */
+            <button
+              type="button"
+              title={`Show only ${event.correlation}`}
+              onClick={(clickEvent) => {
+                clickEvent.stopPropagation()
+                onCorrelation(event.correlation!)
+              }}
+              className="mk-mono"
+              style={{
+                flex: '0 0 auto',
+                maxWidth: 120,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                height: 16,
+                padding: '0 5px',
+                fontSize: 11,
+                cursor: 'pointer',
+                color: 'var(--mk-text-secondary)',
+                background: 'var(--mk-bg-subtle)',
+                border: '1px solid var(--mk-border-default)',
+                borderRadius: 'var(--mk-radius-sm)',
+              }}
+            >
+              {event.correlation}
+            </button>
+          )}
         </span>
       </td>
       <td style={{ padding: '4px 8px', textAlign: 'right' }}>
@@ -175,6 +233,17 @@ export function TrafficScreen({ profile }: { profile: Profile }) {
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState<Filter>('all')
   /**
+   * Everything but the match state, which keeps its own segmented control because it is the one
+   * people reach for constantly. Filtering happens in SQL over the mirror, not in the browser:
+   * the count in the footer has to describe the filtered set or paging lies about what is left.
+   */
+  const [filters, setFilters] = useState<JournalFilters>(NO_FILTERS)
+  const narrowed =
+    filters.method !== '' ||
+    filters.path !== '' ||
+    filters.statusClass !== '' ||
+    filters.correlation !== ''
+  /**
    * Events the user has dismissed from *their* view.
    *
    * Held as a set of ids rather than a timestamp watermark: events arrive newest-first within a
@@ -194,8 +263,16 @@ export function TrafficScreen({ profile }: { profile: Profile }) {
   const scrolledAway = useRef(false)
 
   const journal = useQuery({
-    queryKey: ['events', profileId, filter],
-    queryFn: () => api.events(profileId, filter),
+    queryKey: [
+      'events',
+      profileId,
+      filter,
+      filters.method,
+      filters.path,
+      filters.statusClass,
+      filters.correlation,
+    ],
+    queryFn: () => api.events(profileId, { ...filters, matched: filter }),
     // Polled, because WireMock has no push channel. Paused when the tab is hidden so a
     // background window does not keep hammering the server we are here to debug.
     refetchInterval: () => (document.visibilityState === 'visible' ? 2_000 : false),
@@ -307,6 +384,69 @@ export function TrafficScreen({ profile }: { profile: Profile }) {
             </button>
           ))}
         </div>
+
+        <select
+          aria-label="Filter by method"
+          value={filters.method}
+          onChange={(event) => setFilters({ ...filters, method: event.target.value })}
+          style={{ ...filterField, flex: '0 0 116px' }}
+        >
+          <option value="">Any method</option>
+          {METHODS.map((method) => (
+            <option key={method} value={method}>
+              {method}
+            </option>
+          ))}
+        </select>
+
+        <select
+          aria-label="Filter by status class"
+          value={filters.statusClass}
+          onChange={(event) => setFilters({ ...filters, statusClass: event.target.value })}
+          style={{ ...filterField, flex: '0 0 96px' }}
+        >
+          <option value="">Any status</option>
+          {['2', '3', '4', '5'].map((digit) => (
+            <option key={digit} value={digit}>
+              {digit}xx
+            </option>
+          ))}
+        </select>
+
+        <input
+          aria-label="Filter by path"
+          placeholder="Path contains…"
+          value={filters.path}
+          onChange={(event) => setFilters({ ...filters, path: event.target.value })}
+          className="mk-mono"
+          style={{ ...filterField, flex: '0 1 200px' }}
+        />
+
+        {filters.correlation !== '' && (
+          <span
+            className="mk-mono"
+            title="Showing one request's correlation id"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              height: 26,
+              padding: '0 6px',
+              fontSize: 12,
+              color: 'var(--mk-accent-text)',
+              background: 'var(--mk-accent-bg-subtle)',
+              border: '1px solid var(--mk-accent-border)',
+              borderRadius: 'var(--mk-radius-sm)',
+            }}
+          >
+            {filters.correlation}
+          </span>
+        )}
+
+        {narrowed && (
+          <Button variant="quiet" onClick={() => setFilters(NO_FILTERS)}>
+            Clear filters
+          </Button>
+        )}
 
         {/* Held arrivals are counted and visible — never a silent freeze, never a yanked viewport. */}
         {pending > 0 && (
@@ -448,9 +588,25 @@ export function TrafficScreen({ profile }: { profile: Profile }) {
             style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--mk-text-secondary)' }}
           >
             <strong style={{ display: 'block', fontSize: 16, marginBottom: 6 }}>
-              {hiddenCount > 0 ? 'Waiting for the next request.' : 'No requests recorded yet.'}
+              {narrowed
+                ? 'No requests match these filters.'
+                : hiddenCount > 0
+                  ? 'Waiting for the next request.'
+                  : 'No requests recorded yet.'}
             </strong>
-            {hiddenCount > 0 ? (
+            {narrowed ? (
+              // Distinguished from an empty journal on purpose: "nothing here" and "nothing
+              // here that you asked for" send someone to different places. No count here —
+              // `total` is the *filtered* total, so it is always zero in this branch and a
+              // sentence quoting it would say "0 matching requests match nothing".
+              <>
+                Widen or clear the filters. The journal itself only reaches back to{' '}
+                {journal.data?.window.earliestAt == null
+                  ? 'the last reset'
+                  : new Date(journal.data.window.earliestAt).toLocaleTimeString()}
+                , so an older request would not be here either way.
+              </>
+            ) : hiddenCount > 0 ? (
               <>
                 {hiddenCount} earlier {hiddenCount === 1 ? 'request is' : 'requests are'} hidden
                 from this view — still on the server.
@@ -475,6 +631,11 @@ export function TrafficScreen({ profile }: { profile: Profile }) {
                   focused={event.id === focusedId}
                   onFocus={() => setFocusedId(event.id)}
                   onExplain={setExplaining}
+                  onCorrelation={(correlation) =>
+                    // Replaces the other filters rather than adding to them: following one
+                    // request means seeing all of it, not the part that also matched a path box.
+                    setFilters({ ...NO_FILTERS, correlation })
+                  }
                 />
               ))}
             </tbody>

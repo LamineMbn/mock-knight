@@ -101,6 +101,18 @@ export interface ServeEventRow {
 export interface JournalQueryOptions {
   readonly matched?: boolean
   readonly correlation?: string
+  /** Exact verb. The journal records what was sent, so this is not a matcher. */
+  readonly method?: string
+  /** Substring of the request URL, case-insensitive. */
+  readonly path?: string
+  /** A status class as its leading digit — 2 for 2xx — or an exact code. */
+  readonly status?: number
+  readonly statusClass?: number
+  /** The stub that answered, by client key. "Show me only what this stub served." */
+  readonly clientKey?: string
+  /** ISO timestamps, inclusive. Bounded by the journal window either way. */
+  readonly since?: string
+  readonly until?: string
   readonly limit: number
   readonly offset: number
 }
@@ -129,6 +141,37 @@ export function listServeEvents(
   if (options.correlation !== undefined) {
     where.push('correlation = ?')
     params.push(options.correlation)
+  }
+  if (options.method !== undefined) {
+    where.push('method = ?')
+    params.push(options.method.toUpperCase())
+  }
+  if (options.path !== undefined && options.path !== '') {
+    // `LIKE` with an escaped pattern, not FTS: the journal is a bounded window of at most a few
+    // thousand rows, and a substring of a URL is what someone actually types. Escaping matters
+    // because `_` and `%` appear in real paths and would otherwise be wildcards.
+    where.push(`url LIKE ? ESCAPE '\\'`)
+    params.push(`%${options.path.replace(/[\\%_]/g, (c) => `\\${c}`)}%`)
+  }
+  if (options.status !== undefined) {
+    where.push('status = ?')
+    params.push(options.status)
+  }
+  if (options.statusClass !== undefined) {
+    where.push('status >= ? AND status < ?')
+    params.push(options.statusClass * 100, (options.statusClass + 1) * 100)
+  }
+  if (options.clientKey !== undefined) {
+    where.push('matched_key = ?')
+    params.push(options.clientKey)
+  }
+  if (options.since !== undefined) {
+    where.push('at >= ?')
+    params.push(options.since)
+  }
+  if (options.until !== undefined) {
+    where.push('at <= ?')
+    params.push(options.until)
   }
   const clause = where.join(' AND ')
 

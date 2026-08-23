@@ -184,3 +184,85 @@ test('Clear journal needs the profile name typed, then empties the server too', 
   await expect(page.getByText('No requests recorded yet.')).toBeVisible()
   await expect(page.getByRole('button', { name: /hidden/ })).toHaveCount(0)
 })
+
+/**
+ * Journal filters — FR-TRAF-2.
+ *
+ * "All / Unmatched / Matched" is a halving, not a filter. On a server a team shares, finding
+ * the one call you care about needs method, path, status — and the correlation id, which the
+ * journal has stored since it existed and never showed.
+ */
+test.describe('filtering the log', () => {
+  /**
+   * Clears **both** journals, then sends three known requests.
+   *
+   * `DELETE /__admin/requests` only empties WireMock's. Our mirror keeps its own bounded
+   * history, so a spec that cleared only the upstream one counted whatever the previous spec
+   * happened to leave behind — which is exactly the asymmetry the Clear journal button exists
+   * to resolve, so the fixture uses it.
+   */
+  const seedTraffic = async (page: import('@playwright/test').Page) => {
+    const profiles = (await (await page.request.get('/api/profiles')).json()) as {
+      profiles: { id: string; name: string }[]
+    }
+    const profile = profiles.profiles[0]!
+    await page.request.post(`/api/${profile.id}/danger/clear-journal`, {
+      data: { confirm: profile.name },
+    })
+    await fetch(`${WIREMOCK}/__admin/requests`, { method: 'DELETE' })
+    await fetch(`${WIREMOCK}/v1/customers`) // matched, 404 per the seed
+    await fetch(`${WIREMOCK}/v1/nothing-here`) // unmatched, 404
+    await fetch(`${WIREMOCK}/v1/orders`, {
+      method: 'POST',
+      headers: { 'X-Tenant': 'acme', 'content-type': 'application/json' },
+      body: '{}',
+    }) // matched, 500
+  }
+
+  test('narrows by method, status class and path, and counts the filtered set', async ({
+    page,
+  }) => {
+    await seedTraffic(page)
+    await page.goto('/?screen=traffic')
+    await expect(page.locator(ROW)).toHaveCount(3)
+
+    await page.getByLabel('Filter by method').selectOption('POST')
+    await expect(page.locator(ROW)).toHaveCount(1)
+    await expect(page.locator(ROW).first()).toContainText('/v1/orders')
+
+    await page.getByLabel('Filter by method').selectOption('')
+    await page.getByLabel('Filter by status class').selectOption('5')
+    await expect(page.locator(ROW)).toHaveCount(1)
+
+    await page.getByLabel('Filter by status class').selectOption('')
+    await page.getByLabel('Filter by path').fill('customers')
+    await expect(page.locator(ROW)).toHaveCount(1)
+
+    // Clearing restores everything, and the control disappears when nothing is narrowed.
+    await page.getByRole('button', { name: 'Clear filters' }).click()
+    await expect(page.locator(ROW)).toHaveCount(3)
+    await expect(page.getByRole('button', { name: 'Clear filters' })).toHaveCount(0)
+  })
+
+  test('says nothing matches the filters, which is not the same as an empty journal', async ({
+    page,
+  }) => {
+    await seedTraffic(page)
+    await page.goto('/?screen=traffic')
+    await page.getByLabel('Filter by path').fill('definitely-not-a-path')
+    await expect(page.getByText('No requests match these filters.')).toBeVisible()
+    // Not the "send a request and it will appear" copy: the journal is not empty.
+    await expect(page.getByText('No requests recorded yet.')).toHaveCount(0)
+  })
+
+  test('filters combine rather than replacing each other', async ({ page }) => {
+    await seedTraffic(page)
+    await page.goto('/?screen=traffic')
+    await page.getByLabel('Filter by path').fill('v1')
+    await page.getByLabel('Filter by method').selectOption('GET')
+    await expect(page.locator(ROW)).toHaveCount(2)
+    await page.getByRole('button', { name: 'Unmatched' }).click()
+    await expect(page.locator(ROW)).toHaveCount(1)
+    await expect(page.locator(ROW).first()).toContainText('/v1/nothing-here')
+  })
+})

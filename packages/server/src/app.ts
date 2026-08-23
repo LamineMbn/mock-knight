@@ -71,6 +71,14 @@ const eventsQuerySchema = z.object({
     .optional()
     .transform((value) => (value === undefined ? undefined : value === 'true')),
   correlation: z.string().optional(),
+  method: z.string().optional(),
+  path: z.string().optional(),
+  status: z.coerce.number().int().min(100).max(599).optional(),
+  /** A leading digit — 2, 4, 5 — rather than the "2xx" spelling the corpus facets use. */
+  statusClass: z.coerce.number().int().min(1).max(5).optional(),
+  clientKey: z.string().optional(),
+  since: z.string().optional(),
+  until: z.string().optional(),
 })
 
 /**
@@ -491,6 +499,13 @@ export function createApp(options: AppOptions) {
         offset: parsed.data.offset,
         ...(parsed.data.matched === undefined ? {} : { matched: parsed.data.matched }),
         ...(parsed.data.correlation === undefined ? {} : { correlation: parsed.data.correlation }),
+        ...(parsed.data.method === undefined ? {} : { method: parsed.data.method }),
+        ...(parsed.data.path === undefined ? {} : { path: parsed.data.path }),
+        ...(parsed.data.status === undefined ? {} : { status: parsed.data.status }),
+        ...(parsed.data.statusClass === undefined ? {} : { statusClass: parsed.data.statusClass }),
+        ...(parsed.data.clientKey === undefined ? {} : { clientKey: parsed.data.clientKey }),
+        ...(parsed.data.since === undefined ? {} : { since: parsed.data.since }),
+        ...(parsed.data.until === undefined ? {} : { until: parsed.data.until }),
       })
       return c.json({
         ...page,
