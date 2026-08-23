@@ -73,18 +73,29 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
-      # Written explicitly rather than relying on setup-node's registry-url alone: that writes
-      # an .npmrc pnpm does not always read, and the symptom is an ENEEDAUTH at the last step
-      # of a release that has already tagged and built everything.
-      - name: Authenticate to npm
+      # `NODE_AUTH_TOKEN` must be on **this** step, not an earlier one.
+      #
+      # `setup-node` with `registry-url` points NPM_CONFIG_USERCONFIG at a file in RUNNER_TEMP —
+      # which overrides ~/.npmrc, so writing the token there by hand achieves nothing — and that
+      # file holds a literal `${NODE_AUTH_TOKEN}` expanded from the environment each time npm
+      # reads it. Set on a previous step it is gone by now, the token expands to empty, and the
+      # publish goes out unauthenticated. npm answers a new package's unauthenticated PUT with
+      # **404, not 401**, so the error reads as "mock-knight@0.1.0 is not in this registry" and
+      # sends you looking at the package name instead of the credential.
+      #
+      # `whoami` immediately before the publish is what turns that back into a legible failure:
+      # same config, same environment, one step earlier.
+      - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
-
-      # --provenance links the published tarball to this workflow run and this commit, and
-      # needs the `repository` field in package.json to agree with them.
-      - name: Publish to npm
-        run: pnpm --filter mock-knight publish --access public --no-git-checks --provenance
+        run: |
+          npm whoami || {
+            echo "::error::npm does not recognise the token in this step's environment."
+            exit 1
+          }
+          # --provenance links the tarball to this workflow run and this commit, and needs the
+          # `repository` field in package.json to agree with them.
+          pnpm --filter mock-knight publish --access public --no-git-checks --provenance
 
       - name: Attach the tarball to a GitHub Release
         env:
