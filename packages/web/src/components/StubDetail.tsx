@@ -114,9 +114,9 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
       }
       if (caught instanceof ApiError && payload?.error === 'not_connected') {
         setError({
-        sentence: 'Not connected to the mock server. Reconnect, then save again.',
-        payload: null,
-      })
+          sentence: 'Not connected to the mock server. Reconnect, then save again.',
+          payload: null,
+        })
         return
       }
       setError(describeError(caught))
@@ -572,7 +572,9 @@ function parseDraft(draft: string | null): JsonObject | null {
 
 function describeError(caught: unknown): Failure {
   const fallback =
-    caught instanceof ApiError ? `The server refused the write (${caught.status}).` : 'The write failed.'
+    caught instanceof ApiError
+      ? `The server refused the write (${caught.status}).`
+      : 'The write failed.'
   return toFailure(caught, fallback)
 }
 

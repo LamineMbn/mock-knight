@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { CSSProperties } from 'react'
 import type { MockListItem } from '../api.js'
@@ -41,6 +41,16 @@ interface Column {
 }
 
 /**
+ * The path is the thing the list is for, and it never gets less than this.
+ *
+ * A flex column with `minWidth: 0` collapses to nothing rather than pushing anything out, so
+ * once the fixed columns outgrew the pane every row rendered as a bare `/`. The list looked
+ * populated and told you nothing — the worst possible failure for the screen whose entire job
+ * is finding one stub among thousands.
+ */
+const PATH_MIN_WIDTH = 180
+
+/**
  * The header column is conditional rather than user-toggled-off-by-default.
  *
  * Where a team selects stubs by header, the header value *is* the stub's identity and a list
@@ -51,12 +61,40 @@ function columnsFor(showHeader: boolean): Column[] {
   return [
     { key: 'method', label: 'Method', width: 72 },
     { key: 'path', label: 'Path', width: 'flex' },
-    ...(showHeader ? [{ key: 'header', label: 'Header', width: 240 } as Column] : []),
+    ...(showHeader ? [{ key: 'header', label: 'Header', width: 184 } as Column] : []),
     { key: 'status', label: 'Status', width: 56 },
-    { key: 'priority', label: 'Priority', width: 104 },
+    { key: 'priority', label: 'Priority', width: 92 },
     { key: 'scenario', label: 'Scenario', width: 112 },
     { key: 'served', label: 'Last served', width: 96 },
   ]
+}
+
+/**
+ * Which columns are given up, in order, when the pane cannot hold them all.
+ *
+ * Least diagnostic first. "Last served" is bounded-truth trivia and a scenario chip only appears
+ * on stateful stubs, so both go early. Header is given up **last**, after priority: on a corpus
+ * where stubs are told apart by a request header the header value *is* the row's identity, and a
+ * list without it shows rows that are genuinely indistinguishable. Method, path and status are
+ * never dropped.
+ *
+ * At a 1280px window — a 597px pane, measured — this keeps method, path, header, status and
+ * priority. Nothing is given up until below that.
+ *
+ * This is a narrow-pane fallback, not the user-toggleable column set the brief asks for
+ * (§6.2) — that is still to build. It exists so the default view cannot become unreadable.
+ */
+const SACRIFICE_ORDER = ['served', 'scenario', 'priority', 'header'] as const
+
+/** Drop optional columns, least useful first, until the path can have its minimum. */
+function fitColumns(all: Column[], available: number): Column[] {
+  let columns = all
+  for (const key of SACRIFICE_ORDER) {
+    const fixed = columns.reduce((sum, c) => sum + (c.width === 'flex' ? 0 : c.width), 0)
+    if (available - fixed >= PATH_MIN_WIDTH) break
+    columns = columns.filter((column) => column.key !== key)
+  }
+  return columns
 }
 
 /**
@@ -134,9 +172,31 @@ export function CorpusList({
   emptyMessage,
   showHeaderColumn,
 }: CorpusListProps) {
-  const COLUMNS = columnsFor(showHeaderColumn)
-  const col = columnLookup(COLUMNS)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const paneRef = useRef<HTMLDivElement>(null)
+  // 0 until measured. Everything fits at that width, so the first paint shows the full set and
+  // narrows on the same frame the observer fires rather than flashing a stripped-down table.
+  const [paneWidth, setPaneWidth] = useState(0)
+
+  useEffect(() => {
+    const node = paneRef.current
+    if (node === null) return
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry !== undefined) setPaneWidth(entry.contentRect.width)
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+
+  const COLUMNS = useMemo(
+    () =>
+      paneWidth === 0
+        ? columnsFor(showHeaderColumn)
+        : fitColumns(columnsFor(showHeaderColumn), paneWidth),
+    [showHeaderColumn, paneWidth],
+  )
+  const col = columnLookup(COLUMNS)
+  const has = (key: string) => COLUMNS.some((column) => column.key === key)
   const virtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => scrollRef.current,
@@ -146,6 +206,7 @@ export function CorpusList({
 
   return (
     <div
+      ref={paneRef}
       role="grid"
       aria-label="Stubs in this corpus"
       aria-rowcount={total}
@@ -259,7 +320,7 @@ export function CorpusList({
                       </Chip>
                     )}
                   </span>
-                  {showHeaderColumn && (
+                  {has('header') && (
                     <span
                       role="gridcell"
                       className="mk-mono"
@@ -271,33 +332,39 @@ export function CorpusList({
                   <span role="gridcell" style={cellStyle(col('status'))}>
                     <StatusCode status={item.status} />
                   </span>
-                  <span
-                    role="gridcell"
-                    style={cellStyle(col('priority'))}
-                    aria-label={priorityLabel(item.standing)}
-                  >
-                    <PriorityCell standing={item.standing} />
-                  </span>
-                  <span role="gridcell" style={cellStyle(col('scenario'))}>
-                    {item.scenario !== null && (
-                      <Chip tone="accent" title={`Scenario: ${item.scenario}`}>
-                        <MiddleEllipsis text={item.scenario} tailChars={5} />
-                      </Chip>
-                    )}
-                  </span>
-                  <span
-                    role="gridcell"
-                    className="mk-tabular"
-                    style={{
-                      ...cellStyle(col('served')),
-                      color: 'var(--mk-text-tertiary)',
-                      fontSize: 12,
-                    }}
-                  >
-                    {/* An em-dash, not "never": the journal is bounded and resettable, so we
-                        only know we have not seen it serve — not that it never has. */}
-                    {item.lastServedAt ?? '—'}
-                  </span>
+                  {has('priority') && (
+                    <span
+                      role="gridcell"
+                      style={cellStyle(col('priority'))}
+                      aria-label={priorityLabel(item.standing)}
+                    >
+                      <PriorityCell standing={item.standing} />
+                    </span>
+                  )}
+                  {has('scenario') && (
+                    <span role="gridcell" style={cellStyle(col('scenario'))}>
+                      {item.scenario !== null && (
+                        <Chip tone="accent" title={`Scenario: ${item.scenario}`}>
+                          <MiddleEllipsis text={item.scenario} tailChars={5} />
+                        </Chip>
+                      )}
+                    </span>
+                  )}
+                  {has('served') && (
+                    <span
+                      role="gridcell"
+                      className="mk-tabular"
+                      style={{
+                        ...cellStyle(col('served')),
+                        color: 'var(--mk-text-tertiary)',
+                        fontSize: 12,
+                      }}
+                    >
+                      {/* An em-dash, not "never": the journal is bounded and resettable, so we
+                          only know we have not seen it serve — not that it never has. */}
+                      {item.lastServedAt ?? '—'}
+                    </span>
+                  )}
                 </div>
               )
             })}

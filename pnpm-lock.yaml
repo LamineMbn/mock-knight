@@ -64,9 +64,6 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.17(hono@4.13.3)
-      '@mock-knight/server':
-        specifier: workspace:*
-        version: link:../server
       better-sqlite3:
         specifier: ^13.0.0
         version: 13.0.3
@@ -74,6 +71,12 @@ importers:
         specifier: ^7.2.0
         version: 7.29.0
     devDependencies:
+      '@mock-knight/server':
+        specifier: workspace:*
+        version: link:../server
+      '@mock-knight/web':
+        specifier: workspace:*
+        version: link:../web
       tsx:
         specifier: ^4.19.2
         version: 4.23.12

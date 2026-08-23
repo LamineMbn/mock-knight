@@ -88,8 +88,7 @@ export function CreateFromRequest({
       void queryClient.invalidateQueries({ queryKey: ['corpus'] })
       onCreated()
     },
-    onError: (caught: unknown) =>
-      setError(toFailure(caught, 'The stub could not be created.')),
+    onError: (caught: unknown) => setError(toFailure(caught, 'The stub could not be created.')),
   })
 
   const text = edited ?? JSON.stringify(generated.data?.raw ?? {}, null, 2)

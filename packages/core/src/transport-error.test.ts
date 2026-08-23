@@ -26,7 +26,9 @@ describe('transportCode', () => {
 
 describe('describeTransportFailure', () => {
   it('names the host, not the whole URL, so the sentence stays readable', () => {
-    expect(describeTransportFailure('ECONNREFUSED', 'https://api-int.example.com/wcboo/__admin')).toBe(
+    expect(
+      describeTransportFailure('ECONNREFUSED', 'https://api-int.example.com/wcboo/__admin'),
+    ).toBe(
       'Nothing is listening on api-int.example.com. The server may be down, or on a different port.',
     )
   })

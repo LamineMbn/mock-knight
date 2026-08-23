@@ -53,6 +53,19 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
 
   {
+    /**
+     * Plain-JS build scripts run in Node, and `no-undef` does not know that. Declared rather
+     * than switched off: the rule still catches a typo'd global, which is most of its value in
+     * a file with no type checking behind it. TypeScript files never hit this — typescript-
+     * eslint disables `no-undef` for them, because the compiler already answers the question.
+     */
+    files: ['**/*.mjs', '**/*.cjs', '*.config.js'],
+    languageOptions: {
+      globals: { console: 'readonly', process: 'readonly', URL: 'readonly', fetch: 'readonly' },
+    },
+  },
+
+  {
     rules: {
       // `unknown` plus a zod parse instead — CLAUDE.md, Conventions.
       '@typescript-eslint/no-explicit-any': 'error',

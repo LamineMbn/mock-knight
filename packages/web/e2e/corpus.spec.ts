@@ -230,3 +230,51 @@ test.describe('priority standing', () => {
     ).toHaveAttribute('aria-label', /Shadowed by 2 higher-priority stubs/)
   })
 })
+
+/**
+ * The path column must never collapse.
+ *
+ * It did: adding the priority column pushed the fixed columns past the pane at a 1280px window,
+ * and a flex column with `minWidth: 0` yields rather than pushing anything out — so every row
+ * rendered as a bare `/`. The list looked populated and told you nothing, which is the worst
+ * available failure for the screen whose whole job is finding one stub among thousands.
+ */
+test.describe('the list fits the pane it is given', () => {
+  const headers = (page: import('@playwright/test').Page) =>
+    page.locator('[role="columnheader"]').allTextContents()
+
+  test('keeps the path readable at a laptop width, and the columns that identify a row', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 700 })
+    await page.goto('/')
+    await expect(page.locator(ROW).first()).toBeVisible()
+
+    const path = page.locator(`${ROW} [role="gridcell"]`).nth(1)
+    await expect(path).toContainText('/v1/')
+    expect(
+      await path.evaluate((node) => node.getBoundingClientRect().width),
+    ).toBeGreaterThanOrEqual(180)
+
+    // Header and priority both survive here: on a header-selected corpus one is the row's
+    // identity and the other decides which row answers.
+    expect(await headers(page)).toEqual(['Method', 'Path', 'Header', 'Status', 'Priority'])
+  })
+
+  test('gives up the least diagnostic columns first, and header last', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 700 })
+    await page.goto('/')
+    await expect(page.locator(ROW).first()).toBeVisible()
+    // Method, path and status are never dropped, whatever the width.
+    const narrow = await headers(page)
+    expect(narrow).toContain('Method')
+    expect(narrow).toContain('Path')
+    expect(narrow).toContain('Status')
+    expect(narrow).not.toContain('Last served')
+
+    await page.setViewportSize({ width: 1600, height: 700 })
+    // Widening restores them without a reload — the set follows the pane, not the page load.
+    await expect.poll(async () => (await headers(page)).length, { timeout: 4000 }).toBe(7)
+    expect(await headers(page)).toContain('Last served')
+  })
+})

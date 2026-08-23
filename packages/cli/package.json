@@ -14,18 +14,19 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node scripts/bundle-web.mjs",
     "dev": "tsx src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --root ../.."
   },
   "dependencies": {
-    "@mock-knight/server": "workspace:*",
     "@hono/node-server": "^1.13.7",
     "better-sqlite3": "^13.0.0",
     "undici": "^7.2.0"
   },
   "devDependencies": {
+    "@mock-knight/server": "workspace:*",
+    "@mock-knight/web": "workspace:*",
     "tsx": "^4.19.2"
   }
 }
