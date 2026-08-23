@@ -7,3 +7,15 @@ coverage/
 playwright-report/
 test-results/
 design/contrast-report.txt
+
+# Design and planning documents. These drive the work but are not part of the shipped project,
+# and they are large enough to bury real changes in a diff. They stay on disk; git ignores them.
+#
+# `design/design-tokens.py` is deliberately NOT here: it is a build tool, not a document. It
+# generates the palette and `packages/web/src/styles/tokens.css` via `pnpm tokens:css`, and CI
+# fails if the committed CSS does not match what it emits.
+CLAUDE.md
+PRD.md
+TECH-DESIGN.md
+design/DESIGN-BRIEF.md
+design/CLAUDE-DESIGN-PROMPT.md

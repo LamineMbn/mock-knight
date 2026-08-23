@@ -1,0 +1,159 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+    tags-ignore: ['**']
+  pull_request:
+  workflow_call:
+
+# A second push to the same branch cancels the first. Tags are excluded above so a release
+# never races the branch build it was cut from.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The suites below overwrite this server's corpus wholesale. It exists only for them.
+  MOCK_KNIGHT_TEST_WIREMOCK_URL: http://localhost:18099
+  MOCK_KNIGHT_E2E_WIREMOCK: http://localhost:18099
+  MOCK_KNIGHT_E2E_URL: http://127.0.0.1:7777
+
+jobs:
+  check:
+    name: Lint, typecheck, unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Regenerate the token CSS and fail if it differs from what is committed. The file is
+      # generated, so a hand-edit to it is silently undone by the next `pnpm tokens:css`.
+      - name: Generated token CSS is up to date
+        run: |
+          pnpm tokens:css
+          git diff --exit-code -- packages/web/src/styles/tokens.css \
+            || { echo '::error::tokens.css is stale. Run `pnpm tokens:css` and commit the result.'; exit 1; }
+
+      - name: Colour contrast report
+        run: python3 design/design-tokens.py | tail -1 | grep -qx '0 failure(s)'
+
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  perf:
+    name: Perf budgets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Asserts the PRD's p95 search budget against 1k/5k/10k fixtures. A shared runner is
+      # slower than a laptop, so these budgets have headroom by design.
+      - run: pnpm test:perf
+
+  server:
+    name: Integration and end-to-end
+    runs-on: ubuntu-latest
+    services:
+      wiremock:
+        image: wiremock/wiremock:3.13.1
+        ports: ['18099:8080']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Wait for WireMock
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:18099/__admin/health > /dev/null && exit 0
+            sleep 1
+          done
+          echo '::error::WireMock never became healthy'; exit 1
+
+      - run: pnpm test:integration
+
+      # e2e drives the *built* SPA served by the CLI, not the dev server — the packaging is
+      # part of what is under test.
+      - run: pnpm build
+      - name: Start the CLI
+        run: |
+          node packages/cli/dist/index.js --url http://localhost:18099 \
+            --state "$RUNNER_TEMP/mk-e2e.db" > "$RUNNER_TEMP/cli.log" 2>&1 &
+          for i in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:7777/api/health > /dev/null && exit 0
+            sleep 1
+          done
+          echo '::error::The CLI never became healthy'; cat "$RUNNER_TEMP/cli.log"; exit 1
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - run: pnpm test:e2e
+
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+      - if: failure()
+        run: cat "$RUNNER_TEMP/cli.log"
+
+  package:
+    name: The published tarball actually works
+    runs-on: ubuntu-latest
+    services:
+      wiremock:
+        image: wiremock/wiremock:3.13.1
+        ports: ['18099:8080']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      # The failure this guards against is specific: the CLI has a development fallback that
+      # finds the SPA at ../../web/dist, a path that exists in this repo and in no installed
+      # copy. Without this job a tarball with no UI in it passes every other test here.
+      - name: Pack, install elsewhere, and serve
+        run: |
+          pnpm --filter mock-knight pack --pack-destination "$RUNNER_TEMP/pkg"
+          mkdir -p "$RUNNER_TEMP/consumer" && cd "$RUNNER_TEMP/consumer"
+          npm init -y > /dev/null
+          npm install "$RUNNER_TEMP"/pkg/mock-knight-*.tgz --no-audit --no-fund
+
+          # Run from a directory unrelated to the checkout, so the fallback cannot rescue us.
+          mkdir -p "$RUNNER_TEMP/elsewhere" && cd "$RUNNER_TEMP/elsewhere"
+          "$RUNNER_TEMP/consumer/node_modules/.bin/mock-knight" \
+            --url http://localhost:18099 --port 7911 --state "$RUNNER_TEMP/elsewhere/state.db" \
+            > run.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:7911/api/health > /dev/null && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:7911/ | grep -q '<!doctype html' \
+            || { echo '::error::The installed package served no SPA.'; cat run.log; exit 1; }
+          echo 'The installed tarball serves the SPA.'

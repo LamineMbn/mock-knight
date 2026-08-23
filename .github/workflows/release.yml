@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# Never two releases at once, and never cancel one midway — a half-published release is worse
+# than a slow one.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # Everything CI does, against the exact commit being released. A tag is not a promise that
+  # the branch was green when it was cut.
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub Release
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      # The tag is the source of truth for the version. Publishing something that disagrees
+      # with the tag makes the Release page a lie for good — npm versions are immutable.
+      - name: Tag matches the package version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./packages/cli/package.json').version")
+          [ "$tag" = "$pkg" ] || {
+            echo "::error::Tag v$tag does not match packages/cli version $pkg."
+            exit 1
+          }
+
+      - name: Publish to npm
+        run: pnpm --filter mock-knight publish --access public --no-git-checks --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Attach the tarball to a GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pnpm --filter mock-knight pack --pack-destination dist-pack
+          gh release create "$GITHUB_REF_NAME" dist-pack/*.tgz \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag
