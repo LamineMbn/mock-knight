@@ -54,6 +54,18 @@ export interface AppOptions {
   version: string
   /** Overridable so tests do not depend on the machine's git config. */
   actor?: string
+  /**
+   * The profile this process was started for, if any — the one `--url` named.
+   *
+   * A function rather than a value because the CLI builds the app before it has resolved the
+   * profile, and because the answer must not be captured at construction time.
+   *
+   * Without it the browser has no way to tell which server the command line asked for and falls
+   * back to the first profile it holds, which is the *oldest*. Someone who ran against a local
+   * WireMock last week and then names a staging URL today gets the local one — the tool opening
+   * a server other than the one they just typed.
+   */
+  launchProfileId?: () => string | null
 }
 
 const listQuerySchema = z.object({
@@ -336,7 +348,14 @@ export function createApp(options: AppOptions) {
       return c.json({ error: 'internal_error', message: error.message }, 500)
     })
 
-    .get('/api/health', (c) => c.json({ status: 'ok' as const, mode, version: options.version }))
+    .get('/api/health', (c) =>
+      c.json({
+        status: 'ok' as const,
+        mode,
+        version: options.version,
+        launchProfileId: options.launchProfileId?.() ?? null,
+      }),
+    )
 
     .get('/api/profiles', (c) => c.json({ profiles: listProfiles(db) }))
 

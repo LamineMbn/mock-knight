@@ -86,6 +86,10 @@ named, and mirrors its corpus.
 | `--config <path>` | `./mock-knight.json` if present | See below |
 | `--no-config` | | Ignore any config file |
 
+Servers you connect to are remembered in the state database and stay in the list until you
+remove them (Servers → Remove). `--url` always decides which one the browser opens, whatever
+else is in there.
+
 ### `mock-knight.json`
 
 Optional. Picked up from the working directory, or named with `--config`. **A flag always wins

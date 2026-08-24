@@ -199,7 +199,18 @@ async function main(): Promise<void> {
       updateProfile(db, existing.id, input)
     }
   }
-  const app = createApp({ db, registry, mode, version: VERSION })
+  /**
+   * The profile `--url` named, once it is known. The app is built before that happens, so it
+   * reads this through a function rather than being handed a value it cannot have yet.
+   */
+  let launchProfileId: string | null = null
+  const app = createApp({
+    db,
+    registry,
+    mode,
+    version: VERSION,
+    launchProfileId: () => launchProfileId,
+  })
 
   const webRoot = findWebRoot()
   if (webRoot !== null) {
@@ -226,6 +237,9 @@ async function main(): Promise<void> {
         correlationHeader: null,
         redactHeaders: [],
       })
+
+    // Whether or not it connects: the user named this server, so it is the one to open.
+    launchProfileId = profile.id
 
     try {
       const connection = await registry.connect(profile)

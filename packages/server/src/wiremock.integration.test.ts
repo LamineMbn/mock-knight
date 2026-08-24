@@ -260,3 +260,43 @@ describe('an unreachable server explains itself', () => {
     expect(caps.body.connected).toBe(false)
   })
 })
+
+describe('the server this process was started for', () => {
+  /**
+   * `--url` names a server, and the browser has to be able to find out which one.
+   *
+   * Profiles live in a state database shared by every run, ordered by creation, so without this
+   * the UI fell back to the *oldest* profile — someone who ran against a local WireMock last
+   * week and then typed a staging URL today was shown the local one.
+   */
+  it('is reported by health, so the browser opens the one that was named', async () => {
+    const created = await json('/api/profiles', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'launched', adapter: 'wiremock', baseUrl: WIREMOCK_URL }),
+    })
+    const id = created.body.profile.id as string
+
+    const app = createApp({
+      db,
+      registry,
+      mode: 'local',
+      version: 'test',
+      launchProfileId: () => id,
+    })
+    const health = (await (await app.request('/api/health')).json()) as {
+      launchProfileId: string | null
+    }
+    expect(health.launchProfileId).toBe(id)
+  })
+
+  it('is null when no server was named, rather than guessing at one', async () => {
+    // `npx mock-knight` with no --url has nothing to open, and inventing a choice there would
+    // be worse than letting the UI fall back and say so.
+    const app = createApp({ db, registry, mode: 'local', version: 'test' })
+    const health = (await (await app.request('/api/health')).json()) as {
+      launchProfileId: string | null
+    }
+    expect(health.launchProfileId).toBeNull()
+  })
+})

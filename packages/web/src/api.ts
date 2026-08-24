@@ -241,7 +241,14 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => call<{ status: string; mode: string; version: string }>('/api/health'),
+  health: () =>
+    call<{
+      status: string
+      mode: string
+      version: string
+      /** The profile `--url` named, so the browser opens the server the command line asked for. */
+      launchProfileId: string | null
+    }>('/api/health'),
   profiles: () => call<{ profiles: Profile[] }>('/api/profiles'),
   capabilities: (profileId: string) =>
     call<{ connected: boolean; version: string | null; mode: string; report: CapabilityRow[] }>(

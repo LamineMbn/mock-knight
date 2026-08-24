@@ -169,3 +169,26 @@ test('a server that cannot be reached explains itself, in detail, copyably', asy
   // The failed profile was rolled back, so the list is unchanged.
   await expect(page.getByText('unreachable', { exact: true })).toHaveCount(0)
 })
+
+test('opens the server the command line named, not the oldest one it holds', async ({ page }) => {
+  // Profiles live in a state database shared by every run, and the fallback used to be the
+  // first profile — which is the *oldest*. Running against a local WireMock last week and then
+  // naming a staging URL today opened the local one, so `--url` did not decide what you saw.
+  //
+  // Asserted as the rule rather than against a fixed name, since which profiles exist depends
+  // on what the rest of the suite has created.
+  const health = (await (await page.request.get('/api/health')).json()) as {
+    launchProfileId: string | null
+  }
+  expect(health.launchProfileId).not.toBeNull()
+
+  const profiles = (await (await page.request.get('/api/profiles')).json()) as {
+    profiles: { id: string; name: string }[]
+  }
+  const launched = profiles.profiles.find((p) => p.id === health.launchProfileId)
+  expect(launched).toBeDefined()
+
+  // No ?profile= in the URL, so the fallback decides.
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: /Profile: / })).toContainText(launched!.name)
+})

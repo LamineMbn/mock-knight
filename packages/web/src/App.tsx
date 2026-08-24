@@ -133,9 +133,23 @@ export function App() {
 
   const profiles = useQuery({ queryKey: ['profiles'], queryFn: api.profiles })
   const all = useMemo(() => profiles.data?.profiles ?? [], [profiles.data])
-  // Fall back rather than blank the screen: a link to a profile that has since been removed
-  // should land somewhere useful, not on an error.
-  const profile: Profile | undefined = all.find((p) => p.id === profileId) ?? all[0]
+  const health = useQuery({ queryKey: ['health'], queryFn: api.health })
+
+  /**
+   * The URL wins, then the server this process was started for, then whatever is first.
+   *
+   * That middle step is the one that was missing. Profiles persist in a state database shared
+   * by every run, and `listProfiles` orders by creation, so `?? all[0]` meant the *oldest*
+   * profile. Someone who ran against a local WireMock last week and then typed
+   * `--url https://staging…` today was shown the local one — the tool opening a server other
+   * than the one they had just named.
+   *
+   * Falling back at all is still right: a link to a profile that has since been removed should
+   * land somewhere useful rather than on an error.
+   */
+  const launched = health.data?.launchProfileId ?? null
+  const profile: Profile | undefined =
+    all.find((p) => p.id === profileId) ?? all.find((p) => p.id === launched) ?? all[0]
 
   const mirror = useQuery({
     queryKey: ['mirror', profile?.id],
