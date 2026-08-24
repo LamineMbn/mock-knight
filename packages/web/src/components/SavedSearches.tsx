@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api.js'
 import type { SavedSearch } from '../api.js'
-import { Button } from './primitives.js'
+import { BookmarkPlus, Save, Trash2 } from 'lucide-react'
+import { Button, IconButton } from './primitives.js'
 
 /**
  * Saving a query worth keeping — FR-FIND-6.
@@ -73,21 +74,22 @@ export function SavedSearches({
       {edited && (
         // Offered before "Save search", because after tweaking a saved query updating it is
         // almost always the intention and re-saving under a new name is the exception.
-        <Button
+        <IconButton
+          icon={Save}
           variant="primary"
           disabled={update.isPending}
           onClick={() => update.mutate()}
-          title={`Replace “${applied!.name}” with the query in the box`}
-        >
-          {update.isPending ? 'Updating…' : `Update ${applied!.name}`}
-        </Button>
+          label={`Update “${applied!.name}” with the query in the box`}
+        />
       )}
 
       {/* Saving an empty search would save "everything", which is not worth a name. */}
       {query !== '' && existing === undefined && (
-        <Button onClick={() => setOpen((was) => !was)}>
-          {edited ? 'Save as new' : 'Save search'}
-        </Button>
+        <IconButton
+          icon={BookmarkPlus}
+          label={edited ? 'Save as a new search' : 'Save this search'}
+          onClick={() => setOpen((was) => !was)}
+        />
       )}
       {existing !== undefined && (
         // A button, not a chip. It was inert, which left no way back into the panel to rename
@@ -215,9 +217,12 @@ export function SavedSearches({
                   style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}
                 >
                   <span style={{ flex: 1, minWidth: 0 }}>{candidate.name}</span>
-                  <Button variant="quiet" onClick={() => remove.mutate(candidate.id)}>
-                    Delete
-                  </Button>
+                  <IconButton
+                    icon={Trash2}
+                    variant="danger"
+                    label={`Delete the saved search “${candidate.name}”`}
+                    onClick={() => remove.mutate(candidate.id)}
+                  />
                 </div>
               ))}
             </div>

@@ -47,7 +47,7 @@ async function clearBothJournals(page: import('@playwright/test').Page) {
 
 test('the row action is a quiet button, not a filled primary on every row', async ({ page }) => {
   await traffic(page)
-  const button = page.getByRole('button', { name: 'Why?' }).first()
+  const button = page.getByRole('button', { name: /^Why didn't / }).first()
   const style = await button.evaluate((node) => {
     const computed = getComputedStyle(node)
     return { background: computed.backgroundColor, height: node.getBoundingClientRect().height }
@@ -61,7 +61,7 @@ test('the row action is a quiet button, not a filled primary on every row', asyn
 test('each row action names its own request, not just "Why?"', async ({ page }) => {
   await traffic(page)
   const titles = await page
-    .getByRole('button', { name: 'Why?' })
+    .getByRole('button', { name: /^Why didn't / })
     .evaluateAll((nodes) => nodes.slice(0, 5).map((node) => node.getAttribute('title')))
 
   // Thirty buttons all called "Why?" tell a screen-reader user nothing about which is which,
@@ -160,7 +160,7 @@ test('Clear view empties the list without touching the server journal', async ({
   const onServer = await journalSize()
   expect(onServer).toBeGreaterThan(0)
 
-  await page.getByRole('button', { name: 'Clear view' }).click()
+  await page.getByRole('button', { name: /^Clear view/ }).click()
 
   await expect(page.locator(ROW)).toHaveCount(0)
   await expect(page.getByText('Waiting for the next request.')).toBeVisible()
@@ -173,7 +173,7 @@ test('Clear view empties the list without touching the server journal', async ({
   await expect(page.locator(ROW).first()).toContainText('/v1/after-the-clear')
 
   // And hiding is reversible, because nothing was destroyed.
-  await page.getByRole('button', { name: `Show ${before} hidden` }).click()
+  await page.getByRole('button', { name: new RegExp(`^Show ${before} hidden`) }).click()
   await expect(page.locator(ROW)).toHaveCount(before + 1)
 })
 
@@ -183,7 +183,7 @@ test('Clear journal needs the profile name typed, then empties the server too', 
   await traffic(page)
   expect(await journalSize()).toBeGreaterThan(0)
 
-  await page.getByRole('button', { name: 'Clear journal…' }).click()
+  await page.getByRole('button', { name: 'Clear the request journal…' }).click()
   const confirm = page.getByRole('button', { name: 'Clear journal', exact: true })
   await expect(confirm).toBeDisabled()
 
@@ -301,7 +301,7 @@ test.describe('what the journal already knew', () => {
     const link = page
       .locator(ROW)
       .filter({ hasText: '/v1/customers' })
-      .getByRole('button', { name: 'stub ↗' })
+      .getByRole('button', { name: /^Open the stub that answered/ })
       .first()
     await expect(link).toBeVisible()
     await link.click()
@@ -324,7 +324,9 @@ test('the stub link survives an import that reissued every id', async ({ page })
   await clearBothJournals(page)
   await fetch(`${WIREMOCK}/v1/customers`)
   await page.goto('/?screen=traffic')
-  await expect(page.getByRole('button', { name: 'stub ↗' }).first()).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: /^Open the stub that answered/ }).first(),
+  ).toBeVisible()
 
   const before = (await (await fetch(`${WIREMOCK}/__admin/mappings`)).json()) as {
     mappings: { id: string; request?: { urlPath?: string } }[]
@@ -343,7 +345,7 @@ test('the stub link survives an import that reissued every id', async ({ page })
   await page
     .locator(ROW)
     .filter({ hasText: '/v1/customers' })
-    .getByRole('button', { name: 'stub ↗' })
+    .getByRole('button', { name: /^Open the stub that answered/ })
     .first()
     .click()
 
@@ -376,7 +378,7 @@ test('the stub link works even when the mirror has not seen that stub', async ({
   const link = page
     .locator(ROW)
     .filter({ hasText: '/v1/customers' })
-    .getByRole('button', { name: 'stub ↗' })
+    .getByRole('button', { name: /^Open the stub that answered/ })
     .first()
   await expect(link).toBeVisible()
   await link.click()

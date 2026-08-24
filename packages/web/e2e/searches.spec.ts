@@ -29,13 +29,13 @@ test('a query can be named, recalled, and deleted', async ({ page }) => {
   await page.goto('/?q=method%3AGET')
   await expect(page.locator(ROW).first()).toBeVisible()
 
-  await page.getByRole('button', { name: 'Save search' }).click()
+  await page.getByRole('button', { name: 'Save this search' }).click()
   await page.getByLabel('Name this search').fill('just the reads')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
 
   // Saved: the control names it rather than offering to save it again.
   await expect(page.getByTitle(/This search is saved/)).toHaveText('just the reads')
-  await expect(page.getByRole('button', { name: 'Save search' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Save this search' })).toHaveCount(0)
 
   // Recall it from a different query.
   await page.goto('/?q=status%3A404')
@@ -46,19 +46,22 @@ test('a query can be named, recalled, and deleted', async ({ page }) => {
   // And remove it. The saved chip is the way back into the panel — it used to be inert, which
   // left no route to delete a search once it existed.
   await page.getByTitle('This search is saved — click to manage saved searches').click()
-  await page.getByRole('button', { name: 'Delete' }).first().click()
+  await page
+    .getByRole('button', { name: /^Delete the saved search/ })
+    .first()
+    .click()
   await expect(page.getByLabel('Saved searches')).toHaveCount(0)
 })
 
 test('saving the same name twice updates rather than failing', async ({ page }) => {
   await page.goto('/?q=method%3AGET')
-  await page.getByRole('button', { name: 'Save search' }).click()
+  await page.getByRole('button', { name: 'Save this search' }).click()
   await page.getByLabel('Name this search').fill('tenants')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByTitle(/This search is saved/)).toHaveText('tenants')
 
   await page.goto('/?q=header%3AX-Tenant')
-  await page.getByRole('button', { name: 'Save search' }).click()
+  await page.getByRole('button', { name: 'Save this search' }).click()
   await page.getByLabel('Name this search').fill('tenants')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
 
@@ -71,7 +74,7 @@ test('saving the same name twice updates rather than failing', async ({ page }) 
 
 test('is offered in the palette, with the query it will run', async ({ page }) => {
   await page.goto('/?q=method%3ADELETE')
-  await page.getByRole('button', { name: 'Save search' }).click()
+  await page.getByRole('button', { name: 'Save this search' }).click()
   await page.getByLabel('Name this search').fill('deletes only')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByTitle(/This search is saved/)).toHaveText('deletes only')
@@ -92,7 +95,7 @@ test('an empty search is not offered a name', async ({ page }) => {
   // Saving "everything" is not worth a name.
   await page.goto('/')
   await expect(page.locator(ROW).first()).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Save search' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Save this search' })).toHaveCount(0)
 })
 
 test('the search box can be cleared without selecting the text', async ({ page }) => {
@@ -101,11 +104,11 @@ test('the search box can be cleared without selecting the text', async ({ page }
   await page.goto('/?q=method%3AGET+status%3A2xx')
   await expect(page.getByLabel('Search stubs')).toHaveValue('method:GET status:2xx')
 
-  await page.getByRole('button', { name: 'Clear the search' }).click()
+  await page.getByRole('button', { name: 'Clear the search (esc)' }).click()
   await expect(page.getByLabel('Search stubs')).toHaveValue('')
   await expect(page).not.toHaveURL(/[?&]q=/)
   // The control goes away with nothing to clear.
-  await expect(page.getByRole('button', { name: 'Clear the search' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Clear the search (esc)' })).toHaveCount(0)
 })
 
 test('escape clears the search box too', async ({ page }) => {
@@ -117,7 +120,7 @@ test('escape clears the search box too', async ({ page }) => {
 
 test('an applied search can be updated in place, or saved as a new one', async ({ page }) => {
   await page.goto('/?q=method%3AGET')
-  await page.getByRole('button', { name: 'Save search' }).click()
+  await page.getByRole('button', { name: 'Save this search' }).click()
   await page.getByLabel('Name this search').fill('reads')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByTitle(/This search is saved/)).toHaveText('reads')
@@ -128,14 +131,14 @@ test('an applied search can be updated in place, or saved as a new one', async (
   await page.getByLabel('Search stubs').fill('method:GET status:404')
   await page.getByLabel('Search stubs').press('Enter')
 
-  await expect(page.getByRole('button', { name: 'Update reads' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Update .reads./ })).toBeVisible()
   // And re-saving under a different name is still available, relabelled so the two are distinct.
-  await expect(page.getByRole('button', { name: 'Save as new' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Save as a new search' })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Update reads' }).click()
+  await page.getByRole('button', { name: /^Update .reads./ }).click()
   // Now it is the saved query, so the chip returns and Update has nothing to do.
   await expect(page.getByTitle(/This search is saved/)).toHaveText('reads')
-  await expect(page.getByRole('button', { name: 'Update reads' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^Update .reads./ })).toHaveCount(0)
 
   await page.goto('/?q=')
   await page.getByLabel('Saved searches').selectOption({ label: 'reads' })
@@ -146,13 +149,13 @@ test('Update is not offered for a query that was typed rather than recalled', as
   // It would have to guess which saved search the person meant, and guessing wrong overwrites
   // one they did not name.
   await page.goto('/?q=method%3APOST')
-  await page.getByRole('button', { name: 'Save search' }).click()
+  await page.getByRole('button', { name: 'Save this search' }).click()
   await page.getByLabel('Name this search').fill('writes')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
 
   await page.goto('/?q=method%3APUT')
-  await expect(page.getByRole('button', { name: /^Update/ })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Save search' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Update .*with the query/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Save this search' })).toBeVisible()
 })
 
 test('a search you just saved can be updated straight away', async ({ page }) => {
@@ -160,12 +163,12 @@ test('a search you just saved can be updated straight away', async ({ page }) =>
   // Without treating a save as an application, this offered only "Save search" and a name to
   // reinvent.
   await page.goto('/?q=method%3AGET')
-  await page.getByRole('button', { name: 'Save search' }).click()
+  await page.getByRole('button', { name: 'Save this search' }).click()
   await page.getByLabel('Name this search').fill('reads again')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByTitle(/This search is saved/)).toHaveText('reads again')
 
   await page.getByLabel('Search stubs').fill('method:GET status:404')
   await page.getByLabel('Search stubs').press('Enter')
-  await expect(page.getByRole('button', { name: 'Update reads again' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Update .reads again./ })).toBeVisible()
 })

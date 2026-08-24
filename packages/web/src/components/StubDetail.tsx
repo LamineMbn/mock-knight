@@ -7,6 +7,7 @@ import {
   Button,
   Chip,
   ErrorDisclosure,
+  IconButton,
   InferenceLabel,
   MethodChip,
   PriorityCell,
@@ -15,6 +16,7 @@ import {
   toFailure,
 } from './primitives.js'
 import type { Failure } from './primitives.js'
+import { Copy, Trash2, Undo2 } from 'lucide-react'
 import { ConflictDialog } from './ConflictDialog.js'
 import { duplicateMockDraft } from '@mock-knight/core/types'
 import { MatcherForm } from './MatcherForm.js'
@@ -588,14 +590,14 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
               <span style={{ flex: 1, fontSize: 12, color: 'var(--mk-text-secondary)' }}>
                 ⌘S save · esc discard
               </span>
-              <Button
+              <IconButton
+                icon={Undo2}
+                label="Discard unsaved changes (esc)"
                 onClick={() => {
                   setDraft(null)
                   setFormDraft(null)
                 }}
-              >
-                Discard
-              </Button>
+              />
               <Button variant="primary" disabled={save.isPending} onClick={attemptSave}>
                 {save.isPending || saveDraft.isPending ? 'Saving…' : 'Save'}
               </Button>
@@ -604,7 +606,11 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
             <>
               <span style={{ flex: 1 }} />
               {serverDraft !== null && (
-                <Button onClick={() => setDuplicating(serverDraft)}>Duplicate</Button>
+                <IconButton
+                  icon={Copy}
+                  label="Duplicate this stub"
+                  onClick={() => setDuplicating(serverDraft)}
+                />
               )}
               <DeleteButton
                 name={mock.name ?? mock.url?.value ?? 'this stub'}
@@ -665,9 +671,15 @@ function DeleteButton({
   const [typed, setTyped] = useState('')
   if (!arming) {
     return (
-      <Button onClick={() => setArming(true)} title={`Delete ${name}`}>
-        Delete…
-      </Button>
+      // The trigger is an icon; the confirm below keeps its word. A typed confirmation is the
+      // moment of commitment, and an icon there would be a guess at the point of writing to a
+      // server a whole team shares.
+      <IconButton
+        icon={Trash2}
+        variant="danger"
+        label={`Delete ${name}…`}
+        onClick={() => setArming(true)}
+      />
     )
   }
   return (

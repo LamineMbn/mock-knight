@@ -130,7 +130,7 @@ test('a server can be edited, and the form opens on that server', async ({ page 
   // Leave something half-typed in the add form first: the edit form must not inherit it.
   await page.getByLabel('Base URL', { exact: true }).fill('http://half-typed')
   const row = page.locator('main li').filter({ hasText: 'to be renamed' })
-  await row.getByRole('button', { name: 'Edit' }).click()
+  await row.getByRole('button', { name: /^Edit / }).click()
 
   await expect(page.getByLabel('Base URL', { exact: true })).toHaveValue(WIREMOCK)
   await page.getByLabel('Name', { exact: true }).fill('renamed in the ui')

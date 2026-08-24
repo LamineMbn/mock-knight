@@ -21,10 +21,13 @@ test.describe('with a light machine', () => {
 
   test('follows the OS until told otherwise, then holds the choice', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByLabel('Theme')).toHaveValue('system')
+    await expect(page.getByRole('button', { name: 'Follow this machine theme' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
     const lightCanvas = await canvas(page)
 
-    await page.getByLabel('Theme').selectOption('dark')
+    await page.getByRole('button', { name: 'Dark theme' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
     const darkCanvas = await canvas(page)
     expect(darkCanvas).not.toBe(lightCanvas)
@@ -33,14 +36,17 @@ test.describe('with a light machine', () => {
     // inline script before the bundle runs, so it is already correct on the very first paint.
     await page.reload()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-    await expect(page.getByLabel('Theme')).toHaveValue('dark')
+    await expect(page.getByRole('button', { name: 'Dark theme' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
     expect(await canvas(page)).toBe(darkCanvas)
   })
 
   test('back to system removes the attribute rather than pinning a colour', async ({ page }) => {
     await page.goto('/')
-    await page.getByLabel('Theme').selectOption('dark')
-    await page.getByLabel('Theme').selectOption('system')
+    await page.getByRole('button', { name: 'Dark theme' }).click()
+    await page.getByRole('button', { name: 'Follow this machine theme' }).click()
     // Writing data-theme="light" here would pin a dark machine to light, which is the opposite
     // of following the OS.
     await expect(page.locator('html')).not.toHaveAttribute('data-theme', /.*/)
@@ -52,10 +58,13 @@ test.describe('with a dark machine', () => {
 
   test('system means dark here, and light can still be forced', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByLabel('Theme')).toHaveValue('system')
+    await expect(page.getByRole('button', { name: 'Follow this machine theme' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
     const systemCanvas = await canvas(page)
 
-    await page.getByLabel('Theme').selectOption('light')
+    await page.getByRole('button', { name: 'Light theme' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
     expect(await canvas(page)).not.toBe(systemCanvas)
   })
@@ -66,7 +75,7 @@ test.describe('with a dark machine', () => {
     await page.goto('/')
     // Wait for the shell: querying computed styles before React has mounted finds no images at
     // all, which looks identical to "both are hidden".
-    await expect(page.getByLabel('Theme')).toBeVisible()
+    await expect(page.getByRole('group', { name: 'Theme' })).toBeVisible()
     const shown = async () =>
       page
         .locator('header img')
@@ -77,7 +86,7 @@ test.describe('with a dark machine', () => {
         )
     expect(await shown()).toEqual(['/brand/mock-knight-mark-dark.svg'])
 
-    await page.getByLabel('Theme').selectOption('light')
+    await page.getByRole('button', { name: 'Light theme' }).click()
     expect(await shown()).toEqual(['/brand/mock-knight-mark.svg'])
   })
 })

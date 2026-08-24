@@ -61,11 +61,11 @@ test('an unsaved edit is marked, and discard restores the loaded document', asyn
   const original = await editor.inputValue()
   await editor.fill(original.replace(/"status":\s*404/, '"status": 503'))
 
-  await expect(page.getByLabel('unsaved changes')).toBeVisible()
-  await page.getByRole('button', { name: 'Discard' }).click()
+  await expect(page.getByLabel('unsaved changes', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Discard unsaved changes (esc)' }).click()
 
   expect(await editor.inputValue()).toBe(original)
-  await expect(page.getByLabel('unsaved changes')).toHaveCount(0)
+  await expect(page.getByLabel('unsaved changes', { exact: true })).toHaveCount(0)
   // Nothing reached the server.
   expect(customers(await mappings())?.response?.status).toBe(404)
 })
@@ -119,7 +119,7 @@ test('a concurrent edit produces a merge, not a lost update', async ({ page }) =
 
 test('deleting needs the stub named back', async ({ page }) => {
   await openRawEditor(page)
-  await page.getByRole('button', { name: 'Delete…' }).click()
+  await page.getByRole('button', { name: /^Delete .*…$/ }).click()
 
   const confirm = page.getByRole('button', { name: 'Delete', exact: true })
   await expect(confirm).toBeDisabled()
@@ -146,7 +146,7 @@ test('a stub created from an unmatched request makes that request match', async 
 
   await page.goto('/?screen=traffic')
   const row = page.locator('tbody tr').filter({ hasText: '/v1/somewhere-new' }).first()
-  await row.getByRole('button', { name: 'Why?' }).click()
+  await row.getByRole('button', { name: /^Why didn't / }).click()
 
   const explainer = page.getByRole('dialog', { name: "Why didn't this match?" })
   await expect(explainer).toBeVisible()
@@ -197,7 +197,7 @@ test('the tightest setting pins the discriminating header but never a credential
     .locator('tbody tr')
     .filter({ hasText: '/v1/secured' })
     .first()
-    .getByRole('button', { name: 'Why?' })
+    .getByRole('button', { name: /^Why didn't / })
     .click()
   await page
     .getByRole('dialog', { name: "Why didn't this match?" })
@@ -283,7 +283,7 @@ test('the two edit channels lock each other rather than disagreeing silently', a
   await expect(page.getByLabel('Raw JSON')).toHaveAttribute('readonly', '')
 
   // Discarding releases the lock.
-  await page.getByRole('button', { name: 'Discard' }).click()
+  await page.getByRole('button', { name: 'Discard unsaved changes (esc)' }).click()
   await expect(page.getByLabel('Raw JSON')).not.toHaveAttribute('readonly', '')
 })
 
@@ -380,7 +380,8 @@ test('the unsaved dot marks the tab that actually changed', async ({ page }) => 
   await openResponse(page, 'url:/v1/customers')
   await page.getByLabel('Status code').fill('418')
 
-  const dot = (name: string) => page.getByRole('tab', { name }).getByLabel('unsaved changes')
+  const dot = (name: string) =>
+    page.getByRole('tab', { name }).getByLabel('unsaved changes', { exact: true })
   await expect(dot('Response')).toBeVisible()
   await expect(dot('Matcher')).toHaveCount(0)
 
@@ -421,8 +422,8 @@ test('duplicating keeps fields no form can show, and warns about the contest it 
   await page.goto('/?q=method%3ADELETE')
   await expect(page.locator(ROW)).toHaveCount(1)
   await page.locator(ROW).first().click()
-  await expect(page.getByRole('button', { name: 'Duplicate' })).toBeVisible()
-  await page.getByRole('button', { name: 'Duplicate' }).click()
+  await expect(page.getByRole('button', { name: 'Duplicate this stub' })).toBeVisible()
+  await page.getByRole('button', { name: 'Duplicate this stub' }).click()
 
   const dialog = page.getByRole('dialog', { name: 'Duplicate this stub' })
   // A copy matches the same requests by definition, so it lands in a priority contest at once.

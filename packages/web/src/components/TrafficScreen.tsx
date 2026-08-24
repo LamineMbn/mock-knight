@@ -3,7 +3,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api.js'
 import type { JournalFilters, Profile, ServeEventRow } from '../api.js'
 import { MatchExplainer } from './MatchExplainer.js'
-import { Button, MethodChip, MiddleEllipsis, Skeleton, StatusCode } from './primitives.js'
+import { Eye, EyeOff, ExternalLink, FilterX, HelpCircle, Trash2 } from 'lucide-react'
+import {
+  Button,
+  IconButton,
+  MethodChip,
+  MiddleEllipsis,
+  Skeleton,
+  StatusCode,
+} from './primitives.js'
 
 /**
  * The traffic log — design brief §6.5.
@@ -254,8 +262,10 @@ function Row({
               stub is gone. Clicking refreshes first and then opens it, which resolves the
               common case outright; if it is genuinely deleted, the detail pane says so.
             */
-            <Button
+            <IconButton
+              icon={ExternalLink}
               variant="quiet"
+              label={`Open the stub that answered ${event.method ?? ''} ${event.url ?? ''}`}
               onClick={() =>
                 // The resolved key where we have one — after an import that is the stub with the
                 // same behaviour, not the id the event recorded. Falling back to the recorded id
@@ -265,24 +275,17 @@ function Row({
                   event.resolvedStubKey === null,
                 )
               }
-              title={
-                event.resolvedStubKey !== null
-                  ? `Open the stub that answered ${event.method ?? ''} ${event.url ?? ''}`
-                  : 'The mirror cannot place this stub. Opening it refreshes from the server first.'
-              }
-            >
-              stub ↗
-            </Button>
+            />
           )
         ) : (
-          <Button
+          <IconButton
+            icon={HelpCircle}
             variant="quiet"
             onClick={() => onExplain(event.id)}
-            // 30 buttons all named "Why?" tell a screen-reader user nothing about which is which.
-            title={`Why didn't ${event.method ?? ''} ${event.url ?? ''} at ${new Date(event.at).toLocaleTimeString()} match?`}
-          >
-            Why?
-          </Button>
+            // 30 buttons all named the same tell a screen-reader user nothing about which is
+            // which, so each carries its own request *and* its time.
+            label={`Why didn't ${event.method ?? ''} ${event.url ?? ''} at ${new Date(event.at).toLocaleTimeString()} match?`}
+          />
         )}
       </td>
     </tr>
@@ -511,9 +514,12 @@ export function TrafficScreen({
         )}
 
         {narrowed && (
-          <Button variant="quiet" onClick={() => setFilters(NO_FILTERS)}>
-            Clear filters
-          </Button>
+          <IconButton
+            icon={FilterX}
+            variant="quiet"
+            label="Clear filters"
+            onClick={() => setFilters(NO_FILTERS)}
+          />
         )}
 
         {/* Held arrivals are counted and visible — never a silent freeze, never a yanked viewport. */}
@@ -532,17 +538,20 @@ export function TrafficScreen({
           is beside it, and says so.
         */}
         {visible.length > 0 && (
-          <Button
+          <IconButton
+            icon={EyeOff}
             variant="quiet"
+            label="Clear view — hide what is on screen without touching the server"
             onClick={() => setDismissed(new Set(displayed.map((event) => event.id)))}
-          >
-            Clear view
-          </Button>
+          />
         )}
         {hiddenCount > 0 && (
-          <Button variant="quiet" onClick={() => setDismissed(new Set())}>
-            Show {hiddenCount} hidden
-          </Button>
+          <IconButton
+            icon={Eye}
+            variant="quiet"
+            label={`Show ${hiddenCount} hidden ${hiddenCount === 1 ? 'request' : 'requests'}`}
+            onClick={() => setDismissed(new Set())}
+          />
         )}
 
         <span style={{ flex: 1 }} />
@@ -611,7 +620,12 @@ export function TrafficScreen({
                 </button>
               </span>
             ) : (
-              <Button onClick={() => setConfirmingClear(true)}>Clear journal…</Button>
+              <IconButton
+                icon={Trash2}
+                variant="danger"
+                label="Clear the request journal…"
+                onClick={() => setConfirmingClear(true)}
+              />
             )}
           </>
         )}

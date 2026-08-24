@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api.js'
 import type { CapabilityRow, NewProfile, Profile } from '../api.js'
 import { ServerForm } from './ServerForm.js'
-import { Button, Chip, Skeleton, toFailure } from './primitives.js'
+import { LogIn, Pencil, Trash2 } from 'lucide-react'
+import { Button, Chip, IconButton, Skeleton, toFailure } from './primitives.js'
 import type { Failure } from './primitives.js'
 
 /**
@@ -333,13 +334,25 @@ export function ProfilesScreen({
             {profile.id === active.id ? (
               <Chip tone="accent">active</Chip>
             ) : (
-              <Button variant="quiet" onClick={() => onSelect(profile.id)}>
-                Switch
-              </Button>
+              <IconButton
+                icon={LogIn}
+                variant="quiet"
+                label={`Switch to ${profile.name}`}
+                onClick={() => onSelect(profile.id)}
+              />
             )}
-            <Button onClick={() => setEditing(profile.id)}>Edit</Button>
+            <IconButton
+              icon={Pencil}
+              label={`Edit ${profile.name}`}
+              onClick={() => setEditing(profile.id)}
+            />
             {profiles.length > 1 && profile.id !== active.id && (
-              <Button onClick={() => remove.mutate(profile.id)}>Remove</Button>
+              <IconButton
+                icon={Trash2}
+                variant="danger"
+                label={`Remove ${profile.name}`}
+                onClick={() => remove.mutate(profile.id)}
+              />
             )}
           </li>
         ))}

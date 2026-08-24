@@ -98,7 +98,7 @@ test('a destructive action navigates to its confirmation instead of running', as
   // On Traffic, with the control present and *not* yet triggered — the palette is a way to
   // reach the action, not a way around its typed confirmation.
   await expect(page).toHaveURL(/screen=traffic/)
-  await expect(page.getByRole('button', { name: 'Clear journal…' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Clear the request journal…' })).toBeVisible()
   await expect(page.getByLabel(/Type the profile name/)).toHaveCount(0)
 })
 
@@ -138,7 +138,7 @@ test('switches server, and does not offer the one already active', async ({ page
 test.describe('discoverability', () => {
   test('the top bar advertises the palette and opens it', async ({ page }) => {
     await page.goto('/')
-    const control = page.getByRole('button', { name: /Search/ }).first()
+    const control = page.getByRole('button', { name: /Command palette/ }).first()
     await expect(control).toBeVisible()
     // Names a modifier that works on this platform. Printing the wrong one would send someone
     // to a key combination that does nothing on the machine in front of them.

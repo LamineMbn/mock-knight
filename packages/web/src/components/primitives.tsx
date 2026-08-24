@@ -559,3 +559,87 @@ export function toFailure(caught: unknown, fallback: string): Failure {
     (caught instanceof Error && caught.message !== '' ? caught.message : fallback)
   return { sentence, payload }
 }
+
+/**
+ * A button that is an icon, with its words on hover.
+ *
+ * Density is the point: a toolbar of five verbs eats the width the corpus needs, and these are
+ * actions people repeat all day rather than read once. `label` is not optional and is not
+ * decoration — it becomes the accessible name *and* the tooltip, so the button is never a
+ * shape with no meaning.
+ *
+ * **Not for commitments.** A title attribute is invisible to a keyboard user until focus lands
+ * and invisible to touch entirely, so the moment of "yes, do it" keeps its words: the confirm
+ * inside a typed confirmation, and the primary action of a dialog. An icon-only Save reads as a
+ * guess, and a guess is a bad thing to take at the point of writing to a server a team shares.
+ */
+export function IconButton({
+  icon: Icon,
+  label,
+  onClick,
+  variant = 'secondary',
+  disabled,
+  pressed,
+}: {
+  icon: (props: { size?: number; 'aria-hidden'?: boolean }) => ReactNode
+  /** The words. Used as the accessible name and the tooltip; never omitted. */
+  label: string
+  onClick?: () => void
+  variant?: 'primary' | 'secondary' | 'ghost' | 'quiet' | 'danger'
+  disabled?: boolean
+  /** For a toggle. Rendered as `aria-pressed`, not left to colour alone. */
+  pressed?: boolean
+}) {
+  const styles: Record<string, CSSProperties> = {
+    primary: {
+      background: 'var(--mk-accent-solid)',
+      color: 'var(--mk-accent-on-solid)',
+      border: '1px solid var(--mk-accent-solid)',
+    },
+    secondary: {
+      background: 'var(--mk-bg-surface)',
+      color: 'var(--mk-text-primary)',
+      border: '1px solid var(--mk-border-strong)',
+    },
+    ghost: {
+      background: 'transparent',
+      color: 'var(--mk-text-secondary)',
+      border: '1px solid transparent',
+    },
+    quiet: {
+      background: 'transparent',
+      color: 'var(--mk-accent-text)',
+      border: '1px solid var(--mk-border-default)',
+    },
+    danger: {
+      background: 'var(--mk-bg-surface)',
+      color: 'var(--mk-danger-text)',
+      border: '1px solid var(--mk-danger-border)',
+    },
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      {...(pressed === undefined ? {} : { 'aria-pressed': pressed })}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        // 26 square: the row density elsewhere, and above the 24px minimum target in §8.
+        width: 26,
+        height: 26,
+        padding: 0,
+        borderRadius: 'var(--mk-radius-sm)',
+        cursor: disabled === true ? 'not-allowed' : 'pointer',
+        opacity: disabled === true ? 0.5 : 1,
+        ...styles[pressed === true ? 'primary' : variant],
+      }}
+    >
+      <Icon size={14} aria-hidden={true} />
+    </button>
+  )
+}

@@ -8,6 +8,7 @@ import { CorpusList } from './components/CorpusList.js'
 import { NewStub } from './components/NewStub.js'
 import { SavedSearches } from './components/SavedSearches.js'
 import { CommandPalette } from './components/CommandPalette.js'
+import { CircleHelp, Monitor, Moon, Plus, RefreshCw, Search, Sun, X } from 'lucide-react'
 import { Shortcuts, modifierKey } from './components/Shortcuts.js'
 import { THEMES, applyTheme, readTheme, writeTheme } from './theme.js'
 import type { Theme } from './theme.js'
@@ -19,7 +20,7 @@ import { ScenariosScreen } from './components/ScenariosScreen.js'
 import { ProfilesScreen } from './components/ProfilesScreen.js'
 import { ProfileSwitcher } from './components/ProfileSwitcher.js'
 import { FirstRun } from './components/FirstRun.js'
-import { Button, Chip } from './components/primitives.js'
+import { Button, Chip, IconButton } from './components/primitives.js'
 
 /**
  * The app shell and the Corpus screen — design brief §6.1 and §6.2.
@@ -450,26 +451,9 @@ export function App() {
                   structured queries this box is for.
                 */}
                 {draft !== '' && (
-                  <button
-                    type="button"
-                    onClick={clearSearch}
-                    aria-label="Clear the search"
-                    title="Clear the search (esc)"
-                    style={{
-                      width: 30,
-                      height: 30,
-                      flex: '0 0 30px',
-                      font: 'inherit',
-                      fontSize: 14,
-                      cursor: 'pointer',
-                      color: 'var(--mk-text-secondary)',
-                      background: 'var(--mk-bg-surface)',
-                      border: '1px solid var(--mk-border-strong)',
-                      borderRadius: 'var(--mk-radius-sm)',
-                    }}
-                  >
-                    ×
-                  </button>
+                  <span style={{ flex: '0 0 auto' }}>
+                    <IconButton icon={X} label="Clear the search (esc)" onClick={clearSearch} />
+                  </span>
                 )}
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 6 }}>
@@ -536,7 +520,9 @@ export function App() {
                 color: 'var(--mk-text-tertiary)',
               }}
             >
-              {!profile.readOnly && <Button onClick={() => setCreating(true)}>New stub</Button>}
+              {!profile.readOnly && (
+                <IconButton icon={Plus} label="New stub" onClick={() => setCreating(true)} />
+              )}
               <span className="mk-tabular">
                 {corpus.data?.total ?? 0} stubs
                 {corpus.data !== undefined && corpus.data.total > corpus.data.items.length
@@ -715,6 +701,7 @@ function TopBar({
       <button
         type="button"
         onClick={onPalette}
+        aria-label="Command palette — every action, screen, server and stub"
         title="Command palette — every action, screen, server and stub"
         style={{
           display: 'inline-flex',
@@ -731,56 +718,72 @@ function TopBar({
           borderRadius: 'var(--mk-radius-sm)',
         }}
       >
-        Search
+        <Search size={13} aria-hidden="true" />
         <kbd style={{ font: 'inherit', fontSize: 11, color: 'var(--mk-text-tertiary)' }}>
           {modifierKey()}K
         </kbd>
       </button>
 
-      <select
-        aria-label="Theme"
-        value={theme}
-        onChange={(event) => onTheme(event.target.value as Theme)}
-        title="Light, dark, or whatever this machine is set to"
-        style={{
-          height: 26,
-          padding: '0 4px',
-          font: 'inherit',
-          fontSize: 12,
-          color: 'var(--mk-text-secondary)',
-          background: 'var(--mk-bg-surface)',
-          border: '1px solid var(--mk-border-default)',
-          borderRadius: 'var(--mk-radius-sm)',
-        }}
-      >
-        <option value="system">System</option>
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-      </select>
+      <div role="group" aria-label="Theme" style={{ display: 'flex' }}>
+        {(
+          [
+            ['system', Monitor, 'Follow this machine'],
+            ['light', Sun, 'Light'],
+            ['dark', Moon, 'Dark'],
+          ] as const
+        ).map(([value, Icon, label], index) => {
+          const active = theme === value
+          return (
+            <button
+              key={value}
+              type="button"
+              aria-label={`${label} theme`}
+              aria-pressed={active}
+              title={`${label} theme`}
+              onClick={() => onTheme(value)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 28,
+                height: 26,
+                padding: 0,
+                cursor: 'pointer',
+                color: active ? 'var(--mk-text-primary)' : 'var(--mk-text-tertiary)',
+                background: active ? 'var(--mk-bg-emphasis)' : 'var(--mk-bg-surface)',
+                border: '1px solid var(--mk-border-default)',
+                borderLeftWidth: index === 0 ? 1 : 0,
+                // Selection is a filled cell *and* an underline, not a shade: the app's own rule
+                // is that state never travels by colour alone, and with the labels reduced to
+                // icons the underline is what remains legible to someone who cannot see the fill.
+                borderBottom: `2px solid ${active ? 'var(--mk-accent-solid)' : 'var(--mk-border-default)'}`,
+                borderRadius:
+                  index === 0
+                    ? 'var(--mk-radius-sm) 0 0 var(--mk-radius-sm)'
+                    : index === 2
+                      ? '0 var(--mk-radius-sm) var(--mk-radius-sm) 0'
+                      : 0,
+              }}
+            >
+              <Icon size={14} aria-hidden="true" />
+            </button>
+          )
+        })}
+      </div>
 
-      <button
-        type="button"
+      <IconButton
+        icon={CircleHelp}
+        label="Keyboard shortcuts (?)"
+        variant="ghost"
         onClick={onShortcuts}
-        aria-label="Keyboard shortcuts"
-        title="Keyboard shortcuts (?)"
-        style={{
-          width: 26,
-          height: 26,
-          font: 'inherit',
-          fontSize: 13,
-          cursor: 'pointer',
-          color: 'var(--mk-text-secondary)',
-          background: 'transparent',
-          border: '1px solid var(--mk-border-default)',
-          borderRadius: 'var(--mk-radius-sm)',
-        }}
-      >
-        ?
-      </button>
+      />
 
-      <Button onClick={onRefresh} disabled={refreshing}>
-        {refreshing ? 'Refreshing…' : 'Refresh'}
-      </Button>
+      <IconButton
+        icon={RefreshCw}
+        label={refreshing ? 'Refreshing the corpus…' : 'Refresh the corpus'}
+        onClick={onRefresh}
+        disabled={refreshing}
+      />
     </header>
   )
 }
