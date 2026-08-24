@@ -13,8 +13,8 @@ Mock Knight connects to a mock server you already run and helps you **find** a s
 thousands, **understand** why a request didn't match it, and **change** it safely on a server
 your whole team shares.
 
-It is **not a mock server**. It never serves mock traffic. Point it at your WireMock and it
-gives you a UI; stop it and your mocks carry on exactly as before.
+It is **not a mock server**. It never serves mock traffic. Point it at your WireMock or
+MockServer and it gives you a UI; stop it and your mocks carry on exactly as before.
 
 ```bash
 npx mock-knight --url http://localhost:8080
@@ -138,7 +138,14 @@ over the file** — a flag is what you typed just now.
 |---|---|
 | **WireMock 3.x** | Supported. Read, write, journal, scenarios, near-miss |
 | WireMock 2.x | Read paths work; some admin routes are probed and gracefully absent |
-| MockServer, Hoverfly, Mockoon, Prism | Not yet — the adapter contract was designed for them, but only WireMock is implemented |
+| **MockServer** | Supported. Read and write. No traffic log and no scenarios — it records no attribution for a served request and has no named states, so both screens are absent rather than empty |
+| Hoverfly, Mockoon, Prism | Not yet — the adapter contract was designed for them |
+
+Pick one with `--adapter`, or per server on the Servers screen:
+
+```bash
+npx mock-knight --url http://localhost:1080 --adapter mockserver
+```
 
 Mock Knight probes each server on connect and derives a **capability set**. A capability that is
 off means the control is *absent*, never a button that fails when you press it. The Servers

@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.5.0
+
+### Added
+
+- **A second backend: MockServer.** Selectable from the Servers screen and with `--adapter
+  mockserver`. It exists to prove the adapter contract is a contract rather than a description
+  of WireMock — the same conformance suite runs against both, and the one test that failed had
+  been asserting on a stub's *name*, which MockServer has no concept of. That was the suite's
+  WireMock habit, not a MockServer gap, and it is fixed in the contract.
+
+  The traffic log and scenarios are absent on a MockServer profile, not disabled: it records no
+  attribution for a served request and has no named states, so both screens would be empty by
+  construction.
+
+- **Each server is marked with the backend it is**, beside its name — in the switcher open and
+  closed, the Servers list, and the command palette. An address says nothing about what is on
+  the other end, and the two backends differ in what they can answer.
+
+  Drop an SVG in `packages/web/public/backends/<adapter id>.svg` to use a real logo, and
+  `<id>-dark.svg` beside it for the dark theme. A backend with no file shows a two-letter mark.
+
+### Fixed
+
+- **It reconnects on its own.** A connection was opened at startup for the server named on the
+  command line, and by an explicit Refresh — nowhere else. So switching to any other server, or
+  starting while the target was still down, left "reconnecting…" on the badge indefinitely with
+  nothing reconnecting behind it. Clicking Refresh was the only way out, which had quietly made
+  a status badge into a control.
+
+  Attempts now happen when the UI asks after a profile's health, on a 0/2/5/15/30s backoff, and
+  the browser polls only while disconnected. The badge says what is true: "connecting…" while an
+  attempt is outstanding, "unreachable" with the transport message once one has failed. A server
+  that comes back is picked up within seconds, corpus included, with nothing to click.
+
+- **An unreachable server is no longer reported as an empty one.** The corpus read "This server
+  has no stubs yet" and offered "Create the first stub" for a server nobody had reached —
+  stating as fact something unchecked, and offering a button that could only fail. It names the
+  address it cannot reach and why.
+
+- **The backend mark never flashes a broken image.** Whether a logo file exists is answered by
+  the server rather than probed by the browser, which was requesting a known-missing file on
+  every render of a list that remounts on every keystroke.
+
 ## 0.4.0
 
 ### Fixed

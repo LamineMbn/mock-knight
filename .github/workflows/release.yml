@@ -30,6 +30,11 @@ jobs:
             exit 1
           }
 
+      # The Release body comes from CHANGELOG.md, so a missing section means a release page
+      # with nothing on it. Cheaper to catch here than to edit the release afterwards.
+      - name: The changelog has a section for this version
+        run: node scripts/changelog-section.mjs "${GITHUB_REF_NAME#v}" --check
+
       # npm granular access tokens expire — 90 days by default, a year at most. The failure
       # that costs real time is discovering that at the publish step, after the whole suite has
       # run and the tag is already public. `whoami` answers it immediately.
@@ -63,6 +68,10 @@ jobs:
       id-token: write # npm provenance
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Tags, for the "compare with the previous release" link. The default shallow clone
+          # fetches none, so `git tag --list` comes back empty and the link disappears silently.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -97,12 +106,28 @@ jobs:
           # `repository` field in package.json to agree with them.
           pnpm --filter mock-knight publish --access public --no-git-checks --provenance
 
+      # The body is the changelog entry, not `--generate-notes`.
+      #
+      # `--generate-notes` summarises the pull requests merged since the last tag. Work lands
+      # here as commits on main, so there are none, and every release page read "Full Changelog:
+      # v0.3.0...v0.4.0" and nothing else — while the notes someone had written sat in
+      # CHANGELOG.md. The compare link is still worth having, so it is appended by hand.
       - name: Attach the tarball to a GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           pnpm --filter mock-knight pack --pack-destination dist-pack
+
+          node scripts/changelog-section.mjs "${GITHUB_REF_NAME#v}" > release-notes.md
+          previous=$(git tag --list 'v*' --sort=-version:refname | grep -v "^$GITHUB_REF_NAME$" | head -1)
+          if [ -n "$previous" ]; then
+            {
+              echo
+              echo "**Full changelog**: https://github.com/${{ github.repository }}/compare/$previous...$GITHUB_REF_NAME"
+            } >> release-notes.md
+          fi
+
           gh release create "$GITHUB_REF_NAME" dist-pack/*.tgz \
             --title "$GITHUB_REF_NAME" \
-            --generate-notes \
+            --notes-file release-notes.md \
             --verify-tag
