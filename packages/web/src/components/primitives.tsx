@@ -660,24 +660,27 @@ export function BackendBadge({
   shortName,
   displayName,
   id,
+  logoUrl = null,
+  logoDarkUrl = null,
 }: {
   shortName: string
   displayName: string
   id: string
+  logoUrl?: string | null
+  logoDarkUrl?: string | null
 }) {
   /**
    * A real logo if one has been dropped in, a lettermark otherwise.
    *
-   * The path is a convention — `public/backends/<adapter id>.svg` — so adding a backend's mark
-   * is putting a file in a folder, with no code to change and nothing to register. See the
-   * README there for what may legitimately go in it.
+   * `logoUrl` is decided server-side from the convention `public/backends/<adapter id>.svg`, so
+   * adding a backend's mark is putting a file in a folder — no code to change, nothing to
+   * register. `<adapter id>-dark.svg` beside it is swapped in on the dark theme, because a
+   * single-colour mark legible on white usually vanishes on it. See the README there.
    *
    * No logo ships with this repo on purpose: an approximation of someone else's trademark is
    * worse than none, and their real files are theirs to license. `WM` and `MS` distinguish two
    * backends without claiming to be anybody's brand.
    */
-  const [logoFailed, setLogoFailed] = useState(false)
-
   // Existing profile-colour tokens rather than new ones: the palette is already contrast-checked
   // in both themes, and inventing a colour here would break the literal-colour rule.
   const tints = ['indigo', 'cyan', 'violet', 'olive', 'rose', 'slate'] as const
@@ -685,18 +688,29 @@ export function BackendBadge({
   for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) >>> 0
   const tint = tints[hash % tints.length]!
 
-  if (!logoFailed) {
+  if (logoUrl !== null) {
+    // Both variants are rendered and CSS picks one, the same way the app's own mark swaps. No
+    // JS theme state is involved, so it is right on the first paint and follows the OS while
+    // the theme control is on "system".
     return (
-      <img
-        src={`/backends/${id}.svg`}
-        alt={displayName}
-        title={displayName}
-        width={16}
-        height={16}
-        // Falls back the moment the file is absent, which is the normal case in this repo.
-        onError={() => setLogoFailed(true)}
-        style={{ flex: '0 0 auto', display: 'block', objectFit: 'contain' }}
-      />
+      <>
+        <img
+          className={logoDarkUrl === null ? 'mk-backend-logo' : 'mk-backend-logo mk-mark-light'}
+          src={logoUrl}
+          alt={displayName}
+          title={displayName}
+          height={16}
+        />
+        {logoDarkUrl !== null && (
+          <img
+            className="mk-backend-logo mk-mark-dark"
+            src={logoDarkUrl}
+            alt={displayName}
+            title={displayName}
+            height={16}
+          />
+        )}
+      </>
     )
   }
 
@@ -728,10 +742,15 @@ export function BackendBadge({
 }
 
 /** Look a backend up by id, for the badge. Unknown ids still render, marked as unknown. */
-export function backendOf(
-  adapters: readonly { id: string; displayName: string; shortName: string }[],
-  id: string,
-): { id: string; displayName: string; shortName: string } {
+export interface BackendIdentity {
+  id: string
+  displayName: string
+  shortName: string
+  logoUrl: string | null
+  logoDarkUrl: string | null
+}
+
+export function backendOf(adapters: readonly BackendIdentity[], id: string): BackendIdentity {
   return (
     adapters.find((candidate) => candidate.id === id) ?? {
       id,
@@ -739,6 +758,8 @@ export function backendOf(
       // config file from a colleague. Saying so beats rendering nothing at all.
       displayName: `${id} (not available in this build)`,
       shortName: '??',
+      logoUrl: null,
+      logoDarkUrl: null,
     }
   )
 }

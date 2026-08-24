@@ -238,11 +238,16 @@ test('each server is marked with the backend it is, beside its name', async ({ p
   // and the two differ enough to matter: one has a traffic log and scenarios, the other does not.
   await page.goto('/?screen=profiles')
   const row = page.locator('main li').filter({ hasText: WIREMOCK }).first()
-  // The lettermark: no logo files ship with this repo, because they are other projects' marks.
   await expect(row.getByRole('img', { name: /WireMock/ })).toBeVisible()
 
-  // In the switcher too, where servers are actually chosen between.
-  await page.getByRole('button', { name: /Profile: / }).click()
+  // On the **closed** switcher, which is what is on screen the rest of the time. It carried no
+  // mark at first: the badge was only drawn in the open list, which is the one moment you
+  // already know which server you picked.
+  const trigger = page.getByRole('button', { name: /Profile: / })
+  await expect(trigger.getByRole('img', { name: /WireMock/ })).toBeVisible()
+
+  // And in the open list, where servers are actually chosen between.
+  await trigger.click()
   await expect(
     page
       .getByRole('listbox')
@@ -251,10 +256,34 @@ test('each server is marked with the backend it is, beside its name', async ({ p
   ).toBeVisible()
 })
 
+test('the backend mark is a logo where one exists, and never a broken image', async ({ page }) => {
+  // The badge used to request `/backends/<id>.svg` and fall back on the 404. Badges live in
+  // lists that remount on every keystroke, so that showed a broken-image glyph and re-requested
+  // a known-missing file on every render. The server decides now, so the browser only ever asks
+  // for a file that is there.
+  const missed: string[] = []
+  page.on('response', (response) => {
+    if (response.url().includes('/backends/') && response.status() === 404) {
+      missed.push(response.url())
+    }
+  })
+
+  await page.goto('/?screen=profiles')
+  const mark = page
+    .locator('main li')
+    .filter({ hasText: WIREMOCK })
+    .first()
+    .getByRole('img', { name: /WireMock/ })
+  await expect(mark).toBeVisible()
+  // A logo that failed to load reports naturalWidth 0, which is exactly the broken glyph.
+  expect(await mark.evaluate((node) => (node as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+  expect(missed).toEqual([])
+})
+
 test('a missing asset is a 404, not the app shell with a 200', async ({ page }) => {
   // The SPA catch-all used to answer every unmatched path with index.html, so a missing image
   // came back as HTML and the browser complained about the file rather than about the 404.
-  const logo = await page.request.get('/backends/wiremock.svg')
+  const logo = await page.request.get('/backends/no-such-backend.svg')
   expect(logo.status()).toBe(404)
   // A client-side route still gets the shell — it has no extension, a file does.
   const route = await page.request.get('/some/deep/route')

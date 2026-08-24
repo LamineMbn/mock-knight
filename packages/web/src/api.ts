@@ -92,6 +92,16 @@ export interface AdapterDescriptor {
   shortName: string
   /** Previewed while someone is still typing, before any connection exists. */
   defaultAdminPath: string
+  /**
+   * The backend's logo, or `null` when no file has been dropped in for it.
+   *
+   * Answered by the server, which can see the asset directory, rather than by the browser
+   * requesting a URL and reacting to the 404 — badges live in lists that remount constantly, so
+   * probing meant a broken-image glyph and a repeated request on every render.
+   */
+  logoUrl: string | null
+  /** A variant for the dark theme, when one has been dropped in beside the light one. */
+  logoDarkUrl: string | null
 }
 
 export interface NewProfile {

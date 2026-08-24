@@ -20,7 +20,7 @@ import { ScenariosScreen } from './components/ScenariosScreen.js'
 import { ProfilesScreen } from './components/ProfilesScreen.js'
 import { ProfileSwitcher } from './components/ProfileSwitcher.js'
 import { FirstRun } from './components/FirstRun.js'
-import { Button, Chip, IconButton } from './components/primitives.js'
+import { Button, Chip, IconButton, backendOf } from './components/primitives.js'
 
 /**
  * The app shell and the Corpus screen — design brief §6.1 and §6.2.
@@ -196,6 +196,8 @@ export function App() {
   // Memoised because `?? []` is a fresh array every render, which made the command list below
   // recompute on each one — the dependency was never actually stable.
   const savedSearches = useMemo(() => searches.data?.searches ?? [], [searches.data])
+  const adapterList = useQuery({ queryKey: ['adapters'], queryFn: api.adapters })
+  const adapterKinds = useMemo(() => adapterList.data?.adapters ?? [], [adapterList.data])
 
   const commands = useMemo<Command[]>(() => {
     if (profile === undefined) return []
@@ -277,10 +279,11 @@ export function App() {
           section: 'Switch profile',
           hint: candidate.baseUrl,
           colour: candidate.colour,
+          backend: backendOf(adapterKinds, candidate.adapter),
           run: () => setUrlState({ profileId: candidate.id, query: '', selectedKey: null }),
         })),
     ]
-  }, [profile, screen, all, setUrlState, refresh, savedSearches, theme, chooseTheme])
+  }, [profile, screen, all, setUrlState, refresh, savedSearches, theme, chooseTheme, adapterKinds])
 
   /**
    * Which facet tokens are on, read from the URL rather than from the server's echoed plan.

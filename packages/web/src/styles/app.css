@@ -68,6 +68,24 @@ body {
   }
 }
 
+/*
+ * A backend's logo beside a server address. Height is fixed and width is not: a logo is whatever
+ * aspect ratio its owner drew it at, and `contain` keeps that ratio when a wide wordmark reaches
+ * the cap.
+ *
+ * `display` is set here rather than inline, and this block sits **before** the mark-swap rules
+ * below, so `.mk-mark-dark { display: none }` still wins at equal specificity. With it after,
+ * the light theme drew both variants at once.
+ */
+.mk-backend-logo {
+  display: block;
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 44px;
+  height: 16px;
+  object-fit: contain;
+}
+
 /* The mark swaps with the theme rather than being recoloured with a filter. */
 .mk-mark-dark {
   display: none;

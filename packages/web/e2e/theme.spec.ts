@@ -78,7 +78,9 @@ test.describe('with a dark machine', () => {
     await expect(page.getByRole('group', { name: 'Theme' })).toBeVisible()
     const shown = async () =>
       page
-        .locator('header img')
+        // Scoped to the brand assets: a backend logo is also an image in the header, and it
+        // swaps on the same rules without being the thing under test here.
+        .locator('header img[src^="/brand/"]')
         .evaluateAll((nodes) =>
           nodes
             .filter((node) => getComputedStyle(node).display !== 'none')

@@ -80,6 +80,9 @@ export function ProfileSwitcher({
         }}
       >
         <Dot colour={active.colour} connected={connected} />
+        {/* The closed switcher is what is on screen the other 99% of the time — knowing which
+            kind of server you are looking at should not require opening the list. */}
+        <BackendBadge {...backendOf(kinds, active.adapter)} />
         <span style={{ fontWeight: 500 }}>{active.name}</span>
         {active.protected && <Chip tone="warning">protected</Chip>}
         {active.readOnly && <Chip>read-only</Chip>}

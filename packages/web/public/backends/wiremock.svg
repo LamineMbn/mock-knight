@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1024"
+     height="385"
+     viewBox="0 0 1024 385"
+     role="img"
+     aria-labelledby="title desc">
+  <title id="title">Blue and orange WM mark</title>
+  <desc id="desc">A geometric blue W joined diagonally to a geometric orange M on a transparent background.</desc>
+
+  <defs>
+    <linearGradient id="orange" x1="423" y1="193" x2="1024" y2="193" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F59121"/>
+      <stop offset="0.72" stop-color="#F59121"/>
+      <stop offset="0.84" stop-color="#F59224"/>
+      <stop offset="1" stop-color="#F59121"/>
+    </linearGradient>
+  </defs>
+
+  <path fill="#0FB2EF"
+        d="M0 3H130L183 185L238 3H368L419 185L471 3H548L423 383H361L302 202L243 383H122Z"/>
+
+  <path fill="url(#orange)"
+        d="M548 3H663L722 185L782 3H902L1024 383H895L840 201L787 383H657L605 202L553 383H423Z"/>
+</svg>

@@ -4,7 +4,8 @@ import { fuzzyRank } from '@mock-knight/core/types'
 import type { FuzzyMatch } from '@mock-knight/core/types'
 import { api } from '../api.js'
 import type { Profile } from '../api.js'
-import { MethodChip, StatusCode } from './primitives.js'
+import { BackendBadge, MethodChip, StatusCode } from './primitives.js'
+import type { BackendIdentity } from './primitives.js'
 
 /**
  * The command palette — design brief §6.10, FR-UX-1, FR-CONN-2.
@@ -32,6 +33,8 @@ export interface Command {
   readonly destructive?: boolean
   /** A profile's colour, shown as a dot. */
   readonly colour?: string
+  /** Which backend, for a row that names a server. */
+  readonly backend?: BackendIdentity
   readonly run: () => void
 }
 
@@ -133,6 +136,7 @@ export function CommandPalette({
         run: item.run,
         render: (
           <>
+            {item.backend !== undefined && <BackendBadge {...item.backend} />}
             {item.colour !== undefined && (
               <span
                 aria-hidden="true"

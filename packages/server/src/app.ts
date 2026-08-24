@@ -68,6 +68,15 @@ export interface AppOptions {
    * a server other than the one they just typed.
    */
   launchProfileId?: () => string | null
+  /**
+   * Whether a logo file has been dropped in for a backend, and where.
+   *
+   * Answered here rather than probed from the browser. The badge lives in lists that remount on
+   * every keystroke, so an `<img>` that falls back on error showed a broken-image glyph and
+   * re-requested a missing file on each render — and with fast enough remounting the probe never
+   * completed at all. One `existsSync` at startup replaces all of it.
+   */
+  backendLogo?: (adapterId: string) => { light: string; dark: string | null } | null
 }
 
 const listQuerySchema = z.object({
@@ -363,7 +372,14 @@ export function createApp(options: AppOptions) {
      * The backends this build can talk to. The browser cannot import an adapter (the layering
      * rule), so it learns the list — and each one's default control path — from here.
      */
-    .get('/api/adapters', (c) => c.json({ adapters: ADAPTERS }))
+    .get('/api/adapters', (c) =>
+      c.json({
+        adapters: ADAPTERS.map((adapter) => {
+          const logo = options.backendLogo?.(adapter.id) ?? null
+          return { ...adapter, logoUrl: logo?.light ?? null, logoDarkUrl: logo?.dark ?? null }
+        }),
+      }),
+    )
 
     .get('/api/profiles', (c) => c.json({ profiles: listProfiles(db) }))
 

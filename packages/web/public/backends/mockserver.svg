@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="128"
+     height="128"
+     viewBox="0 0 128 128"
+     role="img"
+     aria-labelledby="title desc">
+  <title id="title">Rounded M mark</title>
+  <desc id="desc">A hand-drawn dark gray capital M with rounded ends on a transparent background.</desc>
+
+  <path d="M17 108
+           C19.5 91 21 54 21.5 22
+           C21.6 18.5 24.2 17.2 26.5 20.4
+           L62.2 94.5
+           L100.5 20.5
+           C102.4 17.2 105.5 18.2 105.6 22.2
+           C106 48 106.5 87.5 109 109"
+        fill="none"
+        stroke="#333333"
+        stroke-width="15"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+</svg>

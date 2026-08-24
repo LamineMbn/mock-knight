@@ -216,15 +216,28 @@ async function main(): Promise<void> {
    * reads this through a function rather than being handed a value it cannot have yet.
    */
   let launchProfileId: string | null = null
+  // Resolved before the app, because the app closes over it to answer whether a backend has a
+  // logo file.
+  const webRoot = findWebRoot()
   const app = createApp({
     db,
     registry,
     mode,
     version: VERSION,
     launchProfileId: () => launchProfileId,
+    // Checked once, against the SPA's own asset directory. Dropping a file in needs a restart,
+    // which is the same as every other static asset in a built bundle.
+    backendLogo: (adapterId) => {
+      if (webRoot === null) return null
+      const light = `/backends/${adapterId}.svg`
+      if (!existsSync(join(webRoot, light))) return null
+      // Optional, and the same convention the app's own mark follows: a single-colour mark
+      // legible on white usually disappears on the dark theme.
+      const dark = `/backends/${adapterId}-dark.svg`
+      return { light, dark: existsSync(join(webRoot, dark)) ? dark : null }
+    },
   })
 
-  const webRoot = findWebRoot()
   if (webRoot !== null) {
     app.use('/*', serveStatic({ root: webRoot }))
     /**
