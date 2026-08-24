@@ -11,6 +11,7 @@ export default defineConfig({
       '@mock-knight/core/types': resolve('./packages/core/src/types.ts'),
       '@mock-knight/core': resolve('./packages/core/src/index.ts'),
       '@mock-knight/adapter-mockserver': resolve('./packages/adapter-mockserver/src/index.ts'),
+      '@mock-knight/adapter-mockoon': resolve('./packages/adapter-mockoon/src/index.ts'),
       '@mock-knight/adapter-wiremock': resolve('./packages/adapter-wiremock/src/index.ts'),
     },
   },

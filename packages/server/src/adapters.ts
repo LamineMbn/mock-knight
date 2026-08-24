@@ -1,3 +1,4 @@
+import { MockoonAdapter } from '@mock-knight/adapter-mockoon'
 import { MockServerAdapter } from '@mock-knight/adapter-mockserver'
 import { WireMockAdapter } from '@mock-knight/adapter-wiremock'
 import type { MockBackendAdapter } from '@mock-knight/core'
@@ -13,6 +14,7 @@ import type { MockBackendAdapter } from '@mock-knight/core'
 const FACTORIES: Record<string, () => MockBackendAdapter> = {
   wiremock: () => new WireMockAdapter(),
   mockserver: () => new MockServerAdapter(),
+  mockoon: () => new MockoonAdapter(),
 }
 
 export const ADAPTER_IDS = Object.keys(FACTORIES) as [string, ...string[]]

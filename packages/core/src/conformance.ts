@@ -236,11 +236,12 @@ export function runAdapterConformance(options: () => ConformanceOptions): void {
       expect(remaining.items[0]!.request.url?.value).toBe('/survivor')
     })
 
-    it('replaceAll replaces rather than merges', async () => {
+    it('replaceAll replaces rather than merges', async ({ skip }) => {
       // The trap this exists to catch: WireMock's import endpoint merges unless told otherwise,
       // so a "replace" that quietly became a merge left the old corpus in place. Any backend
       // with the same shape of API can make the same mistake.
       const { adapter, reset } = get()
+      if (adapter.replaceAll === undefined) return skip()
       await reset([conformanceStub({ name: 'old' })])
       const replacement = adapter.interpret(
         adapter.render(

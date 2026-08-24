@@ -139,13 +139,17 @@ over the file** — a flag is what you typed just now.
 | **WireMock 3.x** | Supported. Read, write, journal, scenarios, near-miss |
 | WireMock 2.x | Read paths work; some admin routes are probed and gracefully absent |
 | **MockServer** | Supported. Read and write. No traffic log and no scenarios — it records no attribution for a served request and has no named states, so both screens are absent rather than empty |
-| Hoverfly, Mockoon, Prism | Not yet — the adapter contract was designed for them |
+| **Mockoon** | Read-only. Its corpus is an environment JSON file — the admin API cannot read routes — so point a profile at the file. Traffic works where the admin token is set; editing is not offered yet, because Mockoon's only write does not reach the file |
+| Hoverfly, Prism | Not yet — the adapter contract was designed for them |
 
 Pick one with `--adapter`, or per server on the Servers screen:
 
 ```bash
 npx mock-knight --url http://localhost:1080 --adapter mockserver
 ```
+
+A Mockoon profile also needs the path to its environment file, which the Servers screen asks for.
+Start Mockoon with `--watch` and the file is authoritative: edit it and the server follows.
 
 Mock Knight probes each server on connect and derives a **capability set**. A capability that is
 off means the control is *absent*, never a button that fails when you press it. The Servers

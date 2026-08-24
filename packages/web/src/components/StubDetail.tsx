@@ -35,13 +35,30 @@ export interface StubDetailProps {
   profileId: string
   profileName: string
   /** Writes are absent, not disabled, where the profile or backend forbids them (§7.1). */
-  canWrite: boolean
+  /**
+   * The three write bits, separately, because a backend can have one and not another.
+   *
+   * This was a single `canWrite` derived from the profile's read-only flag alone. Every backend
+   * up to the third could create, update and delete, so nothing exposed the gap — then Mockoon
+   * arrived with none of them and the panel still drew Duplicate and Delete, which is the one
+   * thing invariant 4 forbids: a control that can only fail.
+   */
+  canUpdate: boolean
+  canCreate: boolean
+  canDelete: boolean
   clientKey: string | null
 }
 
 type Tab = 'overview' | 'matcher' | 'response' | 'raw' | 'history'
 
-export function StubDetail({ profileId, profileName, canWrite, clientKey }: StubDetailProps) {
+export function StubDetail({
+  profileId,
+  profileName,
+  canUpdate,
+  canCreate,
+  canDelete,
+  clientKey,
+}: StubDetailProps) {
   const [tab, setTab] = useState<Tab>('overview')
   const queryClient = useQueryClient()
 
@@ -505,19 +522,19 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
               {tab === 'matcher' ? (
                 <MatcherForm
                   draft={formDraft ?? serverDraft}
-                  disabled={!canWrite || rawDirty}
+                  disabled={!canUpdate || rawDirty}
                   onChange={setFormDraft}
                 />
               ) : (
                 <ResponseForm
                   draft={formDraft ?? serverDraft}
-                  disabled={!canWrite || rawDirty}
+                  disabled={!canUpdate || rawDirty}
                   onChange={setFormDraft}
                 />
               )}
             </>
           )
-        ) : canWrite ? (
+        ) : canUpdate ? (
           <>
             {formDirty && (
               <p
@@ -575,7 +592,7 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
       {/* Shown on every tab. Duplicate and Delete are actions on the stub, not on the tab, and
           hiding them behind an editing tab made them unreachable from the one you land on. Save
           appears only when something is unsaved, so it follows the edit rather than the tab. */}
-      {canWrite && (
+      {(canUpdate || canCreate || canDelete) && (
         <footer
           style={{
             display: 'flex',
@@ -605,18 +622,21 @@ export function StubDetail({ profileId, profileName, canWrite, clientKey }: Stub
           ) : (
             <>
               <span style={{ flex: 1 }} />
-              {serverDraft !== null && (
+              {/* Duplicating writes a new stub, so it is `mock.create` rather than update. */}
+              {canCreate && serverDraft !== null && (
                 <IconButton
                   icon={Copy}
                   label="Duplicate this stub"
                   onClick={() => setDuplicating(serverDraft)}
                 />
               )}
-              <DeleteButton
-                name={mock.name ?? mock.url?.value ?? 'this stub'}
-                pending={remove.isPending}
-                onConfirm={() => remove.mutate()}
-              />
+              {canDelete && (
+                <DeleteButton
+                  name={mock.name ?? mock.url?.value ?? 'this stub'}
+                  pending={remove.isPending}
+                  onConfirm={() => remove.mutate()}
+                />
+              )}
             </>
           )}
         </footer>

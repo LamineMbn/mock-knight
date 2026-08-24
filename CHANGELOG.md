@@ -2,7 +2,24 @@
 
 ## Unreleased
 
+### Added
+
+- **A third backend: Mockoon**, read-only for now. It is the first that is not an admin API:
+  Mockoon's corpus lives in an environment JSON file and its admin API cannot read routes at all,
+  so a profile points at the file. Folders come from Mockoon's own tree rather than being guessed
+  from a URL prefix, and a route holding several rule-selected responses is read as one stub per
+  response, ranked in the order Mockoon consults them.
+
+  Editing is deliberately absent rather than half-built: Mockoon's only write is a whole-document
+  `PUT` that never reaches the file, so an edit would vanish on restart. Writing the file is the
+  right path and comes next.
+
 ### Fixed
+
+- **Write controls are gated on what the backend can actually do.** New stub, Duplicate and
+  Delete were drawn whenever the *profile* was not read-only, which was accidentally right while
+  every backend could write. Against a read-only backend they were three buttons that could only
+  fail.
 
 - **A connection that stops working is noticed.** Once connected, the app kept reporting healthy
   however long the server had been gone — the badge stayed clean while every action failed on

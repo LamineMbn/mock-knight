@@ -165,6 +165,21 @@ export function App() {
   const profile: Profile | undefined =
     all.find((p) => p.id === profileId) ?? all.find((p) => p.id === launched) ?? all[0]
 
+  /**
+   * What this profile can actually be asked to write.
+   *
+   * Both halves matter: a read-only *profile* forbids writes the backend could do, and a backend
+   * without the capability cannot do them however the profile is configured. Until the third
+   * backend every adapter had all three bits, so `!profile.readOnly` alone was accidentally
+   * right — and then a read-only backend still drew New stub, Duplicate and Delete, which is
+   * exactly the control-that-can-only-fail invariant 4 exists to prevent.
+   */
+  const writable = profile !== undefined && !profile.readOnly
+  const can = (bit: string): boolean => writable && (profile?.capabilities ?? []).includes(bit)
+  const canCreate = can('mock.create')
+  const canUpdate = can('mock.update')
+  const canDelete = can('mock.delete')
+
   const mirror = useQuery({
     queryKey: ['mirror', profile?.id],
     queryFn: () => api.mirror(profile!.id),
@@ -237,7 +252,7 @@ export function App() {
       run: () => setUrlState({ screen: name }),
     })
     return [
-      ...(profile.readOnly || screen !== 'corpus'
+      ...(!canCreate || screen !== 'corpus'
         ? []
         : [
             {
@@ -312,7 +327,18 @@ export function App() {
           run: () => setUrlState({ profileId: candidate.id, query: '', selectedKey: null }),
         })),
     ]
-  }, [profile, screen, all, setUrlState, refresh, savedSearches, theme, chooseTheme, adapterKinds])
+  }, [
+    profile,
+    screen,
+    all,
+    setUrlState,
+    refresh,
+    savedSearches,
+    theme,
+    chooseTheme,
+    adapterKinds,
+    canCreate,
+  ])
 
   /**
    * Which facet tokens are on, read from the URL rather than from the server's echoed plan.
@@ -545,7 +571,7 @@ export function App() {
                       This server has no stubs yet.
                     </strong>
                     Nothing has been mirrored from {profile.baseUrl}.
-                    {!profile.readOnly && (
+                    {canCreate && (
                       <div style={{ marginTop: 12 }}>
                         {/* An empty corpus used to be a dead end: the screen said this and
                             offered no way to change it. */}
@@ -578,7 +604,7 @@ export function App() {
                 color: 'var(--mk-text-tertiary)',
               }}
             >
-              {!profile.readOnly && (
+              {canCreate && (
                 <IconButton icon={Plus} label="New stub" onClick={() => setCreating(true)} />
               )}
               <span className="mk-tabular">
@@ -622,7 +648,9 @@ export function App() {
           <StubDetail
             profileId={profile.id}
             profileName={profile.name}
-            canWrite={!profile.readOnly}
+            canUpdate={canUpdate}
+            canCreate={canCreate}
+            canDelete={canDelete}
             clientKey={selectedKey}
           />
 

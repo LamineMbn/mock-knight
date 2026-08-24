@@ -46,6 +46,15 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)(lightningcss@1.32.0)
 
+  packages/adapter-mockoon:
+    dependencies:
+      '@mock-knight/core':
+        specifier: workspace:*
+        version: link:../core
+      undici:
+        specifier: ^7.2.0
+        version: 7.29.0
+
   packages/adapter-mockserver:
     dependencies:
       '@mock-knight/core':
@@ -108,6 +117,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.17(hono@4.13.3)
+      '@mock-knight/adapter-mockoon':
+        specifier: workspace:*
+        version: link:../adapter-mockoon
       '@mock-knight/adapter-mockserver':
         specifier: workspace:*
         version: link:../adapter-mockserver

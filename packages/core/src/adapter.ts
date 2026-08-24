@@ -50,6 +50,14 @@ export interface ConnectionConfig {
   readonly correlationHeader?: string | null
   /** Overrides how the tool identifies itself upstream. Adapters supply a default. */
   readonly userAgent?: string
+  /**
+   * The document a document-backed backend reads its corpus from.
+   *
+   * Added for Mockoon, whose admin API cannot read routes at all (§17.31): the corpus is an
+   * environment JSON file, so "where is the corpus" is a path rather than a URL. Absent for the
+   * API-driven backends, which have no use for it.
+   */
+  readonly documentPath?: string | null
 }
 
 export interface ConnectionInfo {
@@ -135,10 +143,23 @@ export interface MockBackendAdapter {
    */
   render(draft: MockDraft): JsonObject
 
-  // Corpus — the only near-universal primitives (PRD Appendix B).
+  // Corpus. `listMocks` is the one genuinely universal primitive: a backend that cannot be
+  // listed cannot be shown, so there is nothing for this tool to do with it.
   listMocks(q?: { limit?: number; offset?: number }): Promise<Page<Mock>>
-  replaceAll(mocks: readonly Mock[]): Promise<void>
-  resetAll(): Promise<void>
+
+  /**
+   * Wholesale corpus writes, optional like every other write.
+   *
+   * These were required until a *document-backed* backend arrived. Mockoon's corpus lives in an
+   * environment JSON file with no read endpoint at all (§17.31), so a read-only Mockoon profile
+   * has nothing to implement here — and the alternative, a method that exists and throws, is the
+   * exact thing this contract's first paragraph forbids.
+   *
+   * `corpus.replaceAll` and `corpus.reset` already existed as capability bits: the capability
+   * model had anticipated this and only the method list had not.
+   */
+  replaceAll?(mocks: readonly Mock[]): Promise<void>
+  resetAll?(): Promise<void>
 
   // Per-unit. Each is a separate bit because a different backend breaks each one.
   getMock?(id: string): Promise<Mock>
@@ -172,6 +193,8 @@ export interface MockBackendAdapter {
 
 /** Every adapter method that a capability bit can switch off. */
 export const OPTIONAL_ADAPTER_METHODS = [
+  'replaceAll',
+  'resetAll',
   'getMock',
   'createMock',
   'updateMock',
@@ -198,6 +221,8 @@ export type OptionalAdapterMethod = (typeof OPTIONAL_ADAPTER_METHODS)[number]
  * "unsupported" is a conformance failure, not an implementation detail.
  */
 export const METHOD_CAPABILITY: Readonly<Record<OptionalAdapterMethod, CapabilityBit>> = {
+  replaceAll: 'corpus.replaceAll',
+  resetAll: 'corpus.reset',
   getMock: 'mock.read',
   createMock: 'mock.create',
   updateMock: 'mock.update',

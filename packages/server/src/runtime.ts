@@ -144,6 +144,9 @@ export class ConnectionRegistry {
       adminPath: profile.adminPath ?? undefined,
       auth: resolveAuth(profile),
       allowedHosts: this.allowedHosts,
+      // Where a document-backed backend keeps its corpus. `mappingsDir` is the profile's
+      // on-disk field, already resolved to an absolute path by the config loader.
+      documentPath: profile.mappingsDir,
     })
 
     const capabilities = resolveCapabilities({

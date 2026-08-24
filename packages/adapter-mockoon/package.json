@@ -1,5 +1,5 @@
 {
-  "name": "@mock-knight/server",
+  "name": "@mock-knight/adapter-mockoon",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -17,18 +17,7 @@
     "test": "vitest run --root ../.."
   },
   "dependencies": {
-    "@hono/node-server": "^1.13.7",
-    "@mock-knight/adapter-mockserver": "workspace:*",
-    "@mock-knight/adapter-wiremock": "workspace:*",
     "@mock-knight/core": "workspace:*",
-    "better-sqlite3": "^13.0.0",
-    "hono": "^4.10.0",
-    "microdiff": "^1.6.0",
-    "pino": "^9.5.0",
-    "zod": "^4.0.0",
-    "@mock-knight/adapter-mockoon": "workspace:*"
-  },
-  "devDependencies": {
-    "@types/better-sqlite3": "^7.6.12"
+    "undici": "^7.2.0"
   }
 }

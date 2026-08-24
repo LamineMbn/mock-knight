@@ -158,9 +158,12 @@ const DESTRUCTIVE: Record<
   'reset-stubs': {
     action: 'reset',
     summary: 'reset every stub on the server',
-    available: (connection) => connection.capabilities.has('corpus.reset'),
+    // Method presence, like every other entry here. The facade narrows the adapter by
+    // capability, so "is the method there" is the same question as "is the bit on" — and it is
+    // the one the typechecker can enforce now that a read-only backend exists.
+    available: (connection) => connection.adapter.resetAll !== undefined,
     perform: async (connection, db, profileId) => {
-      await connection.adapter.resetAll()
+      await connection.adapter.resetAll?.()
       db.prepare(`DELETE FROM mock WHERE profile_id = ?`).run(profileId)
     },
   },

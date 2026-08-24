@@ -97,6 +97,34 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      # Mockoon cannot be a service container: it needs a data file, and services start before
+      # any step has had a chance to write one. Started here instead, with the token set rather
+      # than auto-generated into its log, and `--watch` so the file is authoritative.
+      - name: Start Mockoon
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/.mockoon"
+          cat > "$GITHUB_WORKSPACE/.mockoon/env.json" <<'JSON'
+          {
+            "uuid": "00000000-0000-0000-0000-0000000000ff", "lastMigration": 33,
+            "name": "conformance", "port": 3000, "hostname": "", "endpointPrefix": "",
+            "latency": 0, "folders": [], "routes": [], "rootChildren": [],
+            "proxyMode": false, "proxyHost": "", "proxyRemovePrefix": false,
+            "tlsOptions": { "enabled": false, "type": "CERT", "pfxPath": "", "certPath": "",
+              "keyPath": "", "caPath": "", "passphrase": "" },
+            "cors": true, "headers": [], "proxyReqHeaders": [], "proxyResHeaders": [],
+            "data": [], "callbacks": []
+          }
+          JSON
+          docker run -d --name mk-mockoon -p 13000:3000 \
+            -v "$GITHUB_WORKSPACE/.mockoon":/data mockoon/cli:latest \
+            -d /data/env.json -p 3000 --admin-api-token ci-token --watch
+          for i in $(seq 1 60); do
+            curl -fsS -H 'authorization: Bearer ci-token' \
+              http://localhost:13000/mockoon-admin/logs > /dev/null && exit 0
+            sleep 1
+          done
+          echo '::error::Mockoon never became healthy'; docker logs mk-mockoon; exit 1
+
       - name: Wait for MockServer
         run: |
           for i in $(seq 1 60); do
@@ -117,9 +145,13 @@ jobs:
       - run: pnpm test:integration
 
       # The adapter contract, asserted by a suite that lives in `core` and is identical for
-      # every backend — WireMock and MockServer both run it. It lives here rather than in its
-      # own job because it needs the same service containers, and it is fast.
+      # every backend — all three run it. It lives here rather than in its own job because it
+      # needs the same backends, and it is fast.
       - run: pnpm test:conformance
+        env:
+          MOCK_KNIGHT_TEST_MOCKOON_URL: http://localhost:13000
+          MOCK_KNIGHT_TEST_MOCKOON_TOKEN: ci-token
+          MOCK_KNIGHT_TEST_MOCKOON_FILE: ${{ github.workspace }}/.mockoon/env.json
 
       # e2e drives the *built* SPA served by the CLI, not the dev server — the packaging is
       # part of what is under test.

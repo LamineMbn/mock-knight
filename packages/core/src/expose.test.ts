@@ -24,14 +24,28 @@ const implementation = {
 } as unknown as MockBackendAdapter
 
 describe('exposeCapableAdapter', () => {
-  it('keeps the near-universal primitives whatever the capabilities say', () => {
+  it('keeps the genuinely universal primitives whatever the capabilities say', () => {
     const exposed = exposeCapableAdapter(implementation, new Set())
+    // Listing is the one corpus method that is always present: a backend that cannot be listed
+    // has nothing for this tool to show.
     expect(typeof exposed.listMocks).toBe('function')
-    expect(typeof exposed.replaceAll).toBe('function')
-    expect(typeof exposed.resetAll).toBe('function')
     // `interpret` is not capability-gated: reading its own vendor format is something every
     // adapter can do, and the write path needs it before it knows whether a write is allowed.
     expect(typeof exposed.interpret).toBe('function')
+  })
+
+  it('gates the wholesale corpus writes, because a read-only backend has none', () => {
+    // These were unconditional until a document-backed backend arrived: Mockoon's corpus is a
+    // JSON file with no read endpoint, so a read-only profile implements neither, and a method
+    // that exists and throws is what this facade exists to prevent.
+    expect('replaceAll' in exposeCapableAdapter(implementation, new Set())).toBe(false)
+
+    const writable = exposeCapableAdapter(
+      implementation,
+      new Set(['corpus.replaceAll', 'corpus.reset'] as const),
+    )
+    expect(typeof writable.replaceAll).toBe('function')
+    expect(typeof writable.resetAll).toBe('function')
   })
 
   it('makes an unsupported method absent rather than present and throwing', () => {

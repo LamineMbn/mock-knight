@@ -24,9 +24,9 @@ export function exposeCapableAdapter(
     capabilities: () => capabilities,
     interpret: implementation.interpret.bind(implementation),
     render: implementation.render.bind(implementation),
+    // `listMocks` is the only corpus method that is always present; the wholesale writes moved
+    // into the capability-gated loop below when a read-only backend arrived.
     listMocks: implementation.listMocks.bind(implementation),
-    replaceAll: implementation.replaceAll.bind(implementation),
-    resetAll: implementation.resetAll.bind(implementation),
   }
   if (typeof implementation.close === 'function') {
     exposed['close'] = implementation.close.bind(implementation)
