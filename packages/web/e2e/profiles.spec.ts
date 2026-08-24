@@ -289,3 +289,32 @@ test('a missing asset is a 404, not the app shell with a 200', async ({ page }) 
   const route = await page.request.get('/some/deep/route')
   expect(route.status()).toBe(200)
 })
+
+test('an unreachable server says so, and never claims to be an empty one', async ({ page }) => {
+  // "reconnecting…" used to sit on the badge indefinitely while nothing reconnected — a
+  // connection was only ever opened at startup or by clicking Refresh, so a status badge had
+  // quietly become a control. The corpus underneath was worse: it read "This server has no
+  // stubs yet" and offered "Create the first stub", stating something nobody had checked and
+  // offering a button that could only fail.
+  // Created through the API rather than the form: the form connects as it saves and rolls back
+  // a server it cannot reach, which is the right behaviour there and the wrong fixture here. A
+  // profile that exists but has never connected is what this is about — the state you land in
+  // after a restart, or when the VPN is not up yet.
+  const created = await page.request.post('/api/profiles', {
+    // Port 9 is the discard port: reserved, and nothing listens on it.
+    data: { name: 'nowhere', adapter: 'wiremock', baseUrl: 'http://127.0.0.1:9' },
+  })
+  expect(created.ok()).toBe(true)
+
+  await page.goto('/')
+  await page.getByRole('button', { name: /Profile: / }).click()
+  await page.getByRole('option', { name: /nowhere/ }).click()
+
+  const badge = page.getByText('unreachable', { exact: true })
+  await expect(badge).toBeVisible()
+  // The reason, not a spinner: ECONNREFUSED and a bad hostname need different fixes.
+  await expect(badge).toHaveAttribute('title', /Retrying automatically/)
+
+  await expect(page.getByText(/Cannot reach http:\/\/127\.0\.0\.1:9/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Create the first stub' })).toHaveCount(0)
+})

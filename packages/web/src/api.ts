@@ -115,6 +115,18 @@ export interface NewProfile {
   readOnly: boolean
 }
 
+/**
+ * Why a profile is not connected, or `null`/absent while it is.
+ *
+ * The server retries on a backoff of its own; this is what the last attempt hit, so the badge
+ * can name the problem instead of claiming to be trying.
+ */
+export type ConnectionFailure = {
+  code: string | null
+  message: string
+  nextAttemptAt: number
+} | null
+
 export interface MirrorStatus {
   profileId: string
   count: number
@@ -124,6 +136,13 @@ export interface MirrorStatus {
   version: string | null
   /** The backend's display name, so the UI names it rather than assuming WireMock. */
   backend: string | null
+  /**
+   * Why the last connection attempt failed, absent while connected.
+   *
+   * The server retries on its own, on a backoff. This is what it hit last time, so the badge can
+   * name the problem rather than saying "reconnecting…" forever.
+   */
+  failure?: ConnectionFailure
 }
 
 export interface CapabilityRow {

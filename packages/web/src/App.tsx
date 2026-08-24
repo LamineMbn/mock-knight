@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api.js'
-import type { Profile } from './api.js'
+import type { ConnectionFailure, Profile } from './api.js'
 import { describeFilter } from '@mock-knight/core/types'
 import type { QueryPlan } from '@mock-knight/core/types'
 import { CorpusList } from './components/CorpusList.js'
@@ -169,6 +169,14 @@ export function App() {
     queryKey: ['mirror', profile?.id],
     queryFn: () => api.mirror(profile!.id),
     enabled: profile !== undefined,
+    /**
+     * Poll only while disconnected. Asking for mirror status is what makes the server retry the
+     * connection, so a profile that is down comes back on its own instead of needing Refresh
+     * clicked — but a healthy profile is not polled at all, and the server's own backoff means
+     * these requests do not reach the mock server every time. Once connected the interval stops.
+     */
+    refetchInterval: (query) => (query.state.data?.connected === true ? false : 3_000),
+    refetchOnWindowFocus: true,
   })
 
   const corpus = useQuery({
@@ -187,6 +195,23 @@ export function App() {
       void queryClient.invalidateQueries({ queryKey: ['mirror'] })
     },
   })
+
+  /**
+   * Fill the mirror the first time a profile connects, so recovering from a server that was down
+   * does not still require clicking Refresh.
+   *
+   * Gated on `fetchedAt === null` rather than an empty corpus: a server that genuinely has no
+   * stubs would otherwise be re-ingested on every poll. One fetch per profile per session, and
+   * only for one that has never been read.
+   */
+  const filled = useRef<string | null>(null)
+  useEffect(() => {
+    if (profile === undefined) return
+    if (mirror.data?.connected !== true || mirror.data.fetchedAt !== null) return
+    if (filled.current === profile.id || refresh.isPending) return
+    filled.current = profile.id
+    refresh.mutate()
+  }, [profile, mirror.data?.connected, mirror.data?.fetchedAt, refresh])
 
   const searches = useQuery({
     queryKey: ['searches', profile?.id],
@@ -349,6 +374,7 @@ export function App() {
         version={mirror.data?.version ?? null}
         backend={mirror.data?.backend ?? null}
         connected={mirror.data?.connected ?? false}
+        failure={mirror.data?.failure ?? null}
         count={mirror.data?.count ?? 0}
         onRefresh={() => refresh.mutate()}
         refreshing={refresh.isPending}
@@ -496,7 +522,20 @@ export function App() {
               onSelect={(key) => setUrlState({ selectedKey: key === selectedKey ? null : key })}
               loading={corpus.isPending}
               emptyMessage={
-                query === '' ? (
+                mirror.data?.connected === false ? (
+                  <>
+                    {/*
+                      An unreached server is not an empty one. This used to read "This server has
+                      no stubs yet" and offer "Create the first stub" — stating as fact something
+                      nobody had checked, and offering a button that could only fail.
+                    */}
+                    <strong style={{ display: 'block', fontSize: 16, marginBottom: 6 }}>
+                      Cannot reach {profile.baseUrl}.
+                    </strong>
+                    {mirror.data.failure?.message ?? 'The server did not answer.'} Mock Knight keeps
+                    trying, and this fills in as soon as it connects.
+                  </>
+                ) : query === '' ? (
                   <>
                     <strong style={{ display: 'block', fontSize: 16, marginBottom: 6 }}>
                       This server has no stubs yet.
@@ -607,6 +646,7 @@ function TopBar({
   backend,
   capabilities,
   connected,
+  failure,
   count,
   onRefresh,
   refreshing,
@@ -625,6 +665,7 @@ function TopBar({
   /** Resolved bits for the active profile, so a destination the backend cannot serve is absent. */
   capabilities: readonly string[]
   connected: boolean
+  failure: ConnectionFailure
   count: number
   onRefresh: () => void
   refreshing: boolean
@@ -671,6 +712,7 @@ function TopBar({
           profiles={profiles}
           active={profile}
           connected={connected}
+          failure={failure}
           onSelect={onSelectProfile}
           onManage={() => onScreen('profiles')}
         />

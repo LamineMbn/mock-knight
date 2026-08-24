@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api.js'
-import type { Profile } from '../api.js'
+import type { ConnectionFailure, Profile } from '../api.js'
 import { BackendBadge, Chip, backendOf } from './primitives.js'
 
 /**
@@ -21,6 +21,8 @@ export interface ProfileSwitcherProps {
   profiles: Profile[]
   active: Profile
   connected: boolean
+  /** Why it is not connected, when the server has an answer. */
+  failure?: ConnectionFailure
   onSelect: (id: string) => void
   onManage: () => void
 }
@@ -29,6 +31,7 @@ export function ProfileSwitcher({
   profiles,
   active,
   connected,
+  failure = null,
   onSelect,
   onManage,
 }: ProfileSwitcherProps) {
@@ -86,7 +89,23 @@ export function ProfileSwitcher({
         <span style={{ fontWeight: 500 }}>{active.name}</span>
         {active.protected && <Chip tone="warning">protected</Chip>}
         {active.readOnly && <Chip>read-only</Chip>}
-        {!connected && <Chip tone="warning">reconnecting…</Chip>}
+        {/*
+          Two different states, which used to read as one.
+          
+          "reconnecting…" was shown whenever there was no connection — including when nothing was
+          reconnecting, because a connection was only ever made at startup or by clicking
+          Refresh. It sat there until someone clicked. The server retries on its own now, so the
+          word is true while an attempt is outstanding, and once one has failed the badge names
+          what it hit instead of implying progress.
+        */}
+        {!connected &&
+          (failure === null ? (
+            <Chip tone="warning">connecting…</Chip>
+          ) : (
+            <Chip tone="warning" title={`${failure.message} Retrying automatically.`}>
+              unreachable
+            </Chip>
+          ))}
         <span aria-hidden="true" style={{ color: 'var(--mk-text-tertiary)' }}>
           ▾
         </span>

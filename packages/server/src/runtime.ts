@@ -1,4 +1,5 @@
 import {
+  AdapterTransportError,
   DEPLOYED_ENVIRONMENT_CAPABILITIES,
   LOCAL_ENVIRONMENT_CAPABILITIES,
   capabilityReport,
@@ -100,8 +101,28 @@ export function resolveAuth(profile: Profile, env: NodeJS.ProcessEnv = process.e
   }
 }
 
+/**
+ * How long to wait after each consecutive failed connection attempt, in order.
+ *
+ * A profile that cannot be reached is usually a VPN that is down or a server still starting, and
+ * both resolve on their own — so retrying is right, and retrying *hard* is not. The last value
+ * is the steady state: one attempt every thirty seconds for as long as the screen is open, which
+ * is far below the "do not poll the mock server aggressively" line.
+ */
+const RECONNECT_BACKOFF_MS = [0, 2_000, 5_000, 15_000, 30_000] as const
+
+export interface ConnectionFailure {
+  /** The transport code where there was one — ENOTFOUND, ECONNREFUSED — and null otherwise. */
+  readonly code: string | null
+  readonly message: string
+  /** Epoch ms of the next attempt, so the UI can say when rather than implying "any moment". */
+  readonly nextAttemptAt: number
+}
+
 export class ConnectionRegistry {
   private readonly connections = new Map<string, Connection>()
+  /** Per-profile retry state, held only while a profile is failing. */
+  private readonly failures = new Map<string, ConnectionFailure & { attempts: number }>()
 
   constructor(
     private readonly db: Db,
@@ -142,8 +163,53 @@ export class ConnectionRegistry {
       connectedAt: new Date().toISOString(),
     }
     this.connections.set(profile.id, connection)
+    this.failures.delete(profile.id)
     recordConnection(this.db, profile.id, [...capabilities], info.fingerprint)
     return connection
+  }
+
+  /**
+   * The connection for a profile, opening one if we do not already hold it.
+   *
+   * Nothing used to do this. A connection was made at startup for the profile named on the
+   * command line and by an explicit refresh, and nowhere else — so switching to any other
+   * server, or losing the network for a moment, left the top bar reading "reconnecting…"
+   * indefinitely while nothing was in fact reconnecting. Clicking Refresh was the only way out,
+   * which made a status badge into a control.
+   *
+   * Returns `null` rather than throwing: a server being down is an ordinary state to render, not
+   * a request that failed. Read `lastFailure` for why, and honours a backoff so a server that is
+   * down is not hammered by a polling UI.
+   */
+  async ensure(profile: Profile, now: number = Date.now()): Promise<Connection | null> {
+    const existing = this.connections.get(profile.id)
+    if (existing !== undefined) return existing
+
+    const waiting = this.failures.get(profile.id)
+    if (waiting !== undefined && now < waiting.nextAttemptAt) return null
+
+    try {
+      return await this.connect(profile)
+    } catch (error) {
+      const attempts = (waiting?.attempts ?? 0) + 1
+      const delay = RECONNECT_BACKOFF_MS[Math.min(attempts, RECONNECT_BACKOFF_MS.length - 1)]!
+      this.failures.set(profile.id, {
+        attempts,
+        code: error instanceof AdapterTransportError ? error.code : null,
+        // Verbatim, because "cannot connect" tells a developer nothing they did not know: the
+        // useful part is ENOTFOUND vs ECONNREFUSED vs a certificate.
+        message: error instanceof Error ? error.message : String(error),
+        nextAttemptAt: now + delay,
+      })
+      return null
+    }
+  }
+
+  /** Why the last attempt for this profile failed, or `null` if it is connected or untried. */
+  lastFailure(profileId: string): ConnectionFailure | null {
+    const failure = this.failures.get(profileId)
+    if (failure === undefined) return null
+    return { code: failure.code, message: failure.message, nextAttemptAt: failure.nextAttemptAt }
   }
 
   async disconnect(profileId: string): Promise<void> {

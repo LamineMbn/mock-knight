@@ -575,16 +575,27 @@ export function createApp(options: AppOptions) {
         : c.json({ error: 'not_found' }, 404)
     })
 
-    .get('/api/:p/mirror', (c) => {
+    /**
+     * Mirror status, and the place a dropped connection is picked back up.
+     *
+     * Reconnecting here rather than on a timer of its own: this is the one request the UI makes
+     * about a profile's health, so the attempt happens exactly when someone is looking at the
+     * answer. `ensure` holds a backoff, so a server that is down is tried on a schedule rather
+     * than on every poll.
+     */
+    .get('/api/:p/mirror', async (c) => {
       const profileId = c.req.param('p')
-      if (getProfile(db, profileId) === null) return c.json({ error: 'not_found' }, 404)
-      const connection = registry.get(profileId)
+      const profile = getProfile(db, profileId)
+      if (profile === null) return c.json({ error: 'not_found' }, 404)
+      const connection = await registry.ensure(profile)
       return c.json({
         ...mirrorStatus(db, profileId, new Date()),
         connected: connection !== null,
         version: connection?.version ?? null,
         // Which backend, so the UI names it rather than assuming one.
         backend: connection?.adapter.displayName ?? null,
+        // Why it is not connected, so the badge can say so instead of claiming to be trying.
+        failure: registry.lastFailure(profileId),
       })
     })
 
