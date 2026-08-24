@@ -5,7 +5,8 @@
     // inner loop never depends on a prior build. tsup does the emitting, not tsc.
     "paths": {
       "@mock-knight/core": ["../core/src/index.ts"],
-      "@mock-knight/core/types": ["../core/src/types.ts"]
+      "@mock-knight/core/types": ["../core/src/types.ts"],
+      "@mock-knight/core/conformance": ["../core/src/conformance.ts"]
     }
   },
   "include": ["src/**/*.ts"]

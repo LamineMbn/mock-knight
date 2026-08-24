@@ -51,6 +51,7 @@ aliased to their **source**, so no build step stands between an edit and a test 
 | Unit | `pnpm test` | nothing |
 | Perf budgets (1k/5k/10k fixtures) | `pnpm test:perf` | nothing |
 | Integration (BFF ↔ real WireMock) | `pnpm test:integration` | WireMock on `:18099` |
+| Adapter conformance (contract ↔ real backend) | `pnpm test:conformance` | WireMock on `:18099` |
 | End-to-end (browser ↔ built SPA) | `pnpm test:e2e` | the above, plus the CLI on `:7777` |
 
 > **The last two replace the target WireMock's corpus wholesale.** Point them only at a
@@ -61,6 +62,22 @@ Playwright runs with `workers: 1`. That is not a performance oversight — every
 same WireMock, and parallel workers redefine each other's corpus mid-test. The symptom is a
 suite that passes file-by-file and fails as a whole, which reads like a product bug and is not
 one.
+
+## Adding a backend
+
+The adapter contract is executable. `packages/core/src/conformance.ts` holds the whole of it as
+tests, and they are identical for every backend — an adapter is the **subject** of that suite,
+not its author. Backend-specific tests written next to an adapter tend to assert what that
+adapter already does, which is how a portable model quietly becomes one vendor's JSON with
+different field names.
+
+So a new backend is: an adapter, plus one `packages/adapter-<name>/src/<name>.conformance.test.ts`
+that connects it and hands it over. That file should contain no assertions at all. If a test in
+the shared suite cannot pass for a legitimate backend, the *contract* is wrong — change
+`conformance.ts` and say why, rather than special-casing the adapter.
+
+Every test skips itself when the capability it exercises is off, because a capability that is
+off means the method is absent (invariant 5), and absence is an answer rather than a failure.
 
 ## Architecture invariants
 
