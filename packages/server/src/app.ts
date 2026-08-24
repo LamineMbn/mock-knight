@@ -11,6 +11,7 @@ import type { JsonObject, LoggedRequest, Mock, NearMiss } from '@mock-knight/cor
 import type { Database as Db } from 'better-sqlite3'
 import { mirrorStatus, replaceCorpus } from './db/mirror.js'
 import { getMock, searchCorpus } from './db/search.js'
+import { adminUrlFor, findProfileByAdminUrl } from './profiles.js'
 import {
   deleteSavedSearch,
   listSavedSearches,
@@ -364,6 +365,25 @@ export function createApp(options: AppOptions) {
       if (!parsed.success) {
         return c.json({ error: 'invalid_profile', issues: parsed.error.issues }, 400)
       }
+      /**
+       * Two profiles pointing at one server are not a second environment, they are a mistake
+       * someone has to notice later: both mirror the same corpus, edits made through one look
+       * stale in the other, and the switcher offers a choice that changes nothing.
+       *
+       * Compared on the composed admin URL rather than the base URL, so a trailing slash or an
+       * explicit `/__admin` cannot smuggle one past.
+       */
+      const clash = findProfileByAdminUrl(db, parsed.data)
+      if (clash !== null) {
+        return c.json(
+          {
+            error: 'duplicate_server',
+            message: `“${clash.name}” already points at ${adminUrlFor(clash) ?? clash.baseUrl}. Switch to it, or edit it, rather than adding a second one.`,
+            existingProfileId: clash.id,
+          },
+          409,
+        )
+      }
       return c.json({ profile: createProfile(db, parsed.data) }, 201)
     })
 
@@ -373,6 +393,19 @@ export function createApp(options: AppOptions) {
       if (!parsed.success) {
         return c.json({ error: 'invalid_profile', issues: parsed.error.issues }, 400)
       }
+      // Ignoring itself, or every save of an unchanged URL would report a collision.
+      const clash = findProfileByAdminUrl(db, parsed.data, id)
+      if (clash !== null) {
+        return c.json(
+          {
+            error: 'duplicate_server',
+            message: `“${clash.name}” already points at ${adminUrlFor(clash) ?? clash.baseUrl}.`,
+            existingProfileId: clash.id,
+          },
+          409,
+        )
+      }
+
       const updated = updateProfile(db, id, parsed.data)
       if (updated === null) return c.json({ error: 'not_found' }, 404)
 

@@ -223,18 +223,21 @@ describe('an unreachable server explains itself', () => {
    * `TypeError: fetch failed`, which is the least useful sentence available. These check that
    * what reaches the browser names the host, the reason, and what to look at.
    */
+  // A distinct address per call: one server means one profile, so reusing one would now be
+  // refused — which is the rule under test elsewhere, not a fixture detail to work around.
+  let nth = 0
   const connectTo = async (baseUrl: string) => {
     const created = await json('/api/profiles', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'unreachable', adapter: 'wiremock', baseUrl }),
+      body: JSON.stringify({ name: `unreachable ${++nth}`, adapter: 'wiremock', baseUrl }),
     })
     return json(`/api/profiles/${created.body.profile.id as string}/connect`, { method: 'POST' })
   }
 
   it('says nothing is listening, and on which host', async () => {
     // Port 1 on loopback: reliably refused, no DNS involved, no network round trip.
-    const result = await connectTo('http://127.0.0.1:1')
+    const result = await connectTo(`http://127.0.0.1:1/u${nth + 1}`)
     expect(result.status).toBe(502)
     expect(result.body.error).toBe('upstream_unreachable')
     expect(result.body.message).toContain('127.0.0.1:1')
@@ -242,7 +245,7 @@ describe('an unreachable server explains itself', () => {
   })
 
   it('hands the browser a disclosure with no invented status', async () => {
-    const result = await connectTo('http://127.0.0.1:1')
+    const result = await connectTo(`http://127.0.0.1:1/u${nth + 1}`)
     // `null`, not 0 or 500: nothing answered, and the UI has to be able to say so.
     expect(result.body.upstream.status).toBeNull()
     expect(result.body.upstream.method).toBe('GET')
@@ -253,7 +256,7 @@ describe('an unreachable server explains itself', () => {
   })
 
   it('does not leave a half-connected profile behind', async () => {
-    await connectTo('http://127.0.0.1:1')
+    await connectTo(`http://127.0.0.1:1/u${nth + 1}`)
     const caps = await json(
       `/api/profiles/${(await json('/api/profiles')).body.profiles.at(-1).id}/capabilities`,
     )
@@ -273,7 +276,12 @@ describe('the server this process was started for', () => {
     const created = await json('/api/profiles', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'launched', adapter: 'wiremock', baseUrl: WIREMOCK_URL }),
+      // Its own address: the profile for WIREMOCK_URL already exists in this suite.
+      body: JSON.stringify({
+        name: 'launched',
+        adapter: 'wiremock',
+        baseUrl: `${WIREMOCK_URL}/launched-probe`,
+      }),
     })
     const id = created.body.profile.id as string
 
@@ -298,5 +306,79 @@ describe('the server this process was started for', () => {
       launchProfileId: string | null
     }
     expect(health.launchProfileId).toBeNull()
+  })
+})
+
+describe('one server, one profile', () => {
+  it('refuses a second profile for the same address, and says which one has it', async () => {
+    const first = await json('/api/profiles', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'the one',
+        adapter: 'wiremock',
+        baseUrl: 'http://dupe.test:8080',
+      }),
+    })
+    expect(first.status).toBe(201)
+
+    // A trailing slash and an explicit admin path reach the same API, so both are the same server.
+    const second = await json('/api/profiles', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'the same one again',
+        adapter: 'wiremock',
+        baseUrl: 'http://dupe.test:8080/',
+        adminPath: '/__admin',
+      }),
+    })
+    expect(second.status).toBe(409)
+    expect(second.body.error).toBe('duplicate_server')
+    // Names the profile that already has it, so the answer is switch-or-edit rather than a
+    // rejection with nowhere to go.
+    expect(second.body.message).toContain('the one')
+    expect(second.body.existingProfileId).toBe(first.body.profile.id)
+  })
+
+  it('still allows two context paths on one host', async () => {
+    // Same host, genuinely different servers — the case that makes base-URL comparison wrong in
+    // the other direction.
+    for (const path of ['/mock/v1', '/mock/v2']) {
+      const created = await json('/api/profiles', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: `ctx ${path}`,
+          adapter: 'wiremock',
+          baseUrl: `http://ctx.test${path}`,
+        }),
+      })
+      expect(created.status).toBe(201)
+    }
+  })
+
+  it('lets a profile keep its own address when edited', async () => {
+    const created = await json('/api/profiles', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'editable',
+        adapter: 'wiremock',
+        baseUrl: 'http://edit.test:8080',
+      }),
+    })
+    const saved = await json(`/api/profiles/${created.body.profile.id as string}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'renamed',
+        adapter: 'wiremock',
+        baseUrl: 'http://edit.test:8080',
+        readOnly: true,
+      }),
+    })
+    // Reporting a profile as colliding with itself would make every save fail.
+    expect(saved.status).toBe(200)
   })
 })

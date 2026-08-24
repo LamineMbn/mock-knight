@@ -116,7 +116,9 @@ test('switches server, and does not offer the one already active', async ({ page
   }
 
   await page.goto('/?screen=profiles')
-  await page.getByLabel('Base URL').first().fill('http://localhost:18099')
+  // A different address for the same machine: one server means one profile now, and identity
+  // is the composed address rather than the host it resolves to.
+  await page.getByLabel('Base URL').first().fill('http://127.0.0.1:18099')
   await page.getByLabel('Name', { exact: true }).first().fill(name)
   await page.getByRole('button', { name: 'Add and connect' }).click()
   await expect(page.getByRole('button', { name: /Profile: / })).toContainText(name)

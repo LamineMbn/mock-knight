@@ -2,6 +2,15 @@ import { expect, test } from '@playwright/test'
 import { WIREMOCK, resetToSeed } from './seed.js'
 
 /**
+ * A second address for the same machine.
+ *
+ * One server now means one profile, so a spec that adds another cannot reuse WIREMOCK's URL.
+ * Identity is the composed address, not the host it resolves to, so this is a legitimate second
+ * profile that also happens to connect.
+ */
+const ALT_WIREMOCK = WIREMOCK.replace('localhost', '127.0.0.1')
+
+/**
  * Connection management — PRD FR-CONN-1..5, design brief §6.9 and §6.11.
  *
  * The claim under test is the product's positioning: Mock Knight can point at several
@@ -41,7 +50,7 @@ test('the active environment is always named, not just coloured', async ({ page 
 test('a second server can be added and switched to from the UI', async ({ page }) => {
   await page.goto('/?screen=profiles')
 
-  await page.getByLabel('Base URL', { exact: true }).fill(WIREMOCK)
+  await page.getByLabel('Base URL', { exact: true }).fill(ALT_WIREMOCK)
   await page.getByLabel('Name', { exact: true }).fill('second view')
   await page.getByRole('button', { name: 'Add and connect' }).click()
 
@@ -77,7 +86,7 @@ test('the danger zone is absent on a protected profile, not merely disabled', as
   // Unprotected: it is there.
   await expect(page.getByText('Danger zone')).toBeVisible()
 
-  await page.getByLabel('Base URL', { exact: true }).fill(WIREMOCK)
+  await page.getByLabel('Base URL', { exact: true }).fill(ALT_WIREMOCK)
   await page.getByLabel('Name', { exact: true }).fill('locked')
   await page.getByRole('checkbox').first().check()
   await page.getByRole('button', { name: 'Add and connect' }).click()
@@ -122,7 +131,7 @@ test('a server can be edited, and the form opens on that server', async ({ page 
 
   // Edit a profile this test owns. Renaming the shared one leaks into every other spec that
   // types the profile name to confirm a destructive action.
-  await page.getByLabel('Base URL', { exact: true }).fill(WIREMOCK)
+  await page.getByLabel('Base URL', { exact: true }).fill(ALT_WIREMOCK)
   await page.getByLabel('Name', { exact: true }).fill('to be renamed')
   await page.getByRole('button', { name: 'Add and connect' }).click()
   await expect(page.getByRole('button', { name: /Profile: / })).toContainText('to be renamed')
@@ -132,7 +141,7 @@ test('a server can be edited, and the form opens on that server', async ({ page 
   const row = page.locator('main li').filter({ hasText: 'to be renamed' })
   await row.getByRole('button', { name: /^Edit / }).click()
 
-  await expect(page.getByLabel('Base URL', { exact: true })).toHaveValue(WIREMOCK)
+  await expect(page.getByLabel('Base URL', { exact: true })).toHaveValue(ALT_WIREMOCK)
   await page.getByLabel('Name', { exact: true }).fill('renamed in the ui')
   await page.getByRole('button', { name: 'Save changes' }).click()
 
@@ -191,4 +200,35 @@ test('opens the server the command line named, not the oldest one it holds', asy
   // No ?profile= in the URL, so the fallback decides.
   await page.goto('/')
   await expect(page.getByRole('button', { name: /Profile: / })).toContainText(launched!.name)
+})
+
+test('refuses a second server for the same address, and says which one has it', async ({
+  page,
+}) => {
+  // Two profiles pointing at one server both mirror the same corpus, and the switcher then
+  // offers a choice that changes nothing.
+  await page.goto('/?screen=profiles')
+  const before = (
+    (await (await page.request.get('/api/profiles')).json()) as {
+      profiles: unknown[]
+    }
+  ).profiles.length
+
+  // The address the suite is already connected to, spelled differently.
+  await page.getByLabel('Base URL').first().fill('http://localhost:18099/')
+  await page.getByLabel('Admin path').first().fill('/__admin')
+  await page.getByLabel('Name', { exact: true }).first().fill('a duplicate')
+  await page.getByRole('button', { name: 'Add and connect' }).click()
+
+  const alert = page.getByRole('alert')
+  await expect(alert).toContainText('already points at')
+  // Names the profile that has it, so the answer is switch-or-edit rather than a dead end.
+  await expect(alert).toContainText('localhost:18099')
+
+  // Nothing was created.
+  const profiles = (await (await page.request.get('/api/profiles')).json()) as {
+    profiles: { name: string }[]
+  }
+  expect(profiles.profiles).toHaveLength(before)
+  expect(profiles.profiles.filter((p) => p.name === 'a duplicate')).toHaveLength(0)
 })

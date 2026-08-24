@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
-import { authKindSchema } from '@mock-knight/core'
+import { authKindSchema, composeAdminUrl } from '@mock-knight/core'
 import type { Database as Db } from 'better-sqlite3'
 
 /**
@@ -80,6 +80,45 @@ function toProfile(row: ProfileRow): Profile {
     origin: row.origin === 'config' ? 'config' : 'runtime',
     createdAt: row.created_at,
   }
+}
+
+/**
+ * The address a profile actually talks to — base URL, context path and admin path composed.
+ *
+ * This, not the base URL, is what makes two profiles the same server. `http://host:8080` and
+ * `http://host:8080/` reach the same admin API, as do one profile leaving `adminPath` unset and
+ * another spelling out `/__admin`. Comparing the raw strings would call those different and let
+ * a duplicate through, which is the shape of the bug this exists to prevent.
+ *
+ * Returns `null` for a base URL that will not parse: an unusable profile cannot collide with
+ * anything, and refusing to save it is the URL validator's job rather than this one's.
+ */
+export function adminUrlFor(profile: Pick<ProfileInput, 'baseUrl' | 'adminPath'>): string | null {
+  try {
+    return composeAdminUrl(profile.baseUrl, profile.adminPath)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The profile already pointing at that address, if any.
+ *
+ * @param exceptId a profile to ignore, so editing one does not report it as colliding with
+ *   itself.
+ */
+export function findProfileByAdminUrl(
+  db: Db,
+  target: Pick<ProfileInput, 'baseUrl' | 'adminPath'>,
+  exceptId?: string,
+): Profile | null {
+  const wanted = adminUrlFor(target)
+  if (wanted === null) return null
+  return (
+    listProfiles(db).find(
+      (profile) => profile.id !== exceptId && adminUrlFor(profile) === wanted,
+    ) ?? null
+  )
 }
 
 export function listProfiles(db: Db): Profile[] {

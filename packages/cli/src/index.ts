@@ -11,6 +11,7 @@ import {
   DEFAULT_CONFIG_FILENAME,
   createApp,
   createProfile,
+  findProfileByAdminUrl,
   listProfiles,
   loadConfig,
   openDatabase,
@@ -220,7 +221,17 @@ async function main(): Promise<void> {
   }
 
   if (flags.url !== undefined) {
-    const existing = listProfiles(db).find((profile) => profile.baseUrl === flags.url)
+    /**
+     * Naming a server that is already known is not an error — it is the normal case on the
+     * second run, and the answer is to open it.
+     *
+     * Matched on the composed admin URL, the same identity the API rejects duplicates by. A raw
+     * string comparison would call `http://host:8080` and `http://host:8080/` different, create
+     * a second profile for one server, and now be refused outright — turning an everyday
+     * command into a failure.
+     */
+    const existing = findProfileByAdminUrl(db, { baseUrl: flags.url, adminPath: null })
+    if (existing !== null) console.log(`  using the server already known as "${existing.name}"`)
     const profile =
       existing ??
       createProfile(db, {

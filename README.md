@@ -89,7 +89,13 @@ named, and mirrors its corpus.
 
 Servers you connect to are remembered in the state database and stay in the list until you
 remove them (Servers → Remove). `--url` always decides which one the browser opens, whatever
-else is in there.
+else is in there, and naming one that is already known simply opens it rather than adding a
+second copy.
+
+One address, one server: two profiles reaching the same admin URL are refused, since both would
+mirror the same corpus and the switcher would offer a choice that changes nothing. The
+comparison is on the composed address, so a trailing slash or a spelled-out `/__admin` does not
+sneak a duplicate past.
 
 ### `mock-knight.json`
 
