@@ -331,17 +331,27 @@ export function ProfilesScreen({
               }}
             />
             <span style={{ minWidth: 0, flex: 1 }}>
-              <span style={{ display: 'block', fontSize: 13, fontWeight: 500 }}>
-                {profile.name}
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+              <span
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: 13,
+                  fontWeight: 500,
+                }}
+              >
+                {/* Beside the name, which is what someone reads to tell two servers apart —
+                    the URL below is the detail, not the identity. */}
                 <BackendBadge {...backendOf(kinds, profile.adapter)} />
-                <span
-                  className="mk-mono"
-                  style={{ fontSize: 11, color: 'var(--mk-text-tertiary)' }}
-                >
-                  {profile.baseUrl}
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {profile.name}
                 </span>
+              </span>
+              <span
+                className="mk-mono"
+                style={{ display: 'block', fontSize: 11, color: 'var(--mk-text-tertiary)' }}
+              >
+                {profile.baseUrl}
               </span>
             </span>
             {profile.protected && <Chip tone="warning">protected</Chip>}

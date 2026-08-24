@@ -227,8 +227,21 @@ async function main(): Promise<void> {
   const webRoot = findWebRoot()
   if (webRoot !== null) {
     app.use('/*', serveStatic({ root: webRoot }))
-    // The SPA owns client-side routing, so any unmatched path returns the shell.
-    app.get('/*', serveStatic({ path: join(webRoot, 'index.html') }))
+    /**
+     * The SPA owns client-side routing, so an unmatched path returns the shell — but only when
+     * it could plausibly *be* a route.
+     *
+     * Without the extension check every missing asset answered 200 with HTML: a mistyped font
+     * URL, a stale hashed bundle, an optional image that is simply not there. The browser then
+     * fails to decode it and reports something about the file rather than about the 404, which
+     * is a long way from the cause. A client-side route has no extension; a file does.
+     */
+    const shell = serveStatic({ path: join(webRoot, 'index.html') })
+    app.get('/*', async (c, next) => {
+      // A client-side route has no extension; a file does.
+      if (/\.[a-z0-9]+$/i.test(new URL(c.req.url).pathname)) return c.notFound()
+      return (await shell(c, next)) ?? c.notFound()
+    })
   }
 
   if (flags.url !== undefined) {

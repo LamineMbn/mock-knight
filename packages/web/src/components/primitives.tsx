@@ -665,12 +665,40 @@ export function BackendBadge({
   displayName: string
   id: string
 }) {
+  /**
+   * A real logo if one has been dropped in, a lettermark otherwise.
+   *
+   * The path is a convention — `public/backends/<adapter id>.svg` — so adding a backend's mark
+   * is putting a file in a folder, with no code to change and nothing to register. See the
+   * README there for what may legitimately go in it.
+   *
+   * No logo ships with this repo on purpose: an approximation of someone else's trademark is
+   * worse than none, and their real files are theirs to license. `WM` and `MS` distinguish two
+   * backends without claiming to be anybody's brand.
+   */
+  const [logoFailed, setLogoFailed] = useState(false)
+
   // Existing profile-colour tokens rather than new ones: the palette is already contrast-checked
-  // in both themes, and inventing a colour here would be the literal-colour rule broken.
+  // in both themes, and inventing a colour here would break the literal-colour rule.
   const tints = ['indigo', 'cyan', 'violet', 'olive', 'rose', 'slate'] as const
   let hash = 0
   for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) >>> 0
   const tint = tints[hash % tints.length]!
+
+  if (!logoFailed) {
+    return (
+      <img
+        src={`/backends/${id}.svg`}
+        alt={displayName}
+        title={displayName}
+        width={16}
+        height={16}
+        // Falls back the moment the file is absent, which is the normal case in this repo.
+        onError={() => setLogoFailed(true)}
+        style={{ flex: '0 0 auto', display: 'block', objectFit: 'contain' }}
+      />
+    )
+  }
 
   return (
     <span

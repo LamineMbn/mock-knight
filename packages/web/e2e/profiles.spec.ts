@@ -232,3 +232,31 @@ test('refuses a second server for the same address, and says which one has it', 
   expect(profiles.profiles).toHaveLength(before)
   expect(profiles.profiles.filter((p) => p.name === 'a duplicate')).toHaveLength(0)
 })
+
+test('each server is marked with the backend it is, beside its name', async ({ page }) => {
+  // With two backends in one list, an address says nothing about what is on the other end —
+  // and the two differ enough to matter: one has a traffic log and scenarios, the other does not.
+  await page.goto('/?screen=profiles')
+  const row = page.locator('main li').filter({ hasText: WIREMOCK }).first()
+  // The lettermark: no logo files ship with this repo, because they are other projects' marks.
+  await expect(row.getByRole('img', { name: /WireMock/ })).toBeVisible()
+
+  // In the switcher too, where servers are actually chosen between.
+  await page.getByRole('button', { name: /Profile: / }).click()
+  await expect(
+    page
+      .getByRole('listbox')
+      .getByRole('img', { name: /WireMock/ })
+      .first(),
+  ).toBeVisible()
+})
+
+test('a missing asset is a 404, not the app shell with a 200', async ({ page }) => {
+  // The SPA catch-all used to answer every unmatched path with index.html, so a missing image
+  // came back as HTML and the browser complained about the file rather than about the 404.
+  const logo = await page.request.get('/backends/wiremock.svg')
+  expect(logo.status()).toBe(404)
+  // A client-side route still gets the shell — it has no extension, a file does.
+  const route = await page.request.get('/some/deep/route')
+  expect(route.status()).toBe(200)
+})
