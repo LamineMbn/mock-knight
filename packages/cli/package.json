@@ -1,6 +1,6 @@
 {
   "name": "mock-knight",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "A local-first web UI for HTTP mock servers",
   "license": "Apache-2.0",
   "type": "module",

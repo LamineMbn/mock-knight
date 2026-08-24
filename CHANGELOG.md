@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.3.0
+
+### Fixed
+
+- **`--url` now decides which server the browser opens.** Servers are remembered in a state
+  database shared by every run, and the browser fell back to the first profile it held — which
+  is the *oldest*. Anyone who had run against a local WireMock and later named a staging URL was
+  shown the local one, so the flag did not decide what they saw. The process now reports the
+  server it was started for, and the browser prefers it.
+
+### Added
+
+- **Saved searches**, per profile. A structured query is the fastest way to find one stub among
+  thousands and the thing nobody remembers the syntax of a week later. They appear beside the
+  search box and in the command palette, with the query shown next to the name. Applying one and
+  then refining it offers **Update**, so keeping the name does not mean retyping it.
+- **A clear control on the search box**, and `esc` does the same. Emptying a query used to mean
+  selecting the text and deleting it, which is worst on exactly the long structured queries the
+  box is for.
+- **An adapter conformance suite.** The contract is now executable: one set of tests, living in
+  `core`, that any backend must pass. An adapter is the subject of that suite rather than its
+  author, because backend-specific tests tend to assert what the adapter already does — which is
+  how a portable model quietly becomes one vendor's JSON with different field names. Adding a
+  backend means one file that connects an adapter and hands it over, containing no assertions of
+  its own.
+
+### Changed
+
+- The query pills under the search box report what was actually applied. They rendered
+  `field: value`, which dropped the operator and the header name, so `header:X-Tenant` read as
+  "header: null" and `priority:<5` as "priority: 5" — each naming a filter that was not applied.
+
 ## 0.2.1
 
 Fixes a reported bug: clicking the stub that served a request opened the corpus without opening
