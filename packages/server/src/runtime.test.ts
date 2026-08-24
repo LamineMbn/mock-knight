@@ -146,3 +146,19 @@ describe('ConnectionRegistry.ensure', () => {
     expect(second - first).toBeGreaterThan(first - start)
   })
 })
+
+describe('ConnectionRegistry.markUnreachable', () => {
+  /**
+   * A connection that has stopped working is not detected by probing — it is detected the next
+   * time something uses it. Nothing here connects, so the behaviour under test is what happens
+   * to registry state, not to a socket.
+   */
+  it('does nothing to a profile that was never connected', () => {
+    const db = openDatabase(':memory:')
+    const registry = new ConnectionRegistry(db, 'local')
+    registry.markUnreachable('never-connected', new Error('boom'))
+    // No phantom failure: a profile nobody has connected is untried, not broken.
+    expect(registry.lastFailure('never-connected')).toBeNull()
+    db.close()
+  })
+})

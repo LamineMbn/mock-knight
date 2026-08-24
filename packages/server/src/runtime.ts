@@ -205,6 +205,30 @@ export class ConnectionRegistry {
     }
   }
 
+  /**
+   * Drop a connection that has stopped working, and record why.
+   *
+   * Detection is by *use*, not by probing. Once connected, a handle kept reporting healthy
+   * however long the server had been gone — the badge stayed clean and every action failed on
+   * its own instead, which is the app lying about the one thing the badge exists to say. A
+   * transport failure against a live connection is proof enough, and it costs no extra traffic
+   * to a server a whole team shares.
+   *
+   * The next `ensure` retries immediately rather than waiting out a backoff: nothing has failed
+   * *to connect* yet, so there is nothing to back off from, and a blip should recover on the
+   * next poll.
+   */
+  markUnreachable(profileId: string, error: unknown, now: number = Date.now()): void {
+    if (!this.connections.has(profileId)) return
+    void this.disconnect(profileId)
+    this.failures.set(profileId, {
+      attempts: 0,
+      code: error instanceof AdapterTransportError ? error.code : null,
+      message: error instanceof Error ? error.message : String(error),
+      nextAttemptAt: now,
+    })
+  }
+
   /** Why the last attempt for this profile failed, or `null` if it is connected or untried. */
   lastFailure(profileId: string): ConnectionFailure | null {
     const failure = this.failures.get(profileId)

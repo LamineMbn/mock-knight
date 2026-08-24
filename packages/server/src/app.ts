@@ -336,6 +336,19 @@ export function createApp(options: AppOptions) {
         )
       }
       if (error instanceof AdapterTransportError) {
+        /*
+         * The connection is gone, so stop claiming it is not.
+         *
+         * A handle that has stopped working used to keep reporting healthy — the badge stayed
+         * clean while every action failed on its own. Dropping it here means the next mirror
+         * poll says "unreachable" with this reason, and the reconnect loop takes it from there.
+         *
+         * Only a *transport* failure counts. A 4xx or 5xx from the mock server means it
+         * answered, which is the opposite of unreachable.
+         */
+        const failed = c.req.param('p') ?? c.req.param('id')
+        if (failed !== undefined) registry.markUnreachable(failed, error)
+
         // Same envelope as an upstream HTTP error so the UI has one disclosure to render, with
         // `status: null` marking the difference: nothing answered, so there is no status.
         return c.json(

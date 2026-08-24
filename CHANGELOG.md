@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **A connection that stops working is noticed.** Once connected, the app kept reporting healthy
+  however long the server had been gone — the badge stayed clean while every action failed on
+  its own, which is the app lying about the one thing the badge exists to say. A VPN going down
+  mid-session is the ordinary way to see this. Detection is by use rather than by probing: a
+  transport failure against a live connection drops it, the badge says "unreachable" with the
+  reason, and the reconnect loop takes it from there. No extra traffic reaches a mock server the
+  whole team shares.
+
 ## 0.5.0
 
 ### Added

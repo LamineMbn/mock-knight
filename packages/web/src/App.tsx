@@ -170,12 +170,16 @@ export function App() {
     queryFn: () => api.mirror(profile!.id),
     enabled: profile !== undefined,
     /**
-     * Poll only while disconnected. Asking for mirror status is what makes the server retry the
-     * connection, so a profile that is down comes back on its own instead of needing Refresh
-     * clicked — but a healthy profile is not polled at all, and the server's own backoff means
-     * these requests do not reach the mock server every time. Once connected the interval stops.
+     * Poll for connection health — fast while down, slowly while up.
+     *
+     * Asking for mirror status is what makes the server retry the connection, so a profile that
+     * is down comes back on its own instead of needing Refresh clicked. None of this reaches the
+     * mock server: a connected poll is a SQLite read plus an already-open handle, and a
+     * disconnected one is governed by the server's backoff. The slow tick while connected is
+     * what notices a connection the BFF has dropped after it stopped working — a VPN going down
+     * mid-session, which otherwise left the badge clean while every action failed.
      */
-    refetchInterval: (query) => (query.state.data?.connected === true ? false : 3_000),
+    refetchInterval: (query) => (query.state.data?.connected === true ? 10_000 : 3_000),
     refetchOnWindowFocus: true,
   })
 
