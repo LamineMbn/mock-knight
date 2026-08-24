@@ -48,7 +48,10 @@
           "adapter": {
             "default": "wiremock",
             "type": "string",
-            "const": "wiremock"
+            "enum": [
+              "wiremock",
+              "mockserver"
+            ]
           },
           "baseUrl": {
             "type": "string",
