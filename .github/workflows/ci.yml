@@ -125,6 +125,34 @@ jobs:
           done
           echo '::error::Mockoon never became healthy'; docker logs mk-mockoon; exit 1
 
+      # Prism, like Mockoon, cannot be a service container: it needs a document, and services
+      # start before any step can write one. It always watches that document — there is no
+      # --watch flag because there is nothing to switch on — and it refuses to start on a
+      # specification with no operations, hence the placeholder.
+      - name: Start Prism
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/.prism"
+          cat > "$GITHUB_WORKSPACE/.prism/conf.json" <<'JSON'
+          {
+            "openapi": "3.0.0",
+            "info": { "title": "conformance", "version": "1.0" },
+            "paths": {
+              "/__mock-knight-conformance": {
+                "get": { "operationId": "mkConformance", "responses": {} }
+              }
+            }
+          }
+          JSON
+          npx -y @stoplight/prism-cli@latest mock -p 13002 \
+            -d "$GITHUB_WORKSPACE/.prism/conf.json" > "$RUNNER_TEMP/prism.log" 2>&1 &
+          for i in $(seq 1 90); do
+            curl -fsS -o /dev/null "http://127.0.0.1:13002/__mock-knight-conformance" && exit 0
+            # A 4xx still means it is listening, which is all this is waiting for.
+            curl -sS -o /dev/null "http://127.0.0.1:13002/" && exit 0
+            sleep 1
+          done
+          echo '::error::Prism never became healthy'; cat "$RUNNER_TEMP/prism.log"; exit 1
+
       - name: Wait for MockServer
         run: |
           for i in $(seq 1 60); do
@@ -145,13 +173,15 @@ jobs:
       - run: pnpm test:integration
 
       # The adapter contract, asserted by a suite that lives in `core` and is identical for
-      # every backend — all three run it. It lives here rather than in its own job because it
+      # every backend — all four run it. It lives here rather than in its own job because it
       # needs the same backends, and it is fast.
       - run: pnpm test:conformance
         env:
           MOCK_KNIGHT_TEST_MOCKOON_URL: http://localhost:13000
           MOCK_KNIGHT_TEST_MOCKOON_TOKEN: ci-token
           MOCK_KNIGHT_TEST_MOCKOON_FILE: ${{ github.workspace }}/.mockoon/env.json
+          MOCK_KNIGHT_TEST_PRISM_URL: http://127.0.0.1:13002
+          MOCK_KNIGHT_TEST_PRISM_FILE: ${{ github.workspace }}/.prism/conf.json
 
       # e2e drives the *built* SPA served by the CLI, not the dev server — the packaging is
       # part of what is under test.

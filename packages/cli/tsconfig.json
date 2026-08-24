@@ -8,6 +8,7 @@
       "@mock-knight/adapter-wiremock": ["../adapter-wiremock/src/index.ts"],
       "@mock-knight/adapter-mockserver": ["../adapter-mockserver/src/index.ts"],
       "@mock-knight/adapter-mockoon": ["../adapter-mockoon/src/index.ts"],
+      "@mock-knight/adapter-prism": ["../adapter-prism/src/index.ts"],
       "@mock-knight/server": ["../server/src/index.ts"]
     }
   },

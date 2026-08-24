@@ -51,7 +51,8 @@
             "enum": [
               "wiremock",
               "mockserver",
-              "mockoon"
+              "mockoon",
+              "prism"
             ]
           },
           "baseUrl": {

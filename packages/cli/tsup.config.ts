@@ -15,13 +15,19 @@ export default defineConfig({
     '@mock-knight/core',
     '@mock-knight/adapter-wiremock',
     '@mock-knight/adapter-mockserver',
+    '@mock-knight/adapter-mockoon',
+    '@mock-knight/adapter-prism',
   ],
   // Left external on purpose:
   //  - better-sqlite3 is a native module; its prebuilt binary must be resolved from disk.
   //  - undici is CJS and uses dynamic require(), which an ESM bundle cannot express. Bundling
   //    it produces a build that succeeds and then dies at startup on `Dynamic require of
   //    "assert" is not supported`.
-  external: ['better-sqlite3', 'undici'],
+  //  - yaml, for the same reason and found the same way: bundled, the CLI built cleanly and then
+  //    died on `Dynamic require of "process" is not supported` the moment it was run. tsup only
+  //    externalises *this* package's dependencies, so a dependency of an adapter is bundled
+  //    unless it is named here.
+  external: ['better-sqlite3', 'undici', 'yaml'],
   // The version is single-sourced from package.json and inlined at build time. It used to be a
   // literal in index.ts, which meant the published 0.1.0 answered `--version` with 0.0.0 —
   // and the release workflow's tag check compares against package.json, so nothing caught it.

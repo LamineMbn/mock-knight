@@ -20,4 +20,5 @@ export const workspaceAliases: Record<string, string> = {
   '@mock-knight/adapter-wiremock': resolve('./packages/adapter-wiremock/src/index.ts'),
   '@mock-knight/adapter-mockserver': resolve('./packages/adapter-mockserver/src/index.ts'),
   '@mock-knight/adapter-mockoon': resolve('./packages/adapter-mockoon/src/index.ts'),
+  '@mock-knight/adapter-prism': resolve('./packages/adapter-prism/src/index.ts'),
 }

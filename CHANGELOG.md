@@ -4,6 +4,15 @@
 
 ### Added
 
+- **A fourth backend: Prism**, read-only. The first whose corpus was never written as mocks at
+  all: Prism serves an OpenAPI document, and mock behaviour is derived from it. An operation
+  becomes one stub per declared response, ranked the way Prism actually picks — the lowest 2xx,
+  verified by running it — with tags as folders and required parameters as matchers.
+
+  Read-only on purpose and for a different reason than Mockoon: a write here would mean editing
+  an API specification, which changes the contract other people generate clients from. That is a
+  product decision, not a missing feature.
+
 - **A third backend: Mockoon**, read-only for now. It is the first that is not an admin API:
   Mockoon's corpus lives in an environment JSON file and its admin API cannot read routes at all,
   so a profile points at the file. Folders come from Mockoon's own tree rather than being guessed
