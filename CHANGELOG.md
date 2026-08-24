@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.0
+
+### Fixed
+
+- **One address, one server.** Adding a profile that reaches an address another already reaches
+  is refused, naming the one that has it. Two profiles on one server both mirror the same
+  corpus, an edit through one looks stale in the other, and the switcher offers a choice that
+  changes nothing. The comparison is the composed admin URL, so a trailing slash or a
+  spelled-out `/__admin` cannot slip a duplicate past — while two context paths on one host stay
+  the two different servers they are.
+- **`npx mock-knight --url <a server you already added>` opens it** rather than adding a second
+  copy. It matched on the raw base URL before, so a trailing slash made a duplicate — which the
+  rule above would then have refused outright.
+
+### Added
+
+- **A theme switch.** Light, dark, or whatever the machine is set to. The default still follows
+  the OS, and stays following it: a machine that switches at sunset takes the app with it. The
+  choice is applied before the first paint, so there is no flash of the wrong theme on load.
+- **Icons for the actions you repeat**, with their words on hover and as their accessible name.
+  A toolbar of five verbs eats the width the corpus needs. Confirmations and dialog primary
+  actions keep their words, because a tooltip is invisible to a keyboard user until focus lands
+  and invisible to touch entirely — the moment of committing a write is not the place for a
+  button you have to guess at.
+
 ## 0.3.0
 
 ### Fixed
