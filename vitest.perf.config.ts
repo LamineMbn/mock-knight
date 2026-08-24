@@ -1,7 +1,5 @@
-import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
-
-const resolve = (path: string) => fileURLToPath(new URL(path, import.meta.url))
+import { workspaceAliases } from './vitest.aliases.js'
 
 /**
  * Performance budgets. Separate from `pnpm test` because they build 10,000-stub corpora and
@@ -10,11 +8,7 @@ const resolve = (path: string) => fileURLToPath(new URL(path, import.meta.url))
  */
 export default defineConfig({
   resolve: {
-    alias: {
-      '@mock-knight/core/types': resolve('./packages/core/src/types.ts'),
-      '@mock-knight/core': resolve('./packages/core/src/index.ts'),
-      '@mock-knight/adapter-wiremock': resolve('./packages/adapter-wiremock/src/index.ts'),
-    },
+    alias: workspaceAliases,
   },
   test: {
     include: ['packages/*/src/**/*.perf.test.ts'],

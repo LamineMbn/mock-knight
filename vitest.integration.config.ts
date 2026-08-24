@@ -1,7 +1,5 @@
-import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
-
-const resolve = (path: string) => fileURLToPath(new URL(path, import.meta.url))
+import { workspaceAliases } from './vitest.aliases.js'
 
 /**
  * Tier 3 — against a real mock server in Docker, never a fake.
@@ -12,13 +10,7 @@ const resolve = (path: string) => fileURLToPath(new URL(path, import.meta.url))
  */
 export default defineConfig({
   resolve: {
-    alias: {
-      '@mock-knight/core/conformance': resolve('./packages/core/src/conformance.ts'),
-      '@mock-knight/core/types': resolve('./packages/core/src/types.ts'),
-      '@mock-knight/core': resolve('./packages/core/src/index.ts'),
-      '@mock-knight/adapter-mockserver': resolve('./packages/adapter-mockserver/src/index.ts'),
-      '@mock-knight/adapter-wiremock': resolve('./packages/adapter-wiremock/src/index.ts'),
-    },
+    alias: workspaceAliases,
   },
   test: {
     include: ['packages/*/src/**/*.integration.test.ts'],
