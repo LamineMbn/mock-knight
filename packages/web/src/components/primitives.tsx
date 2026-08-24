@@ -643,3 +643,74 @@ export function IconButton({
     </button>
   )
 }
+
+/**
+ * Which backend a server is, beside its address.
+ *
+ * A lettermark, not the vendor's logo: shipping an approximation of someone else's trademark is
+ * worse than shipping none — it is wrong, it is theirs, and a redrawn mark is the kind of thing
+ * a project gets asked to take down. Two letters distinguish two backends at a glance and claim
+ * to be nobody's brand.
+ *
+ * Tinted per backend so the eye can sort a list without reading, and lettered so the tint is
+ * never the only signal (§8). The tint is derived from the id rather than configured, so a third
+ * backend gets one without anyone choosing.
+ */
+export function BackendBadge({
+  shortName,
+  displayName,
+  id,
+}: {
+  shortName: string
+  displayName: string
+  id: string
+}) {
+  // Existing profile-colour tokens rather than new ones: the palette is already contrast-checked
+  // in both themes, and inventing a colour here would be the literal-colour rule broken.
+  const tints = ['indigo', 'cyan', 'violet', 'olive', 'rose', 'slate'] as const
+  let hash = 0
+  for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) >>> 0
+  const tint = tints[hash % tints.length]!
+
+  return (
+    <span
+      title={displayName}
+      aria-label={displayName}
+      role="img"
+      className="mk-mono"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flex: '0 0 auto',
+        width: 20,
+        height: 16,
+        fontSize: 10,
+        fontWeight: 600,
+        letterSpacing: '0.02em',
+        color: `var(--mk-profile-${tint})`,
+        background: 'var(--mk-bg-subtle)',
+        border: `1px solid var(--mk-profile-${tint})`,
+        borderRadius: 'var(--mk-radius-sm)',
+      }}
+    >
+      {shortName}
+    </span>
+  )
+}
+
+/** Look a backend up by id, for the badge. Unknown ids still render, marked as unknown. */
+export function backendOf(
+  adapters: readonly { id: string; displayName: string; shortName: string }[],
+  id: string,
+): { id: string; displayName: string; shortName: string } {
+  return (
+    adapters.find((candidate) => candidate.id === id) ?? {
+      id,
+      // A profile can name a backend this build does not have — an older state database, or a
+      // config file from a colleague. Saying so beats rendering nothing at all.
+      displayName: `${id} (not available in this build)`,
+      shortName: '??',
+    }
+  )
+}

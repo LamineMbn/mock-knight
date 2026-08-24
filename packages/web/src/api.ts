@@ -88,6 +88,8 @@ export interface Profile {
 export interface AdapterDescriptor {
   id: string
   displayName: string
+  /** Two or three characters, for the badge shown beside every server address. */
+  shortName: string
   /** Previewed while someone is still typing, before any connection exists. */
   defaultAdminPath: string
 }

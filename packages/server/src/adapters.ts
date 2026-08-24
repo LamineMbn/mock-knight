@@ -20,6 +20,8 @@ export const ADAPTER_IDS = Object.keys(FACTORIES) as [string, ...string[]]
 export interface AdapterDescriptor {
   readonly id: string
   readonly displayName: string
+  /** Two or three characters, for the badge beside every server address. */
+  readonly shortName: string
   /** What the Servers form previews before a connection exists. */
   readonly defaultAdminPath: string
 }
@@ -35,6 +37,7 @@ export const ADAPTERS: readonly AdapterDescriptor[] = Object.values(FACTORIES).m
   return {
     id: instance.id,
     displayName: instance.displayName,
+    shortName: instance.shortName,
     defaultAdminPath: instance.defaultAdminPath,
   }
 })

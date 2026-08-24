@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '../api.js'
 import type { Profile } from '../api.js'
-import { Chip } from './primitives.js'
+import { BackendBadge, Chip, backendOf } from './primitives.js'
 
 /**
  * The environment badge and switcher — design brief §6.1.
@@ -32,6 +34,9 @@ export function ProfileSwitcher({
 }: ProfileSwitcherProps) {
   const [open, setOpen] = useState(false)
   const container = useRef<HTMLDivElement>(null)
+  // Shared query key with the Servers screen, so React Query fetches this once.
+  const adapters = useQuery({ queryKey: ['adapters'], queryFn: api.adapters })
+  const kinds = adapters.data?.adapters ?? []
 
   useEffect(() => {
     if (!open) return
@@ -133,17 +138,21 @@ export function ProfileSwitcher({
               <Dot colour={profile.colour} connected />
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: 'block', fontWeight: 500 }}>{profile.name}</span>
-                <span
-                  className="mk-mono"
-                  style={{
-                    display: 'block',
-                    fontSize: 11,
-                    color: 'var(--mk-text-tertiary)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {profile.baseUrl}
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                  <BackendBadge {...backendOf(kinds, profile.adapter)} />
+                  <span
+                    className="mk-mono"
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      fontSize: 11,
+                      color: 'var(--mk-text-tertiary)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {profile.baseUrl}
+                  </span>
                 </span>
               </span>
               {profile.protected && <Chip tone="warning">protected</Chip>}

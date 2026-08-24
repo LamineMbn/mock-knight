@@ -4,7 +4,15 @@ import { api } from '../api.js'
 import type { CapabilityRow, NewProfile, Profile } from '../api.js'
 import { ServerForm } from './ServerForm.js'
 import { LogIn, Pencil, Trash2 } from 'lucide-react'
-import { Button, Chip, IconButton, Skeleton, toFailure } from './primitives.js'
+import {
+  BackendBadge,
+  Button,
+  Chip,
+  IconButton,
+  Skeleton,
+  backendOf,
+  toFailure,
+} from './primitives.js'
 import type { Failure } from './primitives.js'
 
 /**
@@ -267,6 +275,9 @@ export function ProfilesScreen({
 }) {
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState<string | null>(null)
+  // Same query key as the switcher and the form: fetched once for the whole app.
+  const adapters = useQuery({ queryKey: ['adapters'], queryFn: api.adapters })
+  const kinds = adapters.data?.adapters ?? []
   const remove = useMutation({
     mutationFn: (id: string) => api.deleteProfile(id),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['profiles'] }),
@@ -323,11 +334,14 @@ export function ProfilesScreen({
               <span style={{ display: 'block', fontSize: 13, fontWeight: 500 }}>
                 {profile.name}
               </span>
-              <span
-                className="mk-mono"
-                style={{ display: 'block', fontSize: 11, color: 'var(--mk-text-tertiary)' }}
-              >
-                {profile.baseUrl}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                <BackendBadge {...backendOf(kinds, profile.adapter)} />
+                <span
+                  className="mk-mono"
+                  style={{ fontSize: 11, color: 'var(--mk-text-tertiary)' }}
+                >
+                  {profile.baseUrl}
+                </span>
               </span>
             </span>
             {profile.protected && <Chip tone="warning">protected</Chip>}

@@ -91,6 +91,17 @@ export interface MockBackendAdapter {
   readonly id: string
   readonly displayName: string
   /**
+   * Two or three characters identifying this backend where a name will not fit — beside every
+   * server address, at 16px.
+   *
+   * A lettermark rather than the vendor's own logo, deliberately. Shipping an approximation of
+   * someone else's trademark is worse than shipping no logo: it is wrong, it is theirs, and a
+   * redrawn mark is the kind of thing a project gets asked to remove. `WM` and `MS` distinguish
+   * two backends at a glance without claiming to be anybody's brand.
+   */
+  readonly shortName: string
+
+  /**
    * Where this backend's control API lives when a profile does not say.
    *
    * On the contract rather than in a lookup table somewhere, because it is a property of the

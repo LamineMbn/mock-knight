@@ -98,6 +98,7 @@ export function atLeast(version: ParsedVersion | null, target: ParsedVersion): b
 export class WireMockAdapter implements MockBackendAdapter {
   readonly id = BACKEND_ID
   readonly displayName = 'WireMock (Java)'
+  readonly shortName = 'WM'
   readonly defaultAdminPath = DEFAULT_ADMIN_PATH
 
   private client: WireMockClient | null = null

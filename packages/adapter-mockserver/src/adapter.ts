@@ -35,6 +35,7 @@ import { toCanonical, toVendor } from './mapping.js'
 export class MockServerAdapter implements MockBackendAdapter {
   readonly id = 'mockserver'
   readonly displayName = 'MockServer'
+  readonly shortName = 'MS'
   readonly defaultAdminPath = DEFAULT_CONTROL_PATH
 
   private client: MockServerClient | null = null
