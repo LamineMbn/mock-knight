@@ -46,6 +46,15 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)(lightningcss@1.32.0)
 
+  packages/adapter-mockserver:
+    dependencies:
+      '@mock-knight/core':
+        specifier: workspace:*
+        version: link:../core
+      undici:
+        specifier: ^7.2.0
+        version: 7.29.0
+
   packages/adapter-wiremock:
     dependencies:
       '@mock-knight/core':

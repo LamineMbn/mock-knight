@@ -83,6 +83,11 @@ jobs:
       wiremock:
         image: wiremock/wiremock:3.13.1
         ports: ['18099:8080']
+      # A second backend, so the conformance tier proves the model is portable rather than
+      # proving the suite runs.
+      mockserver:
+        image: mockserver/mockserver:5.15.0
+        ports: ['11080:1080']
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -91,6 +96,15 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+
+      - name: Wait for MockServer
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS -X PUT -H 'content-type: application/json' -d '{}' \
+              http://localhost:11080/mockserver/status > /dev/null && exit 0
+            sleep 1
+          done
+          echo '::error::MockServer never became healthy'; exit 1
 
       - name: Wait for WireMock
         run: |
@@ -103,8 +117,8 @@ jobs:
       - run: pnpm test:integration
 
       # The adapter contract, asserted by a suite that lives in `core` and is identical for
-      # every backend. It runs here rather than as its own job because it needs the same
-      # WireMock service container, and it is fast.
+      # every backend — WireMock and MockServer both run it. It lives here rather than in its
+      # own job because it needs the same service containers, and it is fast.
       - run: pnpm test:conformance
 
       # e2e drives the *built* SPA served by the CLI, not the dev server — the packaging is

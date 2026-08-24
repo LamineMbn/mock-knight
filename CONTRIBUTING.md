@@ -21,6 +21,9 @@ To actually run it:
 # 1. a throwaway WireMock the test suites are allowed to overwrite
 docker run -d --name mk-dev-wiremock -p 18099:8080 wiremock/wiremock:3.13.1 --verbose
 
+# the second backend, for the conformance tier
+docker run -d --name mk-mockserver -p 11080:1080 mockserver/mockserver:5.15.0
+
 # 2. build the SPA and the CLI
 pnpm build
 
@@ -51,7 +54,7 @@ aliased to their **source**, so no build step stands between an edit and a test 
 | Unit | `pnpm test` | nothing |
 | Perf budgets (1k/5k/10k fixtures) | `pnpm test:perf` | nothing |
 | Integration (BFF ↔ real WireMock) | `pnpm test:integration` | WireMock on `:18099` |
-| Adapter conformance (contract ↔ real backend) | `pnpm test:conformance` | WireMock on `:18099` |
+| Adapter conformance (contract ↔ both backends) | `pnpm test:conformance` | WireMock on `:18099`, MockServer on `:11080` |
 | End-to-end (browser ↔ built SPA) | `pnpm test:e2e` | the above, plus the CLI on `:7777` |
 
 > **The last two replace the target WireMock's corpus wholesale.** Point them only at a

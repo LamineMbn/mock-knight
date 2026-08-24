@@ -229,7 +229,11 @@ export function runAdapterConformance(options: () => ConformanceOptions): void {
 
       const remaining = await adapter.listMocks({ limit: 50, offset: 0 })
       expect(remaining.total).toBe(1)
-      expect(remaining.items[0]!.name).toBe('survivor')
+      // Identified by URL, not by name. MockServer has no name for an expectation, so asserting
+      // on one was this suite testing a WireMock habit rather than the contract — found by
+      // running it against the second backend, which is what the tier is for. Every backend has
+      // a matcher; not every backend has a label.
+      expect(remaining.items[0]!.request.url?.value).toBe('/survivor')
     })
 
     it('replaceAll replaces rather than merges', async () => {
