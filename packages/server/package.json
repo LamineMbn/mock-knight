@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
+    "@mock-knight/adapter-mockserver": "workspace:*",
     "@mock-knight/adapter-wiremock": "workspace:*",
     "@mock-knight/core": "workspace:*",
     "better-sqlite3": "^13.0.0",

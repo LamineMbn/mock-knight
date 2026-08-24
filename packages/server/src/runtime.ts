@@ -13,7 +13,7 @@ import type {
   MockBackendAdapter,
   ResolvedAuth,
 } from '@mock-knight/core'
-import { WireMockAdapter } from '@mock-knight/adapter-wiremock'
+import { createAdapter } from './adapters.js'
 import type { Database as Db } from 'better-sqlite3'
 import { recordConnection } from './profiles.js'
 import type { Profile } from './profiles.js'
@@ -116,7 +116,8 @@ export class ConnectionRegistry {
   async connect(profile: Profile): Promise<Connection> {
     await this.disconnect(profile.id)
 
-    const implementation = new WireMockAdapter()
+    // Chosen by the profile rather than assumed: this build has more than one backend.
+    const implementation = createAdapter(profile.adapter)
     const info = await implementation.connect({
       baseUrl: profile.baseUrl,
       adminPath: profile.adminPath ?? undefined,

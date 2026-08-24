@@ -9,7 +9,7 @@ import type {
   MockDraft,
   Page,
 } from '@mock-knight/core'
-import { MockServerClient } from './client.js'
+import { DEFAULT_CONTROL_PATH, MockServerClient } from './client.js'
 import { toCanonical, toVendor } from './mapping.js'
 
 /**
@@ -35,6 +35,7 @@ import { toCanonical, toVendor } from './mapping.js'
 export class MockServerAdapter implements MockBackendAdapter {
   readonly id = 'mockserver'
   readonly displayName = 'MockServer'
+  readonly defaultAdminPath = DEFAULT_CONTROL_PATH
 
   private client: MockServerClient | null = null
   private bits: Set<CapabilityBit> = new Set()

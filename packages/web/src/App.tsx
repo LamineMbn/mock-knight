@@ -193,7 +193,9 @@ export function App() {
     queryFn: () => api.searches(profile!.id),
     enabled: profile !== undefined,
   })
-  const savedSearches = searches.data?.searches ?? []
+  // Memoised because `?? []` is a fresh array every render, which made the command list below
+  // recompute on each one — the dependency was never actually stable.
+  const savedSearches = useMemo(() => searches.data?.searches ?? [], [searches.data])
 
   const commands = useMemo<Command[]>(() => {
     if (profile === undefined) return []
@@ -233,7 +235,9 @@ export function App() {
        * the palette and still route through their typed confirmation. Reaching the control is
        * the point; skipping the confirmation would not be.
        */
-      ...(profile.readOnly || profile.protected
+      ...(profile.readOnly ||
+      profile.protected ||
+      profile.capabilities?.includes('journal.read') !== true
         ? []
         : [
             {
@@ -256,8 +260,14 @@ export function App() {
         },
       })),
       go('corpus', 'Corpus'),
-      go('traffic', 'Traffic'),
-      go('scenarios', 'Scenarios'),
+      // Same gate as the nav: the palette reaches every action the app *has*, and a screen the
+      // backend cannot serve is not one of them.
+      ...(profile.capabilities?.includes('journal.read') === true
+        ? [go('traffic', 'Traffic')]
+        : []),
+      ...(profile.capabilities?.includes('state.read') === true
+        ? [go('scenarios', 'Scenarios')]
+        : []),
       go('profiles', 'Servers'),
       ...all
         .filter((candidate) => candidate.id !== profile.id)
@@ -334,12 +344,14 @@ export function App() {
       <TopBar
         profile={profile}
         version={mirror.data?.version ?? null}
+        backend={mirror.data?.backend ?? null}
         connected={mirror.data?.connected ?? false}
         count={mirror.data?.count ?? 0}
         onRefresh={() => refresh.mutate()}
         refreshing={refresh.isPending}
         screen={screen}
         onScreen={(next) => setUrlState({ screen: next })}
+        capabilities={profile.capabilities ?? []}
         onPalette={() => setPaletteOpen(true)}
         onShortcuts={() => setShortcutsOpen(true)}
         theme={theme}
@@ -589,6 +601,8 @@ export function App() {
 function TopBar({
   profile,
   version,
+  backend,
+  capabilities,
   connected,
   count,
   onRefresh,
@@ -604,6 +618,9 @@ function TopBar({
 }: {
   profile: Profile
   version: string | null
+  backend: string | null
+  /** Resolved bits for the active profile, so a destination the backend cannot serve is absent. */
+  capabilities: readonly string[]
   connected: boolean
   count: number
   onRefresh: () => void
@@ -657,40 +674,46 @@ function TopBar({
       </span>
 
       <nav style={{ marginLeft: 16, display: 'flex', gap: 4 }} aria-label="Screens">
-        {/* Three of the four destinations exist. Sync is deliberately not drawn: a nav item
-            that goes nowhere is a control that fails. */}
+        {/*
+          Sync is deliberately not drawn: a nav item that goes nowhere is a control that fails.
+          Traffic and Scenarios are drawn only where the backend can serve them — MockServer
+          records no attribution for a served request and has no named states, so both screens
+          would be empty by construction. §7.1: absent, not disabled.
+        */}
         {(
           [
-            ['corpus', 'Corpus'],
-            ['traffic', 'Traffic'],
-            ['scenarios', 'Scenarios'],
-            ['profiles', 'Servers'],
+            ['corpus', 'Corpus', null],
+            ['traffic', 'Traffic', 'journal.read'],
+            ['scenarios', 'Scenarios', 'state.read'],
+            ['profiles', 'Servers', null],
           ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            aria-current={screen === value ? 'page' : undefined}
-            onClick={() => onScreen(value)}
-            style={{
-              padding: '4px 8px',
-              font: 'inherit',
-              cursor: 'pointer',
-              border: 'none',
-              borderRadius: 'var(--mk-radius-sm)',
-              background: screen === value ? 'var(--mk-bg-emphasis)' : 'transparent',
-              color: screen === value ? 'var(--mk-text-primary)' : 'var(--mk-text-secondary)',
-            }}
-          >
-            {label}
-          </button>
-        ))}
+        )
+          .filter(([, , bit]) => bit === null || capabilities.includes(bit))
+          .map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-current={screen === value ? 'page' : undefined}
+              onClick={() => onScreen(value)}
+              style={{
+                padding: '4px 8px',
+                font: 'inherit',
+                cursor: 'pointer',
+                border: 'none',
+                borderRadius: 'var(--mk-radius-sm)',
+                background: screen === value ? 'var(--mk-bg-emphasis)' : 'transparent',
+                color: screen === value ? 'var(--mk-text-primary)' : 'var(--mk-text-secondary)',
+              }}
+            >
+              {label}
+            </button>
+          ))}
       </nav>
 
       <span style={{ flex: 1 }} />
 
       <span className="mk-tabular" style={{ fontSize: 12, color: 'var(--mk-text-tertiary)' }}>
-        {count} mirrored{version !== null ? ` · WireMock ${version}` : ''}
+        {count} mirrored{version !== null ? ` · ${backend ?? 'server'} ${version}` : ''}
       </span>
       {/*
         The palette is only useful to someone who knows it exists, which is nobody on their

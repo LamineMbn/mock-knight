@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { authKindSchema, composeAdminUrl } from '@mock-knight/core'
+import { ADAPTER_IDS } from './adapters.js'
 import type { Database as Db } from 'better-sqlite3'
 
 /**
@@ -17,7 +18,11 @@ export const profileColourSchema = z.enum(PROFILE_COLOURS)
 
 export const profileInputSchema = z.object({
   name: z.string().min(1).max(60),
-  adapter: z.literal('wiremock'),
+  /**
+   * Which backend this profile talks to. An enum built from the adapters this build actually
+   * has, so a profile can never name one that cannot be constructed.
+   */
+  adapter: z.enum(ADAPTER_IDS),
   baseUrl: z.string().url(),
   adminPath: z.string().nullable().default(null),
   colour: profileColourSchema.default('indigo'),
@@ -64,7 +69,7 @@ function toProfile(row: ProfileRow): Profile {
   return {
     id: row.id,
     name: row.name,
-    adapter: 'wiremock',
+    adapter: row.adapter,
     baseUrl: row.base_url,
     adminPath: row.admin_path,
     colour: (row.colour ?? 'indigo') as Profile['colour'],

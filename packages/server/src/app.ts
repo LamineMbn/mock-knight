@@ -11,6 +11,7 @@ import type { JsonObject, LoggedRequest, Mock, NearMiss } from '@mock-knight/cor
 import type { Database as Db } from 'better-sqlite3'
 import { mirrorStatus, replaceCorpus } from './db/mirror.js'
 import { getMock, searchCorpus } from './db/search.js'
+import { ADAPTERS } from './adapters.js'
 import { adminUrlFor, findProfileByAdminUrl } from './profiles.js'
 import {
   deleteSavedSearch,
@@ -358,6 +359,12 @@ export function createApp(options: AppOptions) {
       }),
     )
 
+    /**
+     * The backends this build can talk to. The browser cannot import an adapter (the layering
+     * rule), so it learns the list — and each one's default control path — from here.
+     */
+    .get('/api/adapters', (c) => c.json({ adapters: ADAPTERS }))
+
     .get('/api/profiles', (c) => c.json({ profiles: listProfiles(db) }))
 
     .post('/api/profiles', async (c) => {
@@ -444,6 +451,8 @@ export function createApp(options: AppOptions) {
       return c.json({
         connected: connection !== null,
         version: connection?.version ?? null,
+        // Which backend, so the UI names it rather than assuming one.
+        backend: connection?.adapter.displayName ?? null,
         mode,
         report: registry.report(profile.id),
       })
@@ -558,6 +567,8 @@ export function createApp(options: AppOptions) {
         ...mirrorStatus(db, profileId, new Date()),
         connected: connection !== null,
         version: connection?.version ?? null,
+        // Which backend, so the UI names it rather than assuming one.
+        backend: connection?.adapter.displayName ?? null,
       })
     })
 

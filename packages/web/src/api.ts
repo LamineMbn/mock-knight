@@ -85,8 +85,16 @@ export interface Profile {
   createdAt: string
 }
 
+export interface AdapterDescriptor {
+  id: string
+  displayName: string
+  /** Previewed while someone is still typing, before any connection exists. */
+  defaultAdminPath: string
+}
+
 export interface NewProfile {
   name: string
+  adapter: string
   baseUrl: string
   /** Appended to the base URL, context path and all. `/__admin` unless the server says otherwise. */
   adminPath: string | null
@@ -102,6 +110,8 @@ export interface MirrorStatus {
   ageSeconds: number | null
   connected: boolean
   version: string | null
+  /** The backend's display name, so the UI names it rather than assuming WireMock. */
+  backend: string | null
 }
 
 export interface CapabilityRow {
@@ -250,10 +260,16 @@ export const api = {
       launchProfileId: string | null
     }>('/api/health'),
   profiles: () => call<{ profiles: Profile[] }>('/api/profiles'),
+  /** Which backends this build can talk to. The browser cannot import an adapter to find out. */
+  adapters: () => call<{ adapters: AdapterDescriptor[] }>('/api/adapters'),
   capabilities: (profileId: string) =>
-    call<{ connected: boolean; version: string | null; mode: string; report: CapabilityRow[] }>(
-      `/api/profiles/${profileId}/capabilities`,
-    ),
+    call<{
+      connected: boolean
+      version: string | null
+      backend: string | null
+      mode: string
+      report: CapabilityRow[]
+    }>(`/api/profiles/${profileId}/capabilities`),
   mirror: (profileId: string) => call<MirrorStatus>(`/api/${profileId}/mirror`),
   refresh: (profileId: string) =>
     call<MirrorStatus>(`/api/${profileId}/refresh`, { method: 'POST' }),
@@ -265,13 +281,13 @@ export const api = {
     call<{ profile: Profile }>('/api/profiles', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ...profile, adapter: 'wiremock' }),
+      body: JSON.stringify(profile),
     }),
   updateProfile: (profileId: string, profile: NewProfile) =>
     call<{ profile: Profile; mirrorCleared: boolean }>(`/api/profiles/${profileId}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ...profile, adapter: 'wiremock' }),
+      body: JSON.stringify(profile),
     }),
   deleteProfile: (profileId: string) =>
     call<{ deleted: true }>(`/api/profiles/${profileId}`, { method: 'DELETE' }),

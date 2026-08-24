@@ -17,7 +17,7 @@ import type {
   MockBackendAdapter,
   Page,
 } from '@mock-knight/core'
-import { WireMockClient } from './client.js'
+import { DEFAULT_ADMIN_PATH, WireMockClient } from './client.js'
 import { toCanonical, toVendor } from './mapping.js'
 import { toNearMiss, toServeEvent } from './journal.js'
 
@@ -98,6 +98,7 @@ export function atLeast(version: ParsedVersion | null, target: ParsedVersion): b
 export class WireMockAdapter implements MockBackendAdapter {
   readonly id = BACKEND_ID
   readonly displayName = 'WireMock (Java)'
+  readonly defaultAdminPath = DEFAULT_ADMIN_PATH
 
   private client: WireMockClient | null = null
   private correlationHeader: string | null = null

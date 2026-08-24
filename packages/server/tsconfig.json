@@ -5,7 +5,8 @@
     "paths": {
       "@mock-knight/core": ["../core/src/index.ts"],
       "@mock-knight/core/types": ["../core/src/types.ts"],
-      "@mock-knight/adapter-wiremock": ["../adapter-wiremock/src/index.ts"]
+      "@mock-knight/adapter-wiremock": ["../adapter-wiremock/src/index.ts"],
+      "@mock-knight/adapter-mockserver": ["../adapter-mockserver/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts"]

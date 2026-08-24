@@ -30,6 +30,9 @@ export function FirstRun({ onAdded }: { onAdded: (id: string) => void }) {
         throw new Error('That is not a valid URL. It should look like http://localhost:8080')
       }
       const created = await api.createProfile({
+        // First run has no picker: one field, one URL, the common case. Another backend is a
+        // decision for the Servers screen, not for the first thing someone sees.
+        adapter: 'wiremock',
         name: host,
         baseUrl: baseUrl.trim(),
         adminPath: adminPath.trim() === '' ? null : adminPath.trim(),

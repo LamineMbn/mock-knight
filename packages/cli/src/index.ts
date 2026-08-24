@@ -6,6 +6,7 @@ import { parseArgs } from 'node:util'
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import {
+  ADAPTER_IDS,
   ConfigError,
   ConnectionRegistry,
   DEFAULT_CONFIG_FILENAME,
@@ -54,6 +55,7 @@ Options
   --config <path>   Config file (default ./${DEFAULT_CONFIG_FILENAME} if present)
   --no-config       Ignore any config file
   --name <name>     Name for the profile created from --url
+  --adapter <id>    Backend kind: wiremock (default) or mockserver
   --no-refresh      Start without fetching the corpus
   --verbose         Log every upstream call
   --version         Print the version and exit
@@ -97,6 +99,7 @@ async function main(): Promise<void> {
         mode: { type: 'string' },
         state: { type: 'string' },
         name: { type: 'string' },
+        adapter: { type: 'string' },
         config: { type: 'string' },
         refresh: { type: 'boolean', default: true },
         // A separate key, not a negation of `--config`: parseArgs only auto-negates booleans,
@@ -114,6 +117,14 @@ async function main(): Promise<void> {
   }
 
   const flags = parsed.values
+  if (flags.adapter !== undefined && !ADAPTER_IDS.includes(flags.adapter)) {
+    // Named a backend this build does not have. Failing here beats connecting to the wrong kind
+    // of server and reporting whatever it makes of an unfamiliar control API.
+    console.error(
+      `Unknown --adapter "${flags.adapter}". This build has: ${ADAPTER_IDS.join(', ')}.`,
+    )
+    process.exit(1)
+  }
   if (flags.help === true) {
     console.log(USAGE)
     return
@@ -236,7 +247,7 @@ async function main(): Promise<void> {
       existing ??
       createProfile(db, {
         name: flags.name ?? new URL(flags.url).host,
-        adapter: 'wiremock',
+        adapter: flags.adapter ?? 'wiremock',
         baseUrl: flags.url,
         adminPath: null,
         colour: 'indigo',
@@ -254,7 +265,13 @@ async function main(): Promise<void> {
 
     try {
       const connection = await registry.connect(profile)
-      console.log(`  connected to ${connection.adminUrl} (WireMock ${connection.version ?? '?'})`)
+      // Named by the adapter, not hardcoded: this build talks to more than one backend, and
+      // announcing "WireMock 5.15.0" about a MockServer is the kind of small lie that makes
+      // someone doubt everything else on the screen.
+      console.log(
+        `  connected to ${connection.adminUrl} ` +
+          `(${connection.adapter.displayName} ${connection.version ?? '?'})`,
+      )
       if (flags.refresh !== false) {
         const page = await connection.adapter.listMocks({ limit: 1000, offset: 0 })
         replaceCorpus(db, profile.id, page.items, new Date().toISOString())

@@ -88,7 +88,8 @@ function CapabilityReport({ profileId }: { profileId: string }) {
         <strong style={{ fontSize: 14 }}>What this connection can do</strong>
         <span style={{ fontSize: 12, color: 'var(--mk-text-tertiary)' }}>
           {query.data.report.length - off.length} of {query.data.report.length} available
-          {query.data.version !== null && ` · WireMock ${query.data.version}`}
+          {query.data.version !== null &&
+            ` · ${query.data.backend ?? 'server'} ${query.data.version}`}
         </span>
         <span style={{ flex: 1 }} />
         <Button variant="quiet" onClick={() => setShowAll((value) => !value)}>

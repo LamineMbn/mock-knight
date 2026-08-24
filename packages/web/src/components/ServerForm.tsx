@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '../api.js'
 import { composeAdminUrl } from '@mock-knight/core/types'
 import type { NewProfile, Profile } from '../api.js'
 import { Button, ErrorDisclosure } from './primitives.js'
@@ -37,6 +39,11 @@ export interface ServerFormProps {
 }
 
 export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: ServerFormProps) {
+  const adapters = useQuery({ queryKey: ['adapters'], queryFn: api.adapters })
+  const kinds = adapters.data?.adapters ?? []
+  const [adapter, setAdapter] = useState(existing?.adapter ?? 'wiremock')
+  const chosen = kinds.find((kind) => kind.id === adapter)
+
   const [baseUrl, setBaseUrl] = useState(existing?.baseUrl ?? 'http://localhost:8080')
   const [adminPath, setAdminPath] = useState(existing?.adminPath ?? '')
   const [name, setName] = useState(existing?.name ?? '')
@@ -53,7 +60,11 @@ export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: S
   // does not parse.
   const preview = (() => {
     try {
-      return composeAdminUrl(baseUrl, adminPath.trim() === '' ? null : adminPath)
+      // The default follows the backend: /__admin is WireMock's and would 404 on MockServer.
+      return composeAdminUrl(
+        baseUrl,
+        adminPath.trim() === '' ? (chosen?.defaultAdminPath ?? null) : adminPath,
+      )
     } catch {
       return ''
     }
@@ -69,6 +80,7 @@ export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: S
       }
     }
     onSubmit({
+      adapter,
       name: resolved,
       baseUrl: baseUrl.trim(),
       adminPath: adminPath.trim() === '' ? null : adminPath.trim(),
@@ -102,13 +114,34 @@ export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: S
             style={field}
           />
         </label>
+        {/* Only worth asking when there is a choice; one backend is not a decision. */}
+        {kinds.length > 1 && (
+          <label style={{ display: 'grid', gap: 3, flex: '0 1 150px' }}>
+            <span style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>Backend</span>
+            <select
+              aria-label="Backend"
+              value={adapter}
+              onChange={(event) => setAdapter(event.target.value)}
+              style={field}
+            >
+              {kinds.map((kind) => (
+                <option key={kind.id} value={kind.id}>
+                  {kind.displayName}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label style={{ display: 'grid', gap: 3, flex: '1 1 160px' }}>
           <span style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>
-            Admin path <span style={{ color: 'var(--mk-text-tertiary)' }}>(default /__admin)</span>
+            Admin path{' '}
+            <span style={{ color: 'var(--mk-text-tertiary)' }}>
+              (default {chosen?.defaultAdminPath ?? '/__admin'})
+            </span>
           </span>
           <input
             aria-label="Admin path"
-            placeholder="/__admin"
+            placeholder={chosen?.defaultAdminPath ?? '/__admin'}
             value={adminPath}
             onChange={(event) => setAdminPath(event.target.value)}
             style={field}

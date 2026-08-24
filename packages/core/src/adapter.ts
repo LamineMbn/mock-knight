@@ -90,6 +90,15 @@ export interface JournalQuery {
 export interface MockBackendAdapter {
   readonly id: string
   readonly displayName: string
+  /**
+   * Where this backend's control API lives when a profile does not say.
+   *
+   * On the contract rather than in a lookup table somewhere, because it is a property of the
+   * backend and the UI has to know it before a connection exists — the Servers form previews
+   * the composed address while someone is still typing. `/__admin` for WireMock, `/mockserver`
+   * for MockServer, and getting it wrong is a connection failure with a confusing 404.
+   */
+  readonly defaultAdminPath: string
 
   connect(cfg: ConnectionConfig): Promise<ConnectionInfo>
   /** Valid only after `connect`; results are probed, not inferred from a version string. */

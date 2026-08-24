@@ -108,6 +108,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.17(hono@4.13.3)
+      '@mock-knight/adapter-mockserver':
+        specifier: workspace:*
+        version: link:../adapter-mockserver
       '@mock-knight/adapter-wiremock':
         specifier: workspace:*
         version: link:../adapter-wiremock

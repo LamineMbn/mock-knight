@@ -10,7 +10,12 @@ export default defineConfig({
   target: 'node22',
   banner: { js: '#!/usr/bin/env node' },
   // Workspace packages are bundled so the tarball does not depend on unpublished packages.
-  noExternal: ['@mock-knight/server', '@mock-knight/core', '@mock-knight/adapter-wiremock'],
+  noExternal: [
+    '@mock-knight/server',
+    '@mock-knight/core',
+    '@mock-knight/adapter-wiremock',
+    '@mock-knight/adapter-mockserver',
+  ],
   // Left external on purpose:
   //  - better-sqlite3 is a native module; its prebuilt binary must be resolved from disk.
   //  - undici is CJS and uses dynamic require(), which an ESM bundle cannot express. Bundling
