@@ -9,6 +9,8 @@ import { NewStub } from './components/NewStub.js'
 import { SavedSearches } from './components/SavedSearches.js'
 import { CommandPalette } from './components/CommandPalette.js'
 import { Shortcuts, modifierKey } from './components/Shortcuts.js'
+import { THEMES, applyTheme, readTheme, writeTheme } from './theme.js'
+import type { Theme } from './theme.js'
 import type { Command } from './components/CommandPalette.js'
 import { FacetPane } from './components/FacetPane.js'
 import { StubDetail } from './components/StubDetail.js'
@@ -103,6 +105,17 @@ export function App() {
   }, [setUrlState])
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  /**
+   * Initialised from storage rather than defaulted, so React agrees with the inline script in
+   * index.html that already applied it — otherwise the control would read "System" while the
+   * page was plainly dark.
+   */
+  const [theme, setTheme] = useState<Theme>(readTheme)
+  const chooseTheme = useCallback((next: Theme) => {
+    setTheme(next)
+    writeTheme(next)
+    applyTheme(next)
+  }, [])
 
   /**
    * ⌘K anywhere, and `/` to jump to the search box — design brief §8.
@@ -200,6 +213,13 @@ export function App() {
               run: () => setCreating(true),
             },
           ]),
+      ...THEMES.filter((candidate) => candidate !== theme).map((candidate): Command => ({
+        id: `theme:${candidate}`,
+        label: `Theme: ${candidate}`,
+        section: 'Actions',
+        hint: candidate === 'system' ? 'follow this machine' : undefined,
+        run: () => chooseTheme(candidate),
+      })),
       {
         id: 'action:refresh',
         label: 'Refresh the corpus',
@@ -249,7 +269,7 @@ export function App() {
           run: () => setUrlState({ profileId: candidate.id, query: '', selectedKey: null }),
         })),
     ]
-  }, [profile, screen, all, setUrlState, refresh, savedSearches])
+  }, [profile, screen, all, setUrlState, refresh, savedSearches, theme, chooseTheme])
 
   /**
    * Which facet tokens are on, read from the URL rather than from the server's echoed plan.
@@ -321,6 +341,8 @@ export function App() {
         onScreen={(next) => setUrlState({ screen: next })}
         onPalette={() => setPaletteOpen(true)}
         onShortcuts={() => setShortcutsOpen(true)}
+        theme={theme}
+        onTheme={chooseTheme}
         profiles={all}
         onSelectProfile={(id) =>
           // Switching environment abandons the current query and selection: a stub key from one
@@ -589,6 +611,8 @@ function TopBar({
   onScreen,
   onPalette,
   onShortcuts,
+  theme,
+  onTheme,
   profiles,
   onSelectProfile,
 }: {
@@ -602,6 +626,8 @@ function TopBar({
   onScreen: (next: Screen) => void
   onPalette: () => void
   onShortcuts: () => void
+  theme: Theme
+  onTheme: (next: Theme) => void
   profiles: Profile[]
   onSelectProfile: (id: string) => void
 }) {
@@ -710,6 +736,27 @@ function TopBar({
           {modifierKey()}K
         </kbd>
       </button>
+
+      <select
+        aria-label="Theme"
+        value={theme}
+        onChange={(event) => onTheme(event.target.value as Theme)}
+        title="Light, dark, or whatever this machine is set to"
+        style={{
+          height: 26,
+          padding: '0 4px',
+          font: 'inherit',
+          fontSize: 12,
+          color: 'var(--mk-text-secondary)',
+          background: 'var(--mk-bg-surface)',
+          border: '1px solid var(--mk-border-default)',
+          borderRadius: 'var(--mk-radius-sm)',
+        }}
+      >
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
 
       <button
         type="button"

@@ -45,6 +45,7 @@ ones it answers worst:
 | **Watch** | A live request journal with match state, filters, and the match explainer one keystroke away |
 | **Scenarios** | Stateful stubs as a state graph, with unreachable states and dead ends flagged |
 | **Keyboard first** | `⌘K` reaches every action, screen, server and stub; `/` focuses search; `?` publishes the whole map |
+| **Light and dark** | Follows the OS by default, or pin either. It is a debugging tool; it gets used at both ends of the day |
 
 Two principles shape all of it:
 

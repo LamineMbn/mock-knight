@@ -5,6 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/svg+xml" href="/brand/mock-knight-mark-mono.svg" />
     <title>Mock Knight</title>
+    <!--
+      Applied before the first paint, deliberately inline and before the bundle.
+
+      Doing it in React means one frame in the wrong theme for anyone whose choice differs from
+      their OS — a white flash on a dark machine, on every single load. Kept to the minimum that
+      cannot go wrong, and wrapped because storage throws outright in some privacy settings.
+    -->
+    <script>
+      try {
+        var t = localStorage.getItem('mock-knight.theme')
+        if (t === 'light' || t === 'dark') {
+          document.documentElement.setAttribute('data-theme', t)
+          document.documentElement.style.colorScheme = t
+        } else {
+          document.documentElement.style.colorScheme = 'light dark'
+        }
+      } catch (_) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
