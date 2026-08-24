@@ -318,3 +318,27 @@ test('an unreachable server says so, and never claims to be an empty one', async
   await expect(page.getByText(/Cannot reach http:\/\/127\.0\.0\.1:9/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Create the first stub' })).toHaveCount(0)
 })
+
+test('a backend that reads a file asks for it, and will not save without it', async ({ page }) => {
+  // The gap this closes: the path reached the API but no field ever asked for it, so adding a
+  // Mockoon server from the UI saved a profile that then failed to connect with "a Mockoon server
+  // needs the path to its environment JSON file" — an error naming something the form never asked
+  // for. The field is driven by the adapter's own `corpusDocument`, not by its id.
+  await page.goto('/?screen=profiles')
+
+  // WireMock reads its corpus over the admin API, so there is nothing to point at.
+  await expect(page.getByLabel('Environment file')).toHaveCount(0)
+
+  await page.locator('select').first().selectOption('mockoon')
+  await expect(page.getByLabel('Environment file')).toBeVisible()
+  // Disabled rather than absent: unlike a capability the backend lacks, this is a field someone
+  // can fill in, and the label says which.
+  await expect(page.getByRole('button', { name: 'Add and connect' })).toBeDisabled()
+
+  await page.getByLabel('Environment file').fill('/tmp/does-not-matter.json')
+  await expect(page.getByRole('button', { name: 'Add and connect' })).toBeEnabled()
+
+  // And it goes away again for a backend that does not read one.
+  await page.locator('select').first().selectOption('wiremock')
+  await expect(page.getByLabel('Environment file')).toHaveCount(0)
+})

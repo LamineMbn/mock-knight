@@ -81,6 +81,8 @@ export interface Profile {
   readOnly: boolean
   adapter: string
   adminPath: string | null
+  /** The corpus document, for a document-backed backend. Null for the API-driven ones. */
+  mappingsDir: string | null
   capabilities: string[] | null
   createdAt: string
 }
@@ -92,6 +94,11 @@ export interface AdapterDescriptor {
   shortName: string
   /** Previewed while someone is still typing, before any connection exists. */
   defaultAdminPath: string
+  /**
+   * Non-null when this backend's corpus lives in a file rather than behind its admin API, in
+   * which case a profile without one cannot work and the form asks for it.
+   */
+  corpusDocument: { label: string; hint: string } | null
   /**
    * The backend's logo, or `null` when no file has been dropped in for it.
    *
@@ -113,6 +120,8 @@ export interface NewProfile {
   colour: string
   protected: boolean
   readOnly: boolean
+  /** The corpus document, for a backend that reads one. Null for the API-driven backends. */
+  mappingsDir: string | null
 }
 
 /**

@@ -44,6 +44,13 @@ export class MockoonAdapter implements MockBackendAdapter {
   readonly displayName = 'Mockoon'
   readonly shortName = 'MO'
   readonly defaultAdminPath = DEFAULT_ADMIN_PATH
+  readonly corpusDocument = {
+    label: 'Environment file',
+    hint:
+      'The absolute path to the Mockoon environment JSON. Mockoon has no admin route that can ' +
+      'read its routes, so the file is the only source for the corpus. Start Mockoon with ' +
+      '--watch and edits to it are served without a restart.',
+  }
 
   private client: MockoonClient | null = null
   private bits: Set<CapabilityBit> = new Set()

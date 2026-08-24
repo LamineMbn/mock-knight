@@ -119,6 +119,16 @@ export interface MockBackendAdapter {
    */
   readonly defaultAdminPath: string
 
+  /**
+   * For a document-backed backend: what its corpus file is called, and why it is needed.
+   *
+   * `null` for a backend whose corpus is reachable over its admin API. Non-null means a profile
+   * without a `documentPath` cannot work at all, so the Servers form must ask for one — asked of
+   * the adapter rather than hardcoded against an id, exactly as `defaultAdminPath` is, so a
+   * fourth backend needs no change in the UI.
+   */
+  readonly corpusDocument: { readonly label: string; readonly hint: string } | null
+
   connect(cfg: ConnectionConfig): Promise<ConnectionInfo>
   /** Valid only after `connect`; results are probed, not inferred from a version string. */
   capabilities(): ReadonlySet<CapabilityBit>

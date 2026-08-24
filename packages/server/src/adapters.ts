@@ -26,6 +26,8 @@ export interface AdapterDescriptor {
   readonly shortName: string
   /** What the Servers form previews before a connection exists. */
   readonly defaultAdminPath: string
+  /** Non-null when this backend reads its corpus from a file the form has to ask for. */
+  readonly corpusDocument: { readonly label: string; readonly hint: string } | null
 }
 
 /**
@@ -41,6 +43,7 @@ export const ADAPTERS: readonly AdapterDescriptor[] = Object.values(FACTORIES).m
     displayName: instance.displayName,
     shortName: instance.shortName,
     defaultAdminPath: instance.defaultAdminPath,
+    corpusDocument: instance.corpusDocument,
   }
 })
 

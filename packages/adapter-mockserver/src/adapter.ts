@@ -37,6 +37,8 @@ export class MockServerAdapter implements MockBackendAdapter {
   readonly displayName = 'MockServer'
   readonly shortName = 'MS'
   readonly defaultAdminPath = DEFAULT_CONTROL_PATH
+  /** Its corpus is reachable over the control API, so there is no file to point at. */
+  readonly corpusDocument = null
 
   private client: MockServerClient | null = null
   private bits: Set<CapabilityBit> = new Set()

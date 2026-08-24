@@ -37,6 +37,8 @@ export function FirstRun({ onAdded }: { onAdded: (id: string) => void }) {
         baseUrl: baseUrl.trim(),
         adminPath: adminPath.trim() === '' ? null : adminPath.trim(),
         colour: 'indigo',
+        // WireMock reads its corpus over the admin API, so there is no document to point at.
+        mappingsDir: null,
         protected: false,
         readOnly: false,
       })

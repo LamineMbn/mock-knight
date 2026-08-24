@@ -16,6 +16,10 @@
 
 ### Fixed
 
+- **The Servers form asks for a document-backed backend's file.** Adding a Mockoon server saved a
+  profile that then refused to connect, complaining about a path no field had ever asked for. The
+  field appears for exactly the backends that declare they read one, and Save is blocked until it
+  is filled.
 - **Write controls are gated on what the backend can actually do.** New stub, Duplicate and
   Delete were drawn whenever the *profile* was not read-only, which was accidentally right while
   every backend could write. Against a read-only backend they were three buttons that could only

@@ -148,8 +148,16 @@ Pick one with `--adapter`, or per server on the Servers screen:
 npx mock-knight --url http://localhost:1080 --adapter mockserver
 ```
 
-A Mockoon profile also needs the path to its environment file, which the Servers screen asks for.
-Start Mockoon with `--watch` and the file is authoritative: edit it and the server follows.
+A Mockoon profile also needs the path to its environment JSON file — the Servers screen asks for
+it once Mockoon is chosen as the backend, because its admin API cannot read routes. Start Mockoon
+with `--watch` and the file is authoritative: edit it and the server follows.
+
+```bash
+mockoon-cli start --data ./env.json --port 3000 --watch --admin-api-token <token>
+```
+
+The traffic log needs that token; set it as an environment variable and name the variable in the
+profile's auth field, which is where every secret is referenced rather than stored.
 
 Mock Knight probes each server on connect and derives a **capability set**. A capability that is
 off means the control is *absent*, never a button that fails when you press it. The Servers

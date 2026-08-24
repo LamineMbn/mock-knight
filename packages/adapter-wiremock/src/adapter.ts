@@ -100,6 +100,8 @@ export class WireMockAdapter implements MockBackendAdapter {
   readonly displayName = 'WireMock (Java)'
   readonly shortName = 'WM'
   readonly defaultAdminPath = DEFAULT_ADMIN_PATH
+  /** Its corpus is reachable over the admin API, so there is no file to point at. */
+  readonly corpusDocument = null
 
   private client: WireMockClient | null = null
   private correlationHeader: string | null = null

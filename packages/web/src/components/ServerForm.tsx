@@ -50,6 +50,17 @@ export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: S
   const [colour, setColour] = useState<string>(existing?.colour ?? 'indigo')
   const [isProtected, setProtected] = useState(existing?.protected ?? false)
   const [readOnly, setReadOnly] = useState(existing?.readOnly ?? false)
+  /**
+   * The corpus document, for a backend that reads one.
+   *
+   * Asked of the adapter rather than hardcoded against an id: a backend declares
+   * `corpusDocument` when its corpus is a file, and the field appears for exactly those. Without
+   * it a Mockoon profile could be saved and then failed to connect with "a Mockoon server needs
+   * the path to its environment JSON file" — an error naming something the form never asked for.
+   */
+  const [documentPath, setDocumentPath] = useState(existing?.mappingsDir ?? '')
+  const document = chosen?.corpusDocument ?? null
+  const documentMissing = document !== null && documentPath.trim() === ''
 
   // Shown live, because the composed URL is the thing that is actually wrong when a context
   // path is missing, and it is not obvious from the two fields that produce it.
@@ -87,6 +98,9 @@ export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: S
       colour,
       protected: isProtected,
       readOnly,
+      // Only for a backend that reads one, so switching a profile to an API-driven backend
+      // clears a path that would otherwise sit in the database meaning nothing.
+      mappingsDir: document === null || documentPath.trim() === '' ? null : documentPath.trim(),
     })
   }
 
@@ -160,6 +174,26 @@ export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: S
           />
         </label>
       </div>
+
+      {/* `minWidth: 0` because a grid item defaults to `min-width: auto` and will not shrink below
+          its content: without it the hint ran off the side of the card instead of wrapping. */}
+      {document !== null && (
+        <label style={{ display: 'grid', gap: 3, marginTop: 8, minWidth: 0 }}>
+          <span style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>
+            {document.label} <span style={{ color: 'var(--mk-warning-text)' }}>(required)</span>
+          </span>
+          <input
+            aria-label={document.label}
+            placeholder="/absolute/path/to/environment.json"
+            value={documentPath}
+            onChange={(event) => setDocumentPath(event.target.value)}
+            style={field}
+          />
+          <span style={{ fontSize: 12, color: 'var(--mk-text-tertiary)', minWidth: 0 }}>
+            {document.hint}
+          </span>
+        </label>
+      )}
 
       <p
         className="mk-mono"
@@ -243,7 +277,13 @@ export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: S
       )}
 
       <div style={{ display: 'flex', gap: 8 }}>
-        <Button variant="primary" disabled={pending || preview === ''} onClick={submit}>
+        {/* Disabled rather than absent: unlike a capability the backend does not have, this is a
+            field the user can fill in, and the label says which one. */}
+        <Button
+          variant="primary"
+          disabled={pending || preview === '' || documentMissing}
+          onClick={submit}
+        >
           {pending
             ? existing === undefined
               ? 'Connecting…'

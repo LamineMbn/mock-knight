@@ -188,11 +188,17 @@ export function updateProfile(
   const existing = getProfile(db, id)
   if (existing === null) return null
 
-  const targetChanged = existing.baseUrl !== input.baseUrl || existing.adminPath !== input.adminPath
+  // The document counts as the target for a document-backed backend: it *is* where the corpus
+  // comes from, so pointing at a different file is pointing at a different corpus.
+  const targetChanged =
+    existing.baseUrl !== input.baseUrl ||
+    existing.adminPath !== input.adminPath ||
+    existing.mappingsDir !== input.mappingsDir
 
   db.prepare(
     `UPDATE profile SET name = @name, base_url = @base_url, admin_path = @admin_path,
        colour = @colour, protected = @protected, read_only = @read_only,
+       mappings_dir = @mappings_dir,
        auth_kind = @auth_kind, auth_ref = @auth_ref, correlation_header = @correlation_header,
        redact_headers = @redact_headers
      WHERE id = @id`,
@@ -204,6 +210,7 @@ export function updateProfile(
     colour: input.colour,
     protected: input.protected ? 1 : 0,
     read_only: input.readOnly ? 1 : 0,
+    mappings_dir: input.mappingsDir,
     auth_kind: input.authKind,
     auth_ref: input.authRef,
     correlation_header: input.correlationHeader,
