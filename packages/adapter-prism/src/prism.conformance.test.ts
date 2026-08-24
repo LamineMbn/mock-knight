@@ -21,7 +21,9 @@ import { PrismAdapter } from './adapter.js'
  * timing while looking like a contract failure.
  *
  * Needs a Prism this suite may overwrite, started on a document it may rewrite:
- *   npx @stoplight/prism-cli mock -p 13002 -d <file>
+ *   npx @stoplight/prism-cli@5.14.2 mock -p 13002 -d <file>
+ *
+ * Pinned because 5.16.0 requires Node >= 24.18 while this repo's floor is 22.
  */
 
 const BASE_URL = process.env['MOCK_KNIGHT_TEST_PRISM_URL'] ?? 'http://127.0.0.1:13002'
