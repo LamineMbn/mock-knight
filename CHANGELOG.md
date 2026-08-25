@@ -1,6 +1,27 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
+
+### Added
+
+- **A third backend: Mockoon**, read-only for now. It is the first that is not an admin API:
+  Mockoon's corpus lives in an environment JSON file and its admin API cannot read routes at all,
+  so a profile points at the file. Folders come from Mockoon's own tree rather than being guessed
+  from a URL prefix, and a route holding several rule-selected responses is read as one stub per
+  response, ranked in the order Mockoon consults them.
+
+  Editing is deliberately absent rather than half-built: Mockoon's only write is a whole-document
+  `PUT` that never reaches the file, so an edit would vanish on restart. Writing the file is the
+  right path and comes next.
+
+- **A fourth backend: Prism**, read-only. The first whose corpus was never written as mocks at
+  all: Prism serves an OpenAPI document, and mock behaviour is derived from it. An operation
+  becomes one stub per declared response, ranked the way Prism actually picks — the lowest 2xx,
+  verified by running it — with tags as folders and required parameters as matchers.
+
+  Read-only on purpose and for a different reason than Mockoon: a write here would mean editing
+  an API specification, which changes the contract other people generate clients from. That is a
+  product decision, not a missing feature.
 
 ### Fixed
 
@@ -14,43 +35,6 @@
   dash rather than WireMock's default presented as theirs, and the advice for resolving a tie
   names the direction that actually works on the backend you are looking at.
 
-### Added
-
-- **Prism reads the specifications people actually have.** The first parser choice rejected a real
-  OpenAPI document that Prism itself served without complaint, over a multi-line quoted string
-  indented at its key rather than deeper. Being right about the YAML specification is worth
-  nothing against a file the backend is answering from.
-
-- **A fourth backend: Prism**, read-only. The first whose corpus was never written as mocks at
-  all: Prism serves an OpenAPI document, and mock behaviour is derived from it. An operation
-  becomes one stub per declared response, ranked the way Prism actually picks — the lowest 2xx,
-  verified by running it — with tags as folders and required parameters as matchers.
-
-  Read-only on purpose and for a different reason than Mockoon: a write here would mean editing
-  an API specification, which changes the contract other people generate clients from. That is a
-  product decision, not a missing feature.
-
-- **A third backend: Mockoon**, read-only for now. It is the first that is not an admin API:
-  Mockoon's corpus lives in an environment JSON file and its admin API cannot read routes at all,
-  so a profile points at the file. Folders come from Mockoon's own tree rather than being guessed
-  from a URL prefix, and a route holding several rule-selected responses is read as one stub per
-  response, ranked in the order Mockoon consults them.
-
-  Editing is deliberately absent rather than half-built: Mockoon's only write is a whole-document
-  `PUT` that never reaches the file, so an edit would vanish on restart. Writing the file is the
-  right path and comes next.
-
-### Fixed
-
-- **The Servers form asks for a document-backed backend's file.** Adding a Mockoon server saved a
-  profile that then refused to connect, complaining about a path no field had ever asked for. The
-  field appears for exactly the backends that declare they read one, and Save is blocked until it
-  is filled.
-- **Write controls are gated on what the backend can actually do.** New stub, Duplicate and
-  Delete were drawn whenever the *profile* was not read-only, which was accidentally right while
-  every backend could write. Against a read-only backend they were three buttons that could only
-  fail.
-
 - **A connection that stops working is noticed.** Once connected, the app kept reporting healthy
   however long the server had been gone — the badge stayed clean while every action failed on
   its own, which is the app lying about the one thing the badge exists to say. A VPN going down
@@ -58,6 +42,21 @@
   transport failure against a live connection drops it, the badge says "unreachable" with the
   reason, and the reconnect loop takes it from there. No extra traffic reaches a mock server the
   whole team shares.
+
+- **Prism reads the specifications people actually have.** The first parser choice rejected a real
+  OpenAPI document that Prism itself served without complaint, over a multi-line quoted string
+  indented at its key rather than deeper. Being right about the YAML specification is worth
+  nothing against a file the backend is answering from.
+
+- **The Servers form asks for a document-backed backend's file.** Adding a Mockoon server saved a
+  profile that then refused to connect, complaining about a path no field had ever asked for. The
+  field appears for exactly the backends that declare they read one, and Save is blocked until it
+  is filled.
+
+- **Write controls are gated on what the backend can actually do.** New stub, Duplicate and
+  Delete were drawn whenever the *profile* was not read-only, which was accidentally right while
+  every backend could write. Against a read-only backend they were three buttons that could only
+  fail.
 
 ## 0.5.0
 
