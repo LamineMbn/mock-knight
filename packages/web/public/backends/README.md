@@ -8,7 +8,7 @@ Optionally add `<adapter id>-dark.svg` beside it. The dark theme swaps to it, th
 app's own mark does; a single-colour mark that reads on white usually disappears otherwise. With
 no dark variant the one file is used in both themes.
 
-Current ids: `wiremock`, `mockserver`. A backend with no file here shows a two-letter mark
+Current ids: `wiremock`, `mockserver`, `mockoon`, `prism`. A backend with no file here shows a two-letter mark
 (`WM`, `MS`) instead.
 
 ## How the app finds them
@@ -18,18 +18,26 @@ requesting the URL and reacting to a 404. Badges live in lists that remount on e
 so probing meant a broken-image glyph on screen and a fresh request for a known-missing file on
 every render. The consequence: **adding a file needs a rebuild**, like any other static asset.
 
-## If you replace these with a project's real marks
+## These are other projects' marks
 
-The files here are simple original drawings, not the projects' trademarks. If you swap in the
-real ones for your own build:
+Several files here are the backends' **own logos**, not drawings made for this repository. Treat
+them accordingly:
 
-1. Take the file from the project's own brand or press page, not from a search result.
-2. Check its terms. Most permit *nominative* use — identifying the product you interoperate
-   with — while forbidding anything implying endorsement, and most forbid alteration. Both
-   WireMock and MockServer are Apache-2.0 projects, which licenses the *code* and not the marks.
-3. Record where each file came from and under what terms in a `NOTICE.md` beside it.
-4. Keep them recognisable at **16px**, which is the size they are actually drawn at. A detailed
-   mark becomes a smudge. Prefer the icon-only variant where a project offers one.
+1. **Record provenance.** Where each file came from and under what terms is recorded in
+   `NOTICE.md` beside this file. Add a row when you add a logo — without it, nobody downstream
+   can tell which files they may keep.
+2. **Check the terms.** Most projects permit *nominative* use — identifying the product you
+   interoperate with — while forbidding anything that implies endorsement, and most forbid
+   alteration. An Apache-2.0 licence on a project's *code* says nothing about its mark.
+3. **Take the file from the project's own brand or press page**, never from a search result.
+4. **Do not alter them.** The one exception in this folder is `mockserver-dark.svg`, which is a
+   recolour of `mockserver.svg` — safe only because that file is a plain drawing rather than a
+   registered mark. Do not do the same to a real logo; ask its owner for a dark variant.
+5. Keep them recognisable at **16px**, the size they are actually drawn at. A detailed mark
+   becomes a smudge; prefer the icon-only variant where a project offers one.
+
+Nothing here is load-bearing: a backend with no file falls back to a two-letter mark, so this
+folder can be emptied — or git-ignored, and the logos kept locally — without touching any code.
 
 ## Requirements
 
