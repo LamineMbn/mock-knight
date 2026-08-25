@@ -4,6 +4,11 @@
 
 ### Added
 
+- **Prism reads the specifications people actually have.** The first parser choice rejected a real
+  OpenAPI document that Prism itself served without complaint, over a multi-line quoted string
+  indented at its key rather than deeper. Being right about the YAML specification is worth
+  nothing against a file the backend is answering from.
+
 - **A fourth backend: Prism**, read-only. The first whose corpus was never written as mocks at
   all: Prism serves an OpenAPI document, and mock behaviour is derived from it. An operation
   becomes one stub per declared response, ranked the way Prism actually picks — the lowest 2xx,

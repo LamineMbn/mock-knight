@@ -18,6 +18,9 @@
   },
   "dependencies": {
     "@mock-knight/core": "workspace:*",
-    "yaml": "^2.6.0"
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9"
   }
 }

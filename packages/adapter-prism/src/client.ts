@@ -1,20 +1,27 @@
 import { readFile } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
-import { parse as parseYaml } from 'yaml'
+import { load as parseYaml } from 'js-yaml'
 import { AdapterHostNotAllowedError, AdapterTransportError } from '@mock-knight/core'
 import type { ConnectionConfig, JsonObject } from '@mock-knight/core'
 
 /**
  * Transport for Prism — a file, and nothing else.
  *
- * Prism has no control API: `/__admin`, `/_prism` and `/health` are all 404, verified. So unlike
- * Mockoon, which at least offers a traffic log, there is no HTTP surface here worth calling. The
- * OpenAPI document is the entire source of truth, and the running server is only reachable the
- * way any caller reaches it.
+ * Prism has no control API — its CLI documents exactly two commands, `mock` and `proxy`, and no
+ * management endpoints. So unlike Mockoon, which at least offers a traffic log, there is no HTTP
+ * surface here worth calling. The OpenAPI document is the entire source of truth, and the running
+ * server is only reachable the way any caller reaches it.
  *
  * YAML is parsed as well as JSON because OpenAPI documents are predominantly YAML; a reader that
- * handled only JSON would refuse the common case. `yaml` is the dependency for it — no transitive
- * dependencies of its own, and it is the parser the OpenAPI tooling ecosystem standardised on.
+ * handled only JSON would refuse the common case.
+ *
+ * `js-yaml`, and specifically **not** `yaml` (eemeli), which this used first. The rule that
+ * decided it: Mock Knight must not refuse a document Prism itself serves. A real specification —
+ * 8 paths, 36 operations, served by Prism without complaint — was rejected outright by `yaml`
+ * with `Missing closing 'quote`, because a multi-line quoted scalar continued at the *same*
+ * indentation as its key rather than deeper. `yaml` is arguably right about the spec; it is
+ * useless to be right about a file the backend is happily serving. `js-yaml` and
+ * `@stoplight/yaml` (what Prism is built on) both accept it.
  */
 
 export const DEFAULT_ADMIN_PATH = '/'
@@ -72,8 +79,7 @@ export class PrismClient {
 
     let parsed: unknown
     try {
-      // `yaml` parses JSON too — JSON is a subset — so one path handles both and a `.json`
-      // document with a trailing comma still fails the way a strict reader would.
+      // JSON is a subset of YAML, so one path handles both formats.
       parsed = parseYaml(text)
     } catch (error) {
       throw new AdapterTransportError(

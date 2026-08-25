@@ -23,11 +23,10 @@ export default defineConfig({
   //  - undici is CJS and uses dynamic require(), which an ESM bundle cannot express. Bundling
   //    it produces a build that succeeds and then dies at startup on `Dynamic require of
   //    "assert" is not supported`.
-  //  - yaml, for the same reason and found the same way: bundled, the CLI built cleanly and then
-  //    died on `Dynamic require of "process" is not supported` the moment it was run. tsup only
-  //    externalises *this* package's dependencies, so a dependency of an adapter is bundled
-  //    unless it is named here.
-  external: ['better-sqlite3', 'undici', 'yaml'],
+  //  - js-yaml, for the same reason and found the same way: bundled, the CLI built cleanly and
+  //    then died on `Dynamic require` the moment it was run. tsup only externalises *this*
+  //    package's dependencies, so a dependency of an adapter is bundled unless it is named here.
+  external: ['better-sqlite3', 'undici', 'js-yaml'],
   // The version is single-sourced from package.json and inlined at build time. It used to be a
   // literal in index.ts, which meant the published 0.1.0 answered `--version` with 0.0.0 —
   // and the release workflow's tag check compares against package.json, so nothing caught it.
