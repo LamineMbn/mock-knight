@@ -20,6 +20,12 @@ import { documentToMocks } from './mapping.js'
  * stub stores — and it fit, because an operation with several declared responses is the same
  * shape Mockoon already proved the model absorbs.
  *
+ * "No control API" is the documented surface, not an inference from a few probes: the CLI has
+ * exactly two commands, `mock` and `proxy`, and documents no management endpoints. What it does
+ * offer is per-request steering — `Prefer: code=403` / `example=ada`, or the same thing as a
+ * `__code` / `__example` query parameter — which selects among an operation's declared responses
+ * without changing anything on the server. That is why there is nothing here to call.
+ *
  * Read-only, and not for the same reason as Mockoon. Mockoon can be written and the write goes to
  * the wrong place; here a write would mean *editing an API specification*, which is a different
  * act from editing a mock — it changes the contract other people generate clients from. That is a
