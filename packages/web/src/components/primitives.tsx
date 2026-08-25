@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { describeStanding, verdictOf } from '@mock-knight/core/types'
-import type { PriorityStanding } from '@mock-knight/core/types'
+import type { PriorityModel, PriorityStanding } from '@mock-knight/core/types'
 
 /**
  * The small shared pieces. Every colour here is a `--mk-*` token: a literal colour in a
@@ -319,24 +319,38 @@ export function Skeleton({ width, height = 12 }: { width: number | string; heigh
 /**
  * Priority, and what it actually means for this stub — FR-FIND-7, design brief §6.2.
  *
- * A bare number is close to useless here for two reasons. Lower wins, which is the opposite of
- * what most people assume, and a priority only matters relative to the stubs it competes with:
- * `3` is decisive against a `5` and irrelevant if nothing else matches that path. So the cell
- * renders the number *and* the standing — "1 of 3" — and flags the rows that lose.
+ * A bare number is close to useless here for two reasons. Which end wins is **not the same on
+ * every backend** — WireMock ranks lower-first, MockServer higher-first (§17.34) — and a priority
+ * only matters relative to the stubs it competes with: `3` is decisive against a `5` and
+ * irrelevant if nothing else matches that path. So the cell renders the number *and* the
+ * standing — "1 of 3" — names the winning direction explicitly, and flags the rows that lose.
  *
- * The count is Mock Knight's inference over the corpus, not something WireMock reported, so it
+ * A backend with no priority number at all (Mockoon, Prism) has nothing to show here, so the cell
+ * shows an em dash rather than a number invented on its behalf.
+ *
+ * The count is Mock Knight's inference over the corpus, not something the server reported, so it
  * carries the inference glyph and says so on hover (§9.4). Its absence is not a promise: two
  * stubs whose patterns overlap without sharing a matcher are not detected, and the tooltip
  * says that rather than implying a clean bill of health.
  */
-export function PriorityCell({ standing }: { standing: PriorityStanding }) {
+export function PriorityCell({
+  standing,
+  model,
+}: {
+  standing: PriorityStanding
+  /** The backend's ranking rule. Wrong here means naming the wrong winner. */
+  model: PriorityModel
+}) {
   const verdict = verdictOf(standing)
   const contested = standing.contenders > 1
   const rank = standing.ahead + 1
-  const note = describeStanding(standing)
+  const note = describeStanding(standing, model)
+  const wins = model.direction === 'lower-wins' ? 'Lower wins.' : 'Higher wins.'
 
   const title = [
-    `Priority ${standing.priority}${standing.explicit ? '' : ', the default — this stub does not set one'}. Lower wins.`,
+    standing.priority === null
+      ? `${model.backend} has no priority number; order decides which stub answers.`
+      : `Priority ${standing.priority}${standing.explicit ? '' : ', the default — this stub does not set one'}. ${wins}`,
     note,
     contested
       ? 'Contenders computed by Mock Knight: stubs sharing this URL matcher whose methods can overlap. Stubs that overlap by pattern alone are not counted.'
@@ -358,7 +372,7 @@ export function PriorityCell({ standing }: { standing: PriorityStanding }) {
           color: standing.explicit ? 'var(--mk-text-primary)' : 'var(--mk-text-tertiary)',
         }}
       >
-        {standing.priority}
+        {standing.priority ?? '—'}
       </span>
       {contested && (
         <Chip tone={verdict === 'wins' ? 'accent' : 'warning'}>
@@ -387,9 +401,13 @@ export function PriorityCell({ standing }: { standing: PriorityStanding }) {
 }
 
 /** The screen-reader sentence for a priority cell, which cannot rely on a hover tooltip. */
-export function priorityLabel(standing: PriorityStanding): string {
-  const note = describeStanding(standing)
-  return `Priority ${standing.priority}${standing.explicit ? '' : ' by default'}${note === null ? '' : `. ${note}`}`
+export function priorityLabel(standing: PriorityStanding, model: PriorityModel): string {
+  const note = describeStanding(standing, model)
+  const at =
+    standing.priority === null
+      ? 'Ranked by order'
+      : `Priority ${standing.priority}${standing.explicit ? '' : ' by default'}`
+  return `${at}${note === null ? '' : `. ${note}`}`
 }
 
 /**

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { CapabilityBit } from './capabilities.js'
+import type { PriorityModel } from './overlap.js'
 import type {
   LoggedRequest,
   Mock,
@@ -128,6 +129,15 @@ export interface MockBackendAdapter {
    * fourth backend needs no change in the UI.
    */
   readonly corpusDocument: { readonly label: string; readonly hint: string } | null
+
+  /**
+   * How this backend ranks stubs that contend for the same request.
+   *
+   * On the contract because backends disagree on both the default and the *direction*, and the
+   * Priority column exists to say which stub answers — so assuming WireMock's rule made it name
+   * the wrong winner on MockServer (§17.34).
+   */
+  readonly priorityModel: PriorityModel
 
   connect(cfg: ConnectionConfig): Promise<ConnectionInfo>
   /** Valid only after `connect`; results are probed, not inferred from a version string. */

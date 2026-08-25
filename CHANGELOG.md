@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Fixed
+
+- **The Priority column named the wrong winner on MockServer.** MockServer ranks the opposite way
+  to WireMock — an unset priority is 0 rather than 5, and the *higher* number wins — while the
+  standing was computed with WireMock's rule inlined for every backend. So on a MockServer
+  profile the column marked the losing expectation as the one that answers, which is the exact
+  question it exists to answer. Ranking is now a property of the backend.
+
+  Mockoon and Prism have no priority number at all; an uncontested stub there now shows an em
+  dash rather than WireMock's default presented as theirs, and the advice for resolving a tie
+  names the direction that actually works on the backend you are looking at.
+
 ### Added
 
 - **Prism reads the specifications people actually have.** The first parser choice rejected a real

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api.js'
 import type { ConnectionFailure, Profile } from './api.js'
-import { describeFilter } from '@mock-knight/core/types'
+import { WIREMOCK_PRIORITY, describeFilter } from '@mock-knight/core/types'
 import type { QueryPlan } from '@mock-knight/core/types'
 import { CorpusList } from './components/CorpusList.js'
 import { NewStub } from './components/NewStub.js'
@@ -242,6 +242,19 @@ export function App() {
   const savedSearches = useMemo(() => searches.data?.searches ?? [], [searches.data])
   const adapterList = useQuery({ queryKey: ['adapters'], queryFn: api.adapters })
   const adapterKinds = useMemo(() => adapterList.data?.adapters ?? [], [adapterList.data])
+
+  /**
+   * How this profile's backend ranks contenders.
+   *
+   * From the adapter descriptor, because backends disagree on both the default and the direction
+   * — WireMock ranks lower-first, MockServer higher-first — and the Priority column exists to say
+   * which stub answers.
+   */
+  const priorityModel = useMemo(
+    () =>
+      adapterKinds.find((kind) => kind.id === profile?.adapter)?.priorityModel ?? WIREMOCK_PRIORITY,
+    [adapterKinds, profile?.adapter],
+  )
 
   const commands = useMemo<Command[]>(() => {
     if (profile === undefined) return []
@@ -548,6 +561,7 @@ export function App() {
               items={corpus.data?.items ?? []}
               total={corpus.data?.total ?? 0}
               showHeaderColumn={(corpus.data?.facets.header?.length ?? 0) > 0}
+              priorityModel={priorityModel}
               selectedKey={selectedKey}
               onSelect={(key) => setUrlState({ selectedKey: key === selectedKey ? null : key })}
               loading={corpus.isPending}
@@ -648,6 +662,7 @@ export function App() {
           <StubDetail
             profileId={profile.id}
             profileName={profile.name}
+            priorityModel={priorityModel}
             canUpdate={canUpdate}
             canCreate={canCreate}
             canDelete={canDelete}

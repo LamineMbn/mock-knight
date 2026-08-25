@@ -7,11 +7,11 @@ import {
   mockDraftSchema,
   parseQuery,
 } from '@mock-knight/core'
-import type { JsonObject, LoggedRequest, Mock, NearMiss } from '@mock-knight/core'
+import type { JsonObject, LoggedRequest, Mock, NearMiss, PriorityModel } from '@mock-knight/core'
 import type { Database as Db } from 'better-sqlite3'
 import { mirrorStatus, replaceCorpus } from './db/mirror.js'
 import { getMock, searchCorpus } from './db/search.js'
-import { ADAPTERS } from './adapters.js'
+import { ADAPTERS, priorityModelFor } from './adapters.js'
 import { adminUrlFor, findProfileByAdminUrl } from './profiles.js'
 import {
   deleteSavedSearch,
@@ -308,6 +308,15 @@ export function createApp(options: AppOptions) {
    * that profile, which is exactly what the UI models when it declines to draw a Save button
    * (design brief §7.1 — never a control that fails).
    */
+  /**
+   * How the profile's backend ranks contenders.
+   *
+   * Read from the descriptor rather than a live adapter: the mirrored corpus stays browsable
+   * while disconnected, and the Priority column has to be right there too.
+   */
+  const rankingOf = (profileId: string): PriorityModel =>
+    priorityModelFor(getProfile(db, profileId)?.adapter ?? '')
+
   const writeContext = (
     profileId: string,
   ): { context: WriteContext } | { error: 'not_found' | 'not_connected' } => {
@@ -526,6 +535,10 @@ export function createApp(options: AppOptions) {
         limit: parsed.data.limit,
         offset: parsed.data.offset,
         unusedKeys,
+        // From the profile's backend, not a constant: WireMock and MockServer rank in opposite
+        // directions, and the mirror stays browsable while disconnected so this cannot come
+        // from a live adapter.
+        priority: rankingOf(profileId),
       })
       // The plan travels back with the results so the search box can render exactly what was
       // applied — including the tokens it had to reject, which is what makes an empty result
@@ -548,7 +561,7 @@ export function createApp(options: AppOptions) {
 
     .get('/api/:p/mocks/:key', (c) => {
       const profileId = c.req.param('p')
-      const mock = getMock(db, profileId, c.req.param('key'))
+      const mock = getMock(db, profileId, c.req.param('key'), rankingOf(profileId))
       if (mock === null) return c.json({ error: 'not_found' }, 404)
 
       // The canonical view, for the form tabs. Only when connected: interpreting needs the
@@ -718,7 +731,12 @@ export function createApp(options: AppOptions) {
       if (!parsed.success)
         return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400)
 
-      const existing = getMock(db, c.req.param('p'), c.req.param('key'))
+      const existing = getMock(
+        db,
+        c.req.param('p'),
+        c.req.param('key'),
+        rankingOf(c.req.param('p')),
+      )
       if (existing === null) return c.json({ error: 'not_found' }, 404)
       if (existing.serverId === null) {
         return c.json(
@@ -771,7 +789,12 @@ export function createApp(options: AppOptions) {
       if (!parsed.success)
         return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400)
 
-      const existing = getMock(db, c.req.param('p'), c.req.param('key'))
+      const existing = getMock(
+        db,
+        c.req.param('p'),
+        c.req.param('key'),
+        rankingOf(c.req.param('p')),
+      )
       if (existing === null || existing.serverId === null)
         return c.json({ error: 'not_found' }, 404)
 

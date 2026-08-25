@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import type {
+  PriorityModel,
   JournalQuery,
   LoggedRequest,
   NearMiss,
@@ -102,6 +103,12 @@ export class WireMockAdapter implements MockBackendAdapter {
   readonly defaultAdminPath = DEFAULT_ADMIN_PATH
   /** Its corpus is reachable over the admin API, so there is no file to point at. */
   readonly corpusDocument = null
+  /** Documented and long-standing: an unset priority is 5, and lower wins. */
+  readonly priorityModel: PriorityModel = {
+    implicit: 5,
+    direction: 'lower-wins',
+    backend: 'WireMock',
+  }
 
   private client: WireMockClient | null = null
   private correlationHeader: string | null = null

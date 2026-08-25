@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { parseQuery, resolveCapabilities } from '@mock-knight/core'
+import { WIREMOCK_PRIORITY, parseQuery, resolveCapabilities } from '@mock-knight/core'
 import type { Mock } from '@mock-knight/core'
 import type { Database as Db } from 'better-sqlite3'
 import { openDatabase } from './database.js'
@@ -178,6 +178,7 @@ describe('search at the 5,000-stub fixture — PRD §12 p95 < 150ms', () => {
               plan: parseQuery(query, { capabilities: CAPABILITIES }),
               limit: 50,
               offset: 0,
+              priority: WIREMOCK_PRIORITY,
             })
           }),
         )
@@ -202,6 +203,7 @@ describe('search at the 5,000-stub fixture — PRD §12 p95 < 150ms', () => {
           plan: parseQuery(query, { capabilities: CAPABILITIES }),
           limit: 50,
           offset: 0,
+          priority: WIREMOCK_PRIORITY,
         })
       }),
     })).sort((a, b) => b.ms - a.ms)
@@ -221,6 +223,7 @@ describe('search at the 5,000-stub fixture — PRD §12 p95 < 150ms', () => {
         plan: parseQuery('', { capabilities: CAPABILITIES }),
         limit: 50,
         offset: 0,
+        priority: WIREMOCK_PRIORITY,
       })
     })
     const deep = timed(() => {
@@ -229,6 +232,7 @@ describe('search at the 5,000-stub fixture — PRD §12 p95 < 150ms', () => {
         plan: parseQuery('', { capabilities: CAPABILITIES }),
         limit: 50,
         offset: 4_900,
+        priority: WIREMOCK_PRIORITY,
       })
     })
     console.log(`  page 1: ${first.toFixed(1)}ms | page 99: ${deep.toFixed(1)}ms`)

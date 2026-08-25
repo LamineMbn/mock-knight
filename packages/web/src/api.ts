@@ -1,4 +1,5 @@
 import type {
+  PriorityModel,
   MockDraft,
   PriorityStanding,
   QueryPlan,
@@ -99,6 +100,11 @@ export interface AdapterDescriptor {
    * which case a profile without one cannot work and the form asks for it.
    */
   corpusDocument: { label: string; hint: string } | null
+  /**
+   * How this backend ranks contenders — both the default and which end wins, which differ
+   * between backends. The Priority column names the wrong winner if it assumes one rule.
+   */
+  priorityModel: PriorityModel
   /**
    * The backend's logo, or `null` when no file has been dropped in for it.
    *

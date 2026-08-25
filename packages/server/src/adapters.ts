@@ -2,7 +2,8 @@ import { MockoonAdapter } from '@mock-knight/adapter-mockoon'
 import { MockServerAdapter } from '@mock-knight/adapter-mockserver'
 import { PrismAdapter } from '@mock-knight/adapter-prism'
 import { WireMockAdapter } from '@mock-knight/adapter-wiremock'
-import type { MockBackendAdapter } from '@mock-knight/core'
+import { WIREMOCK_PRIORITY } from '@mock-knight/core'
+import type { MockBackendAdapter, PriorityModel } from '@mock-knight/core'
 
 /**
  * The backends this build can talk to.
@@ -30,6 +31,8 @@ export interface AdapterDescriptor {
   readonly defaultAdminPath: string
   /** Non-null when this backend reads its corpus from a file the form has to ask for. */
   readonly corpusDocument: { readonly label: string; readonly hint: string } | null
+  /** How it ranks contenders, which differs between backends in both default and direction. */
+  readonly priorityModel: PriorityModel
 }
 
 /**
@@ -46,8 +49,24 @@ export const ADAPTERS: readonly AdapterDescriptor[] = Object.values(FACTORIES).m
     shortName: instance.shortName,
     defaultAdminPath: instance.defaultAdminPath,
     corpusDocument: instance.corpusDocument,
+    priorityModel: instance.priorityModel,
   }
 })
+
+/**
+ * How a backend ranks contenders, without needing a connection.
+ *
+ * A static property of the backend, like `defaultAdminPath`, and read from the descriptor rather
+ * than from a live adapter for exactly that reason: the mirrored corpus stays browsable while
+ * disconnected, and the Priority column has to be right there too.
+ *
+ * Falls back to WireMock's rule for a profile naming a backend this build does not have. That is
+ * the historical behaviour and the least surprising guess, and such a profile cannot be connected
+ * or refreshed anyway.
+ */
+export function priorityModelFor(adapterId: string): PriorityModel {
+  return ADAPTERS.find((adapter) => adapter.id === adapterId)?.priorityModel ?? WIREMOCK_PRIORITY
+}
 
 export function createAdapter(id: string): MockBackendAdapter {
   const build = FACTORIES[id]

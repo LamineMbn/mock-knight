@@ -1,4 +1,5 @@
 import type {
+  PriorityModel,
   CapabilityBit,
   ConnectionConfig,
   ConnectionInfo,
@@ -44,6 +45,16 @@ export class MockoonAdapter implements MockBackendAdapter {
   readonly displayName = 'Mockoon'
   readonly shortName = 'MO'
   readonly defaultAdminPath = DEFAULT_ADMIN_PATH
+  /**
+   * No priority *number* exists in Mockoon: the first response whose rules pass answers. That
+   * order is read as a rank where there is a contest, and left alone where there is not — hence
+   * no implicit value to fill in.
+   */
+  readonly priorityModel: PriorityModel = {
+    implicit: null,
+    direction: 'lower-wins',
+    backend: 'Mockoon',
+  }
   readonly corpusDocument = {
     label: 'Environment file',
     hint:

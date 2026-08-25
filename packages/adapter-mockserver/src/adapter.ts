@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type {
+  PriorityModel,
   CapabilityBit,
   ConnectionConfig,
   ConnectionInfo,
@@ -39,6 +40,16 @@ export class MockServerAdapter implements MockBackendAdapter {
   readonly defaultAdminPath = DEFAULT_CONTROL_PATH
   /** Its corpus is reachable over the control API, so there is no file to point at. */
   readonly corpusDocument = null
+  /**
+   * The opposite of WireMock on both counts, verified by execution rather than read from a doc:
+   * an unset priority comes back as **0**, and of two expectations on one path the **higher**
+   * priority answers (§17.34).
+   */
+  readonly priorityModel: PriorityModel = {
+    implicit: 0,
+    direction: 'higher-wins',
+    backend: 'MockServer',
+  }
 
   private client: MockServerClient | null = null
   private bits: Set<CapabilityBit> = new Set()

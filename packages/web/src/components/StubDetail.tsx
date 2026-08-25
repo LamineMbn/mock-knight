@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../api.js'
 import { describeStanding } from '@mock-knight/core/types'
-import type { JsonObject, MockDraft } from '@mock-knight/core/types'
+import type { PriorityModel, JsonObject, MockDraft } from '@mock-knight/core/types'
 import {
   Button,
   Chip,
@@ -43,6 +43,8 @@ export interface StubDetailProps {
    * arrived with none of them and the panel still drew Duplicate and Delete, which is the one
    * thing invariant 4 forbids: a control that can only fail.
    */
+  /** The backend's ranking rule, so the standing sentence names the right direction. */
+  priorityModel: PriorityModel
   canUpdate: boolean
   canCreate: boolean
   canDelete: boolean
@@ -54,6 +56,7 @@ type Tab = 'overview' | 'matcher' | 'response' | 'raw' | 'history'
 export function StubDetail({
   profileId,
   profileName,
+  priorityModel,
   canUpdate,
   canCreate,
   canDelete,
@@ -431,12 +434,12 @@ export function StubDetail({
             <Row label="Priority">
               {/* The same cell the list uses, so "1 of 3" means one thing in both places. The
                   detail pane is where someone lands after spotting the flag in the row. */}
-              <PriorityCell standing={mock.standing} />
+              <PriorityCell standing={mock.standing} model={priorityModel} />
             </Row>
-            {describeStanding(mock.standing) !== null && (
+            {describeStanding(mock.standing, priorityModel) !== null && (
               <Row label="">
                 <InferenceLabel title="Mock Knight compares stubs that share a URL matcher and whose methods can overlap. Stubs that overlap by pattern alone are not detected.">
-                  {describeStanding(mock.standing)}
+                  {describeStanding(mock.standing, priorityModel)}
                 </InferenceLabel>
               </Row>
             )}

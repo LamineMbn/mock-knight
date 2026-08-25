@@ -1,3 +1,4 @@
+import type { PriorityModel } from '@mock-knight/core/types'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { CSSProperties } from 'react'
@@ -161,6 +162,8 @@ export interface CorpusListProps {
   emptyMessage: React.ReactNode
   /** Show the Header column — true when anything in the corpus matches on a header. */
   showHeaderColumn: boolean
+  /** The backend's ranking rule, so the Priority column names the right winner. */
+  priorityModel: PriorityModel
 }
 
 export function CorpusList({
@@ -171,6 +174,7 @@ export function CorpusList({
   loading,
   emptyMessage,
   showHeaderColumn,
+  priorityModel,
 }: CorpusListProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const paneRef = useRef<HTMLDivElement>(null)
@@ -336,9 +340,9 @@ export function CorpusList({
                     <span
                       role="gridcell"
                       style={cellStyle(col('priority'))}
-                      aria-label={priorityLabel(item.standing)}
+                      aria-label={priorityLabel(item.standing, priorityModel)}
                     >
-                      <PriorityCell standing={item.standing} />
+                      <PriorityCell standing={item.standing} model={priorityModel} />
                     </span>
                   )}
                   {has('scenario') && (

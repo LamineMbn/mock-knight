@@ -1,4 +1,5 @@
 import type {
+  PriorityModel,
   CapabilityBit,
   ConnectionConfig,
   ConnectionInfo,
@@ -37,6 +38,15 @@ export class PrismAdapter implements MockBackendAdapter {
   readonly displayName = 'Prism'
   readonly shortName = 'PR'
   readonly defaultAdminPath = DEFAULT_ADMIN_PATH
+  /**
+   * OpenAPI has no priority field. Prism serves the lowest 2xx, which is read as a rank only
+   * where an operation declares more than one response.
+   */
+  readonly priorityModel: PriorityModel = {
+    implicit: null,
+    direction: 'lower-wins',
+    backend: 'Prism',
+  }
   readonly corpusDocument = {
     label: 'OpenAPI document',
     hint:

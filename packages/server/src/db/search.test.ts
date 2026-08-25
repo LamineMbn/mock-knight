@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { parseQuery, resolveCapabilities } from '@mock-knight/core'
-import type { CapabilityBit, Mock } from '@mock-knight/core'
+import { parseQuery, resolveCapabilities, WIREMOCK_PRIORITY } from '@mock-knight/core'
+import type { CapabilityBit, Mock, PriorityModel } from '@mock-knight/core'
 import { toCanonical } from '@mock-knight/adapter-wiremock'
 import type { Database as Db } from 'better-sqlite3'
 import { openDatabase } from './database.js'
@@ -44,7 +44,16 @@ function seed(mocks: Mock[]): void {
 
 function search(query: string, limit = 50, offset = 0) {
   const parsed = plan(query)
-  return { ...searchCorpus(db, { profileId: 'p1', plan: parsed, limit, offset }), plan: parsed }
+  return {
+    ...searchCorpus(db, {
+      profileId: 'p1',
+      plan: parsed,
+      limit,
+      offset,
+      priority: WIREMOCK_PRIORITY,
+    }),
+    plan: parsed,
+  }
 }
 
 const CORPUS = (): Mock[] => [
@@ -296,12 +305,12 @@ describe('getMock', () => {
   beforeEach(() => seed(CORPUS()))
 
   it('returns the verbatim raw payload, which the list never carries', () => {
-    const mock = getMock(db, 'p1', 'a')
+    const mock = getMock(db, 'p1', 'a', WIREMOCK_PRIORITY)
     expect(mock?.raw).toMatchObject({ request: { method: 'POST' }, response: { status: 500 } })
   })
 
   it('returns null for a key this profile does not have', () => {
-    expect(getMock(db, 'p1', 'nope')).toBeNull()
+    expect(getMock(db, 'p1', 'nope', WIREMOCK_PRIORITY)).toBeNull()
   })
 })
 
@@ -437,6 +446,7 @@ describe('unused stubs — a bounded truth, and which boundary applies', () => {
       limit: 50,
       offset: 0,
       unusedKeys: ['c'],
+      priority: WIREMOCK_PRIORITY,
     })
     expect(result.items.map((i) => i.clientKey)).toEqual(['c'])
   })
@@ -448,6 +458,7 @@ describe('unused stubs — a bounded truth, and which boundary applies', () => {
       limit: 50,
       offset: 0,
       unusedKeys: ['c'],
+      priority: WIREMOCK_PRIORITY,
     })
     expect(result.items.map((i) => i.clientKey).sort()).toEqual(['a', 'b'])
   })
@@ -461,6 +472,7 @@ describe('unused stubs — a bounded truth, and which boundary applies', () => {
       limit: 50,
       offset: 0,
       unusedKeys: [],
+      priority: WIREMOCK_PRIORITY,
     })
     expect(result.total).toBe(0)
   })
@@ -555,6 +567,77 @@ describe('priority standing (FR-FIND-7)', () => {
     seed(contenders())
     const listed = byName().get('standard')!
     const one = search('standard', 1).items[0]!
-    expect(getMock(db, 'p1', one.clientKey)?.standing).toEqual(listed)
+    expect(getMock(db, 'p1', one.clientKey, WIREMOCK_PRIORITY)?.standing).toEqual(listed)
+  })
+})
+
+describe('priority standing follows the backend, not WireMock', () => {
+  /**
+   * The bug this pins: the standing SQL inlined WireMock's rule — implicit 5, lower wins — for
+   * every backend. MockServer does the opposite on both counts (verified, §17.34), so `ahead`
+   * was inverted and the Priority column named the losing stub as the winner, which is precisely
+   * the answer the column exists to give.
+   */
+  const MOCKSERVER: PriorityModel = {
+    implicit: 0,
+    direction: 'higher-wins',
+    backend: 'MockServer',
+  }
+  const NO_NUMBER: PriorityModel = { implicit: null, direction: 'lower-wins', backend: 'Prism' }
+
+  const twoOnOnePath = (first: number | null, second: number | null): Mock[] => [
+    stub({
+      id: 'low',
+      request: { method: 'GET', urlPath: '/contested' },
+      top: { name: 'low', ...(first === null ? {} : { priority: first }) },
+    }),
+    stub({
+      id: 'high',
+      request: { method: 'GET', urlPath: '/contested' },
+      top: { name: 'high', ...(second === null ? {} : { priority: second }) },
+    }),
+  ]
+
+  const standingOf = (corpus: Mock[], model: PriorityModel) => {
+    replaceCorpus(db, 'p1', corpus, new Date().toISOString())
+    const page = searchCorpus(db, {
+      profileId: 'p1',
+      plan: plan('/contested'),
+      limit: 50,
+      offset: 0,
+      priority: model,
+    })
+    return new Map(page.items.map((item) => [item.name ?? item.clientKey, item.standing]))
+  }
+
+  it('gives the win to the lower number on a lower-wins backend', () => {
+    const standing = standingOf(twoOnOnePath(1, 9), WIREMOCK_PRIORITY)
+    expect(standing.get('low')?.ahead).toBe(0)
+    expect(standing.get('high')?.ahead).toBe(1)
+  })
+
+  it('gives the win to the higher number on a higher-wins backend', () => {
+    const standing = standingOf(twoOnOnePath(1, 9), MOCKSERVER)
+    // The exact inversion. MockServer serves the priority-9 expectation, so 9 is ahead.
+    expect(standing.get('high')?.ahead).toBe(0)
+    expect(standing.get('low')?.ahead).toBe(1)
+  })
+
+  it('uses the backend own implicit priority for a stub that states none', () => {
+    // On MockServer an unset priority is 0, not 5 — so a stub at 3 outranks one that says
+    // nothing. Under WireMock's rule the unset stub would have been treated as 5 and lost too,
+    // but for the wrong reason and with the wrong number on screen.
+    const standing = standingOf(twoOnOnePath(null, 3), MOCKSERVER)
+    expect(standing.get('high')?.ahead).toBe(0)
+    expect(standing.get('low')?.ahead).toBe(1)
+    expect(standing.get('low')?.priority).toBe(0)
+  })
+
+  it('leaves a stub unranked where the backend has no priority number', () => {
+    const standing = standingOf(twoOnOnePath(null, null), NO_NUMBER)
+    // Neither outranks the other, and neither is given a number it does not have.
+    expect(standing.get('low')?.priority).toBeNull()
+    expect(standing.get('low')?.ahead).toBe(0)
+    expect(standing.get('high')?.ahead).toBe(0)
   })
 })

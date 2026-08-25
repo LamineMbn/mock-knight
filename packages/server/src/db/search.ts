@@ -1,4 +1,4 @@
-import { DEFAULT_PRIORITY } from '@mock-knight/core'
+import type { PriorityModel } from '@mock-knight/core'
 import type { PriorityStanding, QueryFilter, QueryPlan } from '@mock-knight/core'
 import type { Database as Db } from 'better-sqlite3'
 
@@ -84,6 +84,8 @@ export interface SearchRequest {
   plan: QueryPlan
   limit: number
   offset: number
+  /** How the profile's backend ranks contenders. Wrong here means naming the wrong winner. */
+  priority: PriorityModel
   /**
    * The set of stubs the *server* says are unused, when it can tell us (FR-FIND-8).
    *
@@ -344,7 +346,7 @@ function parseHeaders(raw: string | null): MockListItem['headers'] {
   }
 }
 
-function toItem(row: MockRow): MockListItem {
+function toItem(row: MockRow, model: PriorityModel): MockListItem {
   return {
     clientKey: row.client_key,
     serverId: row.server_id,
@@ -370,7 +372,9 @@ function toItem(row: MockRow): MockListItem {
     lastServedAt: row.last_served_at,
     contentHash: row.content_hash,
     standing: {
-      priority: row.priority ?? DEFAULT_PRIORITY,
+      // `null` stays null where the backend has no default: a stub Mockoon or Prism ranks only
+      // by order has no number, and filling WireMock's 5 in claimed one it does not have.
+      priority: row.priority ?? model.implicit,
       explicit: row.priority !== null,
       contenders: row.contenders,
       ahead: row.ahead,
@@ -397,15 +401,34 @@ const PEERS = `FROM mock p
      AND p.url_kind IS m.url_kind AND p.url_value IS m.url_value
      AND (p.method IS NULL OR m.method IS NULL OR p.method IS m.method)`
 
-const STANDING_COLUMNS = `
+/**
+ * The standing columns, in the ranking rule of the backend this profile talks to.
+ *
+ * This used to inline WireMock's rule — implicit 5, lower wins — for every backend. MockServer
+ * does the opposite on both counts (§17.34), so the `ahead` count was inverted and the column
+ * named the losing stub as the winner, which is precisely the answer it exists to give.
+ *
+ * The numbers are interpolated rather than bound because they come from the adapter's own
+ * declaration, never from user input; `direction` picks between two fixed operators.
+ */
+function standingColumns(model: PriorityModel): string {
+  // A backend with no implicit priority (Mockoon, Prism) leaves an unranked stub as NULL, and
+  // SQL's NULL comparisons then do the right thing on their own: an unranked stub neither
+  // outranks anything nor ties with anything.
+  const effective = (alias: string): string =>
+    model.implicit === null ? `${alias}.priority` : `COALESCE(${alias}.priority, ${model.implicit})`
+  const beats = model.direction === 'lower-wins' ? '<' : '>'
+
+  return `
   (SELECT COUNT(*) ${PEERS}) AS contenders,
   (SELECT COUNT(*) ${PEERS}
-     AND COALESCE(p.priority, ${DEFAULT_PRIORITY}) < COALESCE(m.priority, ${DEFAULT_PRIORITY})
+     AND ${effective('p')} ${beats} ${effective('m')}
   ) AS ahead,
   (SELECT COUNT(*) ${PEERS}
-     AND COALESCE(p.priority, ${DEFAULT_PRIORITY}) = COALESCE(m.priority, ${DEFAULT_PRIORITY})
+     AND ${effective('p')} = ${effective('m')}
      AND p.rowid <> m.rowid
   ) AS tied`
+}
 
 const SELECT_COLUMNS = `
   m.client_key, m.server_id, m.name, m.folder, m.folder_source, m.tags, m.method, m.url_kind,
@@ -485,7 +508,7 @@ export function searchCorpus(db: Db, request: SearchRequest): SearchResult {
 
   const rows = db
     .prepare(
-      `SELECT ${SELECT_COLUMNS}, ${STANDING_COLUMNS}
+      `SELECT ${SELECT_COLUMNS}, ${standingColumns(request.priority)}
        FROM mock m JOIN ${MATCH_SET} s ON s.rowid = m.rowid
        ${order} LIMIT ? OFFSET ?`,
     )
@@ -523,7 +546,8 @@ export function searchCorpus(db: Db, request: SearchRequest): SearchResult {
   }
 
   return {
-    items: rows.map(toItem),
+    // Not point-free: `map` would pass the row index as the priority model.
+    items: rows.map((row) => toItem(row, request.priority)),
     total: totalRow.n,
     limit: request.limit,
     offset: request.offset,
@@ -538,13 +562,14 @@ export function getMock(
   db: Db,
   profileId: string,
   clientKey: string,
+  model: PriorityModel,
 ): (MockListItem & { raw: unknown }) | null {
   const row = db
     .prepare(
-      `SELECT ${SELECT_COLUMNS}, ${STANDING_COLUMNS}, m.raw
+      `SELECT ${SELECT_COLUMNS}, ${standingColumns(model)}, m.raw
        FROM mock m WHERE m.profile_id = ? AND m.client_key = ?`,
     )
     .get(profileId, clientKey) as (MockRow & { raw: string }) | undefined
   if (row === undefined) return null
-  return { ...toItem(row), raw: JSON.parse(row.raw) as unknown }
+  return { ...toItem(row, model), raw: JSON.parse(row.raw) as unknown }
 }
