@@ -107,6 +107,10 @@ describe('nearMissesForRequest', () => {
     const body = (await response.json()) as {
       nearMisses: { matchResult: { diffDescriptions?: unknown[]; subEvents?: unknown[] } }[]
     }
+    // Asserted before the loop, because a loop over an empty list asserts nothing: if the fixture
+    // ever drifts so that nothing nearly matches, this test would keep passing while no longer
+    // checking the premise it exists to check.
+    expect(body.nearMisses.length).toBeGreaterThan(0)
     for (const miss of body.nearMisses) {
       expect(miss.matchResult.diffDescriptions ?? []).toEqual([])
       expect(miss.matchResult.subEvents ?? []).toEqual([])

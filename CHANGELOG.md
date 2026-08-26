@@ -15,6 +15,10 @@
 
 ### Fixed
 
+- **The Traffic list was unreachable from the keyboard.** Every row was rendered outside the tab
+  order until one had been focused with a mouse, so tabbing through the page skipped the whole
+  traffic log. It now has a tab stop from the first render, without stealing focus on load.
+
 - **A capability report that claimed three things this build cannot do.** WireMock declared
   `files.export`, `files.import` and `files.serverSave` and implements none of them. The
   conformance test meant to catch exactly this was asserting `bits.size >= 0` — true of every

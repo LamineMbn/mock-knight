@@ -200,6 +200,10 @@ describe('what the round trip proves', () => {
     const { mappings } = (await response.json()) as { mappings: Record<string, unknown>[] }
     const { toCanonical, toVendor } = await import('@mock-knight/adapter-wiremock')
     const { canonicalJson } = await import('@mock-knight/core')
+    // The corpus has to be non-empty for this to mean anything. Invariant 3 is the most
+    // important rule in the app — never lose `raw` — and a loop over zero mappings would have
+    // reported it upheld while checking nothing at all.
+    expect(mappings.length).toBeGreaterThan(0)
     for (const mapping of mappings) {
       expect(canonicalJson(toVendor(toCanonical(mapping as never)) as never)).toBe(
         canonicalJson(mapping as never),

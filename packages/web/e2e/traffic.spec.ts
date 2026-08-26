@@ -60,12 +60,21 @@ test('the row action is a quiet button, not a filled primary on every row', asyn
 
 test('each row action names its own request, not just "Why?"', async ({ page }) => {
   await traffic(page)
+  /*
+   * Waited for, not snapshotted. `evaluateAll` resolves immediately against whatever is on the
+   * page, so before the journal poll landed this read an empty list — and a loop over an empty
+   * list asserts nothing, which is how it used to "pass". Asserting the count first made that
+   * timing gap a hard failure instead; waiting for the first button makes it neither.
+   */
+  await expect(page.getByRole('button', { name: /^Why didn't / }).first()).toBeVisible()
   const titles = await page
     .getByRole('button', { name: /^Why didn't / })
     .evaluateAll((nodes) => nodes.slice(0, 5).map((node) => node.getAttribute('title')))
 
   // Thirty buttons all called "Why?" tell a screen-reader user nothing about which is which,
   // so each carries its request *and its time* — two calls to one path are different events.
+  // Asserted before the loop: zero titles would run zero assertions and pass.
+  expect(titles.length).toBeGreaterThan(0)
   for (const title of titles) {
     expect(title).toMatch(/^Why didn't [A-Z]+ \/\S+ at .+ match\?$/)
   }
@@ -123,14 +132,20 @@ test('j and k move a roving focus, and Enter opens the explainer', async ({ page
   )
 })
 
-test('only one row is in the tab order at a time', async ({ page }) => {
+test('exactly one row is in the tab order at a time', async ({ page }) => {
   await traffic(page)
-  const tabbable = await page
-    .locator(`${ROW}[tabindex="0"]`)
-    .count()
-    .catch(() => 0)
-  // A roving tabindex (§8): the list is one tab stop, arrows move within it.
-  expect(tabbable).toBeLessThanOrEqual(1)
+
+  /*
+   * `toBeLessThanOrEqual(1)` here passed on **zero** — a list no keyboard user can reach at all,
+   * which is the precise failure a roving tabindex exists to prevent. The `.catch(() => 0)` made
+   * it worse: a broken selector also produced 0, and also passed.
+   *
+   * A roving tabindex (§8) means the list is one tab stop and arrows move within it, so the
+   * count is exactly one whenever there are rows to move between.
+   */
+  const rows = await page.locator(ROW).count()
+  expect(rows).toBeGreaterThan(0)
+  expect(await page.locator(`${ROW}[tabindex="0"]`).count()).toBe(1)
 })
 
 /**

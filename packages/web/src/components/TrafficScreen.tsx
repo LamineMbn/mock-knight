@@ -73,6 +73,7 @@ function describeRow(event: ServeEventRow): string {
 function Row({
   event,
   focused,
+  tabStop,
   onFocus,
   onExplain,
   onCorrelation,
@@ -80,6 +81,15 @@ function Row({
 }: {
   event: ServeEventRow
   focused: boolean
+  /**
+   * Whether this row is the list's single tab stop.
+   *
+   * Deliberately not the same thing as `focused`, which also *moves* DOM focus. Until a row had
+   * been focused, every row was `tabIndex={-1}` and the list had no tab stop at all — a keyboard
+   * user tabbed straight past the whole traffic log and could only get in with a mouse. Making
+   * the first row `focused` instead would fix the tab order by stealing focus on load.
+   */
+  tabStop: boolean
   onFocus: () => void
   onExplain: (id: number) => void
   onCorrelation: (correlation: string) => void
@@ -100,7 +110,7 @@ function Row({
     <tr
       ref={ref}
       // Roving tabindex (§8): one stop for the whole list, arrows move within it.
-      tabIndex={focused ? 0 : -1}
+      tabIndex={tabStop ? 0 : -1}
       aria-label={describeRow(event)}
       onFocus={onFocus}
       onKeyDown={(keyEvent) => {
@@ -706,11 +716,14 @@ export function TrafficScreen({
               Requests this server has served. Use j and k to move, Enter to explain one.
             </caption>
             <tbody>
-              {visible.map((event) => (
+              {visible.map((event, index) => (
                 <Row
                   key={event.id}
                   event={event}
                   focused={event.id === focusedId}
+                  // Before anything has been focused the first row is the way in. Without it the
+                  // list is unreachable from the keyboard entirely.
+                  tabStop={focusedId === null ? index === 0 : event.id === focusedId}
                   onFocus={() => setFocusedId(event.id)}
                   onExplain={setExplaining}
                   onOpenStub={onOpenStub}

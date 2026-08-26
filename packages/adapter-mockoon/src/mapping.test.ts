@@ -120,6 +120,7 @@ describe('environmentToMocks', () => {
       }),
     )
 
+    expect(mocks).toHaveLength(2)
     for (const mock of mocks) {
       // Route-level fields are repeated across siblings. Duplicating is fine; losing is not.
       expect(mock.raw['responseMode']).toBe('SEQUENTIAL')
