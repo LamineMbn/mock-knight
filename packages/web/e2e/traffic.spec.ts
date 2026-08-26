@@ -409,3 +409,35 @@ test('arriving at a deleted stub by URL explains rather than erroring', async ({
   // Not the generic failure, which sent people looking for a fault that was not there.
   await expect(detail).not.toContainText('Could not load this stub')
 })
+
+test('the explainer is drawn only where the backend can actually explain', async ({ page }) => {
+  /*
+   * WireMock supports near misses, so this suite's profile shows the control. The bug this
+   * guards was only reachable once a backend existed with a traffic log and *no* near-miss
+   * support — Mockoon — because until then every backend that had one had both. The row drew
+   * "Why didn't this match?" regardless, and the route behind it correctly 404s when the
+   * capability is off: a control that can only fail, which is the one thing invariant 4 forbids.
+   *
+   * Asserted here from the capability rather than by adding a second backend to this tier: the
+   * rule is that the control and the bit agree, in whichever direction this profile happens to
+   * sit.
+   */
+  await traffic(page)
+
+  const capabilities = await page.evaluate(async () => {
+    const health = (await (await fetch('/api/health')).json()) as { launchProfileId: string | null }
+    const id = health.launchProfileId
+    const report = (await (await fetch(`/api/profiles/${id}/capabilities`)).json()) as {
+      report: { bit: string; on: boolean }[]
+    }
+    return report.report.filter((row) => row.on).map((row) => row.bit)
+  })
+  const canExplain = capabilities.includes('diagnostics.nearMiss')
+
+  const buttons = await page.getByRole('button', { name: /^Why didn't / }).count()
+  if (canExplain) {
+    expect(buttons).toBeGreaterThan(0)
+  } else {
+    expect(buttons).toBe(0)
+  }
+})

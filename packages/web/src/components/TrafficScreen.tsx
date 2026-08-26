@@ -76,6 +76,7 @@ function Row({
   tabStop,
   onFocus,
   onExplain,
+  canExplain,
   onCorrelation,
   onOpenStub,
 }: {
@@ -92,6 +93,15 @@ function Row({
   tabStop: boolean
   onFocus: () => void
   onExplain: (id: number) => void
+  /**
+   * Whether this backend can explain a near miss at all.
+   *
+   * Mockoon is the first backend with a traffic log and no near-miss support, which is what made
+   * this reachable: the row drew "Why didn't this match?" regardless, and the route behind it
+   * correctly 404s when the capability is off. A control that can only fail is the one thing
+   * invariant 4 forbids.
+   */
+  canExplain: boolean
   onCorrelation: (correlation: string) => void
   onOpenStub: (clientKey: string, refreshFirst: boolean) => void
 }) {
@@ -114,7 +124,8 @@ function Row({
       aria-label={describeRow(event)}
       onFocus={onFocus}
       onKeyDown={(keyEvent) => {
-        if (keyEvent.key === 'Enter' && !event.matched) {
+        // Gated with the button, or Enter would reach a route that is not there.
+        if (keyEvent.key === 'Enter' && !event.matched && canExplain) {
           keyEvent.preventDefault()
           onExplain(event.id)
         }
@@ -287,7 +298,7 @@ function Row({
               }
             />
           )
-        ) : (
+        ) : canExplain ? (
           <IconButton
             icon={HelpCircle}
             variant="quiet"
@@ -296,7 +307,7 @@ function Row({
             // which, so each carries its own request *and* its time.
             label={`Why didn't ${event.method ?? ''} ${event.url ?? ''} at ${new Date(event.at).toLocaleTimeString()} match?`}
           />
-        )}
+        ) : null}
       </td>
     </tr>
   )
@@ -311,6 +322,9 @@ export function TrafficScreen({
 }) {
   const profileId = profile.id
   const baseUrl = profile.baseUrl
+  // A backend can record traffic and still have no way to say why something did not match —
+  // Mockoon does exactly that. Absent, not disabled (invariant 4).
+  const canExplain = (profile.capabilities ?? []).includes('diagnostics.nearMiss')
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState<Filter>('all')
   /**
@@ -726,6 +740,7 @@ export function TrafficScreen({
                   tabStop={focusedId === null ? index === 0 : event.id === focusedId}
                   onFocus={() => setFocusedId(event.id)}
                   onExplain={setExplaining}
+                  canExplain={canExplain}
                   onOpenStub={onOpenStub}
                   onCorrelation={(correlation) =>
                     // Replaces the other filters rather than adding to them: following one

@@ -15,6 +15,11 @@
 
 ### Fixed
 
+- **"Why didn't this match?" was offered by backends that cannot answer it.** On a Mockoon
+  profile — a traffic log with no near-miss support — every unmatched row drew the explainer, and
+  pressing it reached a route that correctly reports the capability as absent. The control is now
+  drawn only where the backend can actually explain.
+
 - **The Traffic list was unreachable from the keyboard.** Every row was rendered outside the tab
   order until one had been focused with a mouse, so tabbing through the page skipped the whole
   traffic log. It now has a tab stop from the first render, without stealing focus on load.
