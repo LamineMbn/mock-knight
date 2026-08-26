@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import { Agent, request } from 'undici'
 import {
@@ -45,6 +45,33 @@ function authHeaders(auth: ResolvedAuth | undefined): Record<string, string> {
 
 const isObject = (value: unknown): value is JsonObject =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
+
+/**
+ * Parse an environment document, reporting failure the same way a network error is reported so
+ * the UI has one disclosure to render.
+ */
+export function parseEnvironment(text: string, path: string): JsonObject {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch (error) {
+    throw new AdapterTransportError(
+      'PARSE',
+      path,
+      'EINVALIDJSON',
+      `${path} is not valid JSON: ${(error as Error).message}`,
+    )
+  }
+  if (!isObject(parsed)) {
+    throw new AdapterTransportError(
+      'PARSE',
+      path,
+      'EINVALIDJSON',
+      `${path} is not a Mockoon environment: the document is not an object.`,
+    )
+  }
+  return parsed
+}
 
 export class MockoonClient {
   private readonly agent: Agent
@@ -104,9 +131,18 @@ export class MockoonClient {
    * had already changed and call it current.
    */
   async readEnvironment(): Promise<JsonObject> {
-    let text: string
+    return parseEnvironment(await this.readDocumentText(), this.documentPath)
+  }
+
+  /**
+   * The document as written, before parsing.
+   *
+   * The write path needs the original text, not a parsed object: an edit is applied to the bytes
+   * so that everything it did not touch stays byte-identical.
+   */
+  async readDocumentText(): Promise<string> {
     try {
-      text = await readFile(this.documentPath, 'utf8')
+      return await readFile(this.documentPath, 'utf8')
     } catch (error) {
       const code = (error as { code?: string }).code ?? null
       // Reported through the same error type as a network failure so the UI has one disclosure
@@ -120,27 +156,34 @@ export class MockoonClient {
           : `Could not read ${this.documentPath}: ${(error as Error).message}`,
       )
     }
+  }
 
-    let parsed: unknown
+  /**
+   * Replace the environment document, atomically.
+   *
+   * Written to a sibling temp file and renamed, never opened for truncation in place. Mockoon
+   * **watches this file**: a partial write is a document it will happily reload, and the window
+   * between "truncated" and "complete" is a window in which the whole corpus is gone. `rename`
+   * within the same directory is atomic on every platform this runs on, so a watcher sees either
+   * the old document or the new one.
+   *
+   * The temp file is removed on failure so a crashed write does not leave litter beside a
+   * document that people keep in version control.
+   */
+  async writeDocument(text: string): Promise<void> {
+    const temporary = `${this.documentPath}.mock-knight-${process.pid}.tmp`
     try {
-      parsed = JSON.parse(text)
+      await writeFile(temporary, text, 'utf8')
+      await rename(temporary, this.documentPath)
     } catch (error) {
+      await rm(temporary, { force: true }).catch(() => undefined)
       throw new AdapterTransportError(
-        'PARSE',
+        'WRITE',
         this.documentPath,
-        'EINVALIDJSON',
-        `${this.documentPath} is not valid JSON: ${(error as Error).message}`,
+        (error as { code?: string }).code ?? null,
+        `Could not write ${this.documentPath}: ${(error as Error).message}`,
       )
     }
-    if (!isObject(parsed)) {
-      throw new AdapterTransportError(
-        'PARSE',
-        this.documentPath,
-        'EINVALIDJSON',
-        `${this.documentPath} is not a Mockoon environment: the document is not an object.`,
-      )
-    }
-    return parsed
   }
 
   /**

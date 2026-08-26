@@ -212,20 +212,33 @@ export function runAdapterConformance(options: () => ConformanceOptions): void {
     })
 
     it('updates a stub in place, keeping its identity', async ({ skip }) => {
-      // A backend that cannot update in place has to say so through its capabilities, because
-      // an update that silently creates a second stub is a corpus that doubles every edit.
+      /*
+       * A backend that cannot update in place has to say so through its capabilities, because an
+       * update that silently creates a second stub is a corpus that doubles every edit.
+       *
+       * Seeded through `reset` rather than `createMock`. Requiring create to test update meant
+       * this silently skipped for any backend that can edit but not add — which is not a corner
+       * case: a document-backed backend can rewrite an entry in place while adding one means
+       * touching two lists at once. The whole write path went untested on exactly the backend it
+       * was written for.
+       */
       const { adapter, reset } = get()
-      if (adapter.updateMock === undefined || adapter.createMock === undefined) return skip()
-      await reset([])
+      if (adapter.updateMock === undefined) return skip()
+      await reset([conformanceStub()])
 
-      const created = await adapter.createMock(conformanceStub())
-      const before = (await adapter.listMocks({ limit: 50, offset: 0 })).total
+      const seeded = await adapter.listMocks({ limit: 50, offset: 0 })
+      const target = seeded.items[0]
+      expect(target).toBeDefined()
+      const before = seeded.total
 
-      const edited = { ...adapter.interpret(created.raw) }
+      const edited = { ...adapter.interpret(target!.raw) }
       edited.response = { ...edited.response, status: 503 }
-      const updated = await adapter.updateMock(created.id ?? created.clientKey, edited)
+      const updated = await adapter.updateMock(target!.id ?? target!.clientKey, edited)
 
       expect(updated.response.status).toBe(503)
+      // The identity has to survive the edit: an update that reissues the key breaks every link
+      // to the stub, including the one in the traffic log.
+      expect(updated.clientKey).toBe(target!.clientKey)
       expect((await adapter.listMocks({ limit: 50, offset: 0 })).total).toBe(before)
     })
 

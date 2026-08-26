@@ -1,3 +1,4 @@
+import { applyEdits, modify } from 'jsonc-parser'
 import { clientKeyFor, contentHash, setKey } from '@mock-knight/core'
 import type {
   Json,
@@ -385,18 +386,16 @@ export function environmentToMocks(environment: JsonObject): {
  * Where a canonical field has no Mockoon home it is left out rather than approximated; a
  * `mockoon:`-prefixed operator is unprefixed back to its own name.
  */
-export function draftToRoute(draft: MockDraft): JsonObject {
-  const url = draft.request.url
-  // Mockoon endpoints carry no leading slash, and a pattern read from `:param` cannot be turned
-  // back into the parameter name it came from — the literal is the honest rendering.
-  const endpoint = (url?.value ?? '').replace(/^\//, '')
-
-  const headers = Object.entries(draft.response.headers).map(([key, value]) => ({
-    key,
-    value: Array.isArray(value) ? (value[0] ?? '') : value,
-  }))
-
+/**
+ * A draft's matchers as Mockoon rules.
+ *
+ * Shared by `render` and by the in-place patch so the two cannot drift: a rule written one way
+ * on create and another on update is the kind of difference nobody notices until a stub stops
+ * matching.
+ */
+function draftToRules(draft: MockDraft): JsonObject[] {
   const rules: JsonObject[] = []
+
   const pushRule = (target: string, modifier: string, matcher: Matcher): void => {
     const vendor = matcher.operator.startsWith('mockoon:')
       ? matcher.operator.slice('mockoon:'.length)
@@ -407,14 +406,13 @@ export function draftToRoute(draft: MockDraft): JsonObject {
     // An operator with no Mockoon spelling is dropped from the rendered rule rather than guessed
     // at. It is still in `raw` for anything that retained the original document.
     if (operator === undefined) return
-    const rule: JsonObject = {
+    rules.push({
       target,
       modifier,
       value: typeof matcher.value === 'string' ? matcher.value : JSON.stringify(matcher.value),
       operator,
       invert: matcher.options['invert'] === true,
-    }
-    rules.push(rule)
+    })
   }
 
   for (const [name, matchers] of Object.entries(draft.request.headers)) {
@@ -430,6 +428,22 @@ export function draftToRoute(draft: MockDraft): JsonObject {
     const expression = matcher.options['expression']
     pushRule('body', typeof expression === 'string' ? expression : '', matcher)
   }
+
+  return rules
+}
+
+export function draftToRoute(draft: MockDraft): JsonObject {
+  const url = draft.request.url
+  // Mockoon endpoints carry no leading slash, and a pattern read from `:param` cannot be turned
+  // back into the parameter name it came from — the literal is the honest rendering.
+  const endpoint = (url?.value ?? '').replace(/^\//, '')
+
+  const headers = Object.entries(draft.response.headers).map(([key, value]) => ({
+    key,
+    value: Array.isArray(value) ? (value[0] ?? '') : value,
+  }))
+
+  const rules = draftToRules(draft)
 
   const body = draft.response.body
   const isFile = body.kind === 'file'
@@ -550,5 +564,126 @@ export function logToServeEvent(entry: unknown, index: number): ServeEvent | nul
     correlation: null,
     nearMisses: null,
     raw,
+  }
+}
+
+/**
+ * Patch one response inside the environment document, leaving the rest of the file alone.
+ *
+ * A **surgical edit**, not a rewrite. These documents live in version control and are edited by
+ * hand and by Mockoon's own GUI, so reserialising the whole file would turn a one-field change
+ * into a diff nobody can review — and would quietly restyle formatting the owner chose.
+ * `jsonc-parser` rewrites only the span that changed.
+ *
+ * Patching rather than rebuilding is also invariant 3: the response written is the response that
+ * was read, with the fields this model understands overwritten. Anything Mockoon supports that
+ * the canonical model does not — callbacks, `fallbackTo404`, `crudKey`, a rule this mapping
+ * cannot express — survives untouched because it is never regenerated.
+ *
+ * @returns the new document text, or `null` when the id names nothing in this document.
+ */
+export function patchResponseInDocument(
+  text: string,
+  document: JsonObject,
+  id: string,
+  draft: MockDraft,
+): string | null {
+  const [routeUuid, responseUuid] = id.split(':')
+  if (routeUuid === undefined || responseUuid === undefined) return null
+
+  const routes = asArray(document['routes'])
+  const routeIndex = routes.findIndex(
+    (route) => isObject(route) && asString(route['uuid']) === routeUuid,
+  )
+  if (routeIndex === -1) return null
+  const route = routes[routeIndex] as JsonObject
+
+  const responses = asArray(route['responses'])
+  const responseIndex = responses.findIndex(
+    (response) => isObject(response) && asString(response['uuid']) === responseUuid,
+  )
+  if (responseIndex === -1) return null
+  const existing = responses[responseIndex] as JsonObject
+
+  // Mockoon's own files are two-space JSON; matching that keeps an inserted object consistent
+  // with its surroundings. Without explicit formattingOptions jsonc-parser writes it on one line.
+  const formattingOptions = { tabSize: 2, insertSpaces: true }
+  let patched = text
+
+  const write = (path: (string | number)[], value: unknown): void => {
+    patched = applyEdits(patched, modify(patched, path, value, { formattingOptions }))
+  }
+
+  write(['routes', routeIndex, 'responses', responseIndex], responseFrom(existing, draft))
+
+  // Route-level fields the canonical model owns. Written only when they actually changed, so an
+  // edit that touches the response alone leaves the route's own lines untouched in the diff.
+  const method = draft.request.method === null ? 'all' : draft.request.method.toLowerCase()
+  if (asString(route['method']) !== method) write(['routes', routeIndex, 'method'], method)
+
+  const endpoint = (draft.request.url?.value ?? '').replace(/^\//, '')
+  if (asString(route['endpoint']) !== endpoint) {
+    write(['routes', routeIndex, 'endpoint'], endpoint)
+  }
+
+  return patched
+}
+
+/**
+ * The vendor response to write: the one that was read, with the canonical fields overwritten.
+ *
+ * Spread-then-override rather than constructed fresh — see the note above about invariant 3.
+ */
+/**
+ * The body string to write, keeping the author's own formatting when the content has not changed.
+ *
+ * Re-serialising unconditionally meant that editing a *status code* also rewrote the body —
+ * `{"ok":true}` became a pretty-printed three-line string — so a one-field change produced a
+ * diff touching a field nobody edited, and quietly discarded whichever layout the author chose.
+ * Caught by the test asserting exactly one line moves.
+ *
+ * The comparison is on the parsed document, not the text: same content in different whitespace
+ * is not a change. Anything that fails to parse falls through to being rewritten, which is the
+ * safe direction — writing the edit matters more than preserving bytes.
+ */
+function bodyStringFor(existing: JsonObject, draft: MockDraft): string {
+  const body = draft.response.body
+  if (body.kind === 'file' || body.kind === 'none') return ''
+
+  const rendered =
+    body.kind === 'json' ? JSON.stringify(body.value, null, 2) : String(body.value ?? '')
+  const current = asString(existing['body'])
+  if (current === null) return rendered
+
+  if (body.kind === 'json') {
+    try {
+      if (JSON.stringify(JSON.parse(current)) === JSON.stringify(body.value)) return current
+    } catch {
+      // Not JSON on disk, so there is nothing to preserve.
+    }
+    return rendered
+  }
+  return current === rendered ? current : rendered
+}
+
+function responseFrom(existing: JsonObject, draft: MockDraft): JsonObject {
+  const body = draft.response.body
+  const isFile = body.kind === 'file'
+
+  return {
+    ...existing,
+    statusCode: draft.response.status ?? 200,
+    label: draft.name ?? '',
+    latency: draft.response.delay?.milliseconds ?? 0,
+    headers: Object.entries(draft.response.headers).map(([key, value]) => ({
+      key,
+      value: Array.isArray(value) ? (value[0] ?? '') : value,
+    })),
+    bodyType: isFile ? 'FILE' : 'INLINE',
+    filePath: isFile ? String(body.value ?? '') : '',
+    body: bodyStringFor(existing, draft),
+    // `transformers` carries Mockoon's own name for templating, so its absence is the signal.
+    disableTemplating: !draft.response.transformers.includes('mockoon:templating'),
+    rules: draftToRules(draft),
   }
 }

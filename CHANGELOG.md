@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Mockoon stubs can be edited.** The edit rewrites the environment file — deliberately not the
+  admin API, whose write never reaches the file — and rewrites only the part that changed, so a
+  document in version control still produces a diff someone can review. Fields Mock Knight does
+  not model survive untouched. Run Mockoon with `--watch` and it serves the change about a second
+  later.
+
+  Adding and deleting stubs stay off: both rewrite `rootChildren` as well as `routes`, and a
+  route missing from that list is silently never served.
+
+### Fixed
+
+- **A capability report that claimed three things this build cannot do.** WireMock declared
+  `files.export`, `files.import` and `files.serverSave` and implements none of them. The
+  conformance test meant to catch exactly this was asserting `bits.size >= 0` — true of every
+  object that has ever existed. Made real, it also found `mock.read` declared without the method
+  behind it on two backends.
+
 ## 0.6.0
 
 ### Added

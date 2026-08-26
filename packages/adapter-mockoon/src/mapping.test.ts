@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { endpointToUrlMatch, environmentToMocks, folderPaths } from './mapping.js'
-import type { JsonObject } from '@mock-knight/core'
+import {
+  endpointToUrlMatch,
+  environmentToMocks,
+  folderPaths,
+  patchResponseInDocument,
+} from './mapping.js'
+import type { JsonObject, MockDraft } from '@mock-knight/core'
 
 /**
  * The Mockoon read path.
@@ -378,5 +383,123 @@ describe('folderPaths', () => {
     // Legal in the wild: a route present in `routes` but missing from `rootChildren` is not
     // served by Mockoon at all (§17.31), and it has no folder either.
     expect(folderPaths(environment({ rootChildren: [] })).get('route-1')).toBeUndefined()
+  })
+})
+
+describe('patchResponseInDocument', () => {
+  const text = JSON.stringify(environment(), null, 2)
+  const parsed = JSON.parse(text) as JsonObject
+
+  const draftFor = (over: (draft: MockDraft) => void): MockDraft => {
+    const { mocks } = environmentToMocks(parsed)
+    const { id: _i, clientKey: _k, contentHash: _c, folderSource: _f, ...draft } = mocks[0]!
+    over(draft)
+    return draft
+  }
+
+  it('changes only the lines it needs to', () => {
+    const patched = patchResponseInDocument(
+      text,
+      parsed,
+      'route-1:r1',
+      draftFor((draft) => {
+        draft.response.status = 503
+      }),
+    )!
+
+    const before = text.split('\n')
+    const after = patched.split('\n')
+    const changed = after.filter((line, index) => line !== before[index])
+    // These documents live in version control and are edited by hand and by Mockoon's own GUI.
+    // Reserialising the whole file would turn a one-field edit into an unreviewable diff.
+    expect(changed).toEqual(['          "statusCode": 503,'])
+  })
+
+  it('keeps fields the canonical model does not understand', () => {
+    const withExtra = JSON.parse(text) as JsonObject
+    const route = (withExtra['routes'] as JsonObject[])[0]!
+    const response = (route['responses'] as JsonObject[])[0]!
+    response['x-team-note'] = 'not modelled, must survive'
+    response['fallbackTo404'] = true
+    const extraText = JSON.stringify(withExtra, null, 2)
+
+    const patched = patchResponseInDocument(
+      extraText,
+      withExtra,
+      'route-1:r1',
+      draftFor((draft) => {
+        draft.response.status = 503
+      }),
+    )!
+
+    // Invariant 3. The response written is the response that was read with known fields
+    // overwritten, never one rebuilt from the canonical model.
+    const out = JSON.parse(patched) as JsonObject
+    const written = ((out['routes'] as JsonObject[])[0]!['responses'] as JsonObject[])[0]!
+    expect(written['x-team-note']).toBe('not modelled, must survive')
+    expect(written['fallbackTo404']).toBe(true)
+    expect(written['statusCode']).toBe(503)
+  })
+
+  it('writes an inverted matcher back as Mockoon spells it', () => {
+    const patched = patchResponseInDocument(
+      text,
+      parsed,
+      'route-1:r1',
+      draftFor((draft) => {
+        draft.request.headers['x-tenant'] = [
+          { operator: 'mockoon:not-equals', value: 'acme', options: { invert: true } },
+        ]
+      }),
+    )!
+
+    const out = JSON.parse(patched) as JsonObject
+    const written = ((out['routes'] as JsonObject[])[0]!['responses'] as JsonObject[])[0]!
+    // `not-equals` is this module's own spelling; on the wire it is `equals` with `invert: true`.
+    expect(written['rules']).toEqual([
+      { target: 'header', modifier: 'x-tenant', value: 'acme', operator: 'equals', invert: true },
+    ])
+  })
+
+  it('leaves the route alone when only the response changed', () => {
+    const patched = patchResponseInDocument(
+      text,
+      parsed,
+      'route-1:r1',
+      draftFor((draft) => {
+        draft.response.status = 503
+      }),
+    )!
+    expect(patched).toContain('"endpoint": "v1/customers"')
+    expect(patched).toContain('"method": "get"')
+  })
+
+  it('says so rather than guessing when the id names nothing', () => {
+    // A stale key — the document was edited elsewhere between read and write — must not fall
+    // through to patching whatever happens to sit at index 0.
+    expect(
+      patchResponseInDocument(
+        text,
+        parsed,
+        'route-1:gone',
+        draftFor(() => {}),
+      ),
+    ).toBeNull()
+    expect(
+      patchResponseInDocument(
+        text,
+        parsed,
+        'nope:r1',
+        draftFor(() => {}),
+      ),
+    ).toBeNull()
+    expect(
+      patchResponseInDocument(
+        text,
+        parsed,
+        'malformed',
+        draftFor(() => {}),
+      ),
+    ).toBeNull()
   })
 })

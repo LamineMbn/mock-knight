@@ -139,7 +139,7 @@ over the file** — a flag is what you typed just now.
 | **WireMock 3.x** | Supported. Read, write, journal, scenarios, near-miss |
 | WireMock 2.x | Read paths work; some admin routes are probed and gracefully absent |
 | **MockServer** | Supported. Read and write. No traffic log and no scenarios — it records no attribution for a served request and has no named states, so both screens are absent rather than empty |
-| **Mockoon** | Read-only. Its corpus is an environment JSON file — the admin API cannot read routes — so point a profile at the file. Traffic works where the admin token is set; editing is not offered yet, because Mockoon's only write does not reach the file |
+| **Mockoon** | Read, edit and traffic. Its corpus is an environment JSON file — the admin API cannot read routes — so point a profile at the file. Editing rewrites that file surgically, leaving everything it did not touch byte-identical; run Mockoon with `--watch` and it serves the change about a second later. Adding and deleting stubs are not offered: both also rewrite `rootChildren`, where a mistake silently unserves a route |
 | **Prism** | Read-only. Its corpus is the OpenAPI document it serves — Prism has no control API — so point a profile at the file. An operation becomes one stub per declared response, ranked the way Prism picks: lowest 2xx first |
 | Hoverfly, JSON Server | Not yet. JSON Server in particular is a poor fit: it has no matchers, no journal and no stubs — its `db.json` holds data, and its routes are generated rather than declared |
 

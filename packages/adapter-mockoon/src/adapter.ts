@@ -11,8 +11,13 @@ import type {
   Page,
   ServeEvent,
 } from '@mock-knight/core'
-import { DEFAULT_ADMIN_PATH, MockoonClient } from './client.js'
-import { draftToRoute, environmentToMocks, logToServeEvent } from './mapping.js'
+import { DEFAULT_ADMIN_PATH, MockoonClient, parseEnvironment } from './client.js'
+import {
+  draftToRoute,
+  environmentToMocks,
+  logToServeEvent,
+  patchResponseInDocument,
+} from './mapping.js'
 
 /**
  * Mockoon — the third backend, and the first that is not an admin API.
@@ -89,9 +94,18 @@ export class MockoonAdapter implements MockBackendAdapter {
       // Mockoon keys both the route and the response, so the pair is a stable server id.
       'mock.stableServerId',
       // Not a number Mockoon stores — the order of responses is what decides which one answers,
-      // which is the same idea and is read as a priority. It cannot be written, and no write
-      // capability is on anyway.
+      // which is the same idea and is read as a priority. It is read-only: changing which
+      // response answers means reordering them, not setting a field.
       'mock.priority',
+      /*
+       * Editing an existing stub, by rewriting the document.
+       *
+       * Create and delete stay off: both change `routes` *and* `rootChildren`, and a route
+       * missing from `rootChildren` is silently not served (§17.31) — a failure mode with no
+       * error and no symptom until someone notices the mock never answers. Update touches
+       * neither list.
+       */
+      'mock.update',
     ])
 
     /**
@@ -173,6 +187,38 @@ export class MockoonAdapter implements MockBackendAdapter {
     const found = mocks.find((mock) => mock.id === id)
     if (found === undefined) throw new Error(`No stub in the document with id "${id}".`)
     return found
+  }
+
+  /**
+   * Edit one stub by rewriting the document.
+   *
+   * Deliberately **not** `PUT /mockoon-admin/environment`, which is the obvious channel and the
+   * wrong one: that write never reaches the file (§17.31), so the server and the document diverge
+   * immediately and the change is gone on restart. Writing the document is the only edit that
+   * survives, and under `--watch` Mockoon picks it up within about a second.
+   *
+   * The read immediately before the write is what invariant 5 rests on, and here it is a genuine
+   * re-read of the file rather than a cache — someone editing the same environment in Mockoon's
+   * GUI is exactly the collision this is guarding against.
+   */
+  async updateMock(id: string, draft: MockDraft): Promise<Mock> {
+    const text = await this.transport.readDocumentText()
+    const document = parseEnvironment(text, this.documentPath)
+    const patched = patchResponseInDocument(text, document, id, draft)
+    if (patched === null) {
+      throw new Error(`No stub in ${this.documentPath} with id "${id}".`)
+    }
+
+    await this.transport.writeDocument(patched)
+
+    const { mocks } = environmentToMocks(parseEnvironment(patched, this.documentPath))
+    const written = mocks.find((mock) => mock.id === id)
+    // Reading the result back rather than returning the draft: what the corpus shows has to be
+    // what the file now says, not what we intended it to say.
+    if (written === undefined) {
+      throw new Error(`Wrote ${this.documentPath} but could not read the stub back.`)
+    }
+    return written
   }
 
   async listMocks(query: { limit?: number; offset?: number } = {}): Promise<Page<Mock>> {
