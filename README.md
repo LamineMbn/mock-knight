@@ -164,6 +164,23 @@ Mock Knight probes each server on connect and derives a **capability set**. A ca
 off means the control is *absent*, never a button that fails when you press it. The Servers
 screen shows the full report and explains what each one being off costs you.
 
+## Servers that need credentials
+
+Set authentication on the Servers screen: bearer token, basic auth, or arbitrary headers. Every
+one of them takes **the name of an environment variable**, never the secret itself —
+
+```bash
+WIREMOCK_USER=ci WIREMOCK_PASS=… npx mock-knight --url https://wiremock.internal
+```
+
+— and the profile stores `WIREMOCK_USER:WIREMOCK_PASS`. The resolved value lives in the Mock
+Knight process for the life of a request and reaches nothing else: not the state database, not a
+log line, not a URL, and not anything sent to the browser. Paste a secret into that field instead
+of a variable name and the form says so.
+
+If a referenced variable is not set when you connect, Mock Knight names it rather than sending an
+empty credential and reporting whatever the server says about it.
+
 ## Security
 
 Mock Knight is **unauthenticated** and binds to loopback by default. It is a developer tool for

@@ -13,7 +13,22 @@
   Adding and deleting stubs stay off: both rewrite `rootChildren` as well as `routes`, and a
   route missing from that list is silently never served.
 
+### Added
+
+- **Authentication is configurable from the Servers screen.** Bearer token, basic auth, or custom
+  headers. Each takes the *name of an environment variable*, never the secret — the value is read
+  in the Mock Knight process when it connects and reaches nothing else: not the state database,
+  not a log line, not the browser. Paste a credential in and the form says so.
+
+  This existed and worked; it simply had no fields in the UI, so it could only be set through the
+  API or a config file. The 401 error even pointed at a Servers screen with nothing on it.
+
 ### Fixed
+
+- **A 401 now says a credential is what is missing**, rather than "the mock server rejected GET
+  /__admin/version" — true, and no help. And a referenced environment variable that is not set is
+  named before connecting, instead of sending an empty credential and reporting whatever the
+  server says about it.
 
 - **"Why didn't this match?" was offered by backends that cannot answer it.** On a Mockoon
   profile — a traffic log with no near-miss support — every unmatched row drew the explainer, and

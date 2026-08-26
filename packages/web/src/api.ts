@@ -84,6 +84,12 @@ export interface Profile {
   adminPath: string | null
   /** The corpus document, for a document-backed backend. Null for the API-driven ones. */
   mappingsDir: string | null
+  authKind: string
+  /**
+   * The *name* of the environment variable(s) holding the credential — never the credential.
+   * The resolved value exists only in the server process, for the life of a request.
+   */
+  authRef: string | null
   capabilities: string[] | null
   createdAt: string
 }
@@ -128,6 +134,9 @@ export interface NewProfile {
   readOnly: boolean
   /** The corpus document, for a backend that reads one. Null for the API-driven backends. */
   mappingsDir: string | null
+  authKind: string
+  /** An environment variable name, never a secret. */
+  authRef: string | null
 }
 
 /**

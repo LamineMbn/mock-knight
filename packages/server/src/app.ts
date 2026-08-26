@@ -34,6 +34,7 @@ import {
   profileInputSchema,
   updateProfile,
 } from './profiles.js'
+import { ProfileConfigurationError } from './runtime.js'
 import type { Connection, ConnectionRegistry, RuntimeMode } from './runtime.js'
 
 /**
@@ -295,6 +296,32 @@ function readRequestFromEvent(raw: unknown): LoggedRequest {
   }
 }
 
+/**
+ * The sentence shown above the disclosure when the mock server refuses a request.
+ *
+ * 401 and 403 get named specifically. "The mock server rejected GET /__admin/version" is true of
+ * an authentication failure and tells nobody what to do about it — the fix is a credential, and
+ * the message has to say so or the status code sits unread inside a collapsed disclosure.
+ *
+ * The *name* of the environment variable is safe to think about here; its value never is. This
+ * function never sees the resolved secret, and nothing about the credential is echoed back.
+ */
+export function describeUpstreamRejection(error: AdapterHttpError): string {
+  if (error.status === 401) {
+    return (
+      `${error.url} requires credentials. Set this server's authentication on the Servers ` +
+      `screen — Mock Knight stores the name of an environment variable, never the secret itself.`
+    )
+  }
+  if (error.status === 403) {
+    return (
+      `${error.url} refused these credentials. They reached the server and were rejected, so ` +
+      `the variable is set but the value or the account is wrong.`
+    )
+  }
+  return `The mock server rejected ${error.method} ${error.url}.`
+}
+
 export function createApp(options: AppOptions) {
   const { db, registry, mode } = options
   // Resolved once: shelling out to git on every write would be absurd, and the answer cannot
@@ -336,7 +363,7 @@ export function createApp(options: AppOptions) {
         return c.json(
           {
             error: 'upstream_error',
-            message: `The mock server rejected ${error.method} ${error.url}.`,
+            message: describeUpstreamRejection(error),
             upstream: {
               method: error.method,
               url: error.url,
@@ -377,6 +404,10 @@ export function createApp(options: AppOptions) {
           },
           502,
         )
+      }
+      if (error instanceof ProfileConfigurationError) {
+        // The profile is wrong, not the server: 400, and the message names what to change.
+        return c.json({ error: 'profile_misconfigured', message: error.message }, 400)
       }
       if (error instanceof AdapterHostNotAllowedError) {
         return c.json({ error: 'host_not_allowed', message: error.message }, 403)

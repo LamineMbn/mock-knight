@@ -39,6 +39,10 @@ export function FirstRun({ onAdded }: { onAdded: (id: string) => void }) {
         colour: 'indigo',
         // WireMock reads its corpus over the admin API, so there is no document to point at.
         mappingsDir: null,
+        // First run has one field; a server needing credentials is configured on the Servers
+        // screen, which is also where the error from an unauthenticated connect points.
+        authKind: 'none',
+        authRef: null,
         protected: false,
         readOnly: false,
       })

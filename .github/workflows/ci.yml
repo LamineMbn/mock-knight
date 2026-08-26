@@ -83,6 +83,17 @@ jobs:
       wiremock:
         image: wiremock/wiremock:3.13.1
         ports: ['18099:8080']
+      # A *second* WireMock, with its admin API behind basic auth. Every other backend here is
+      # open, so without this the whole authentication path — env-var resolution, header
+      # construction, the 401 that comes back without one — is never executed against something
+      # that actually refuses.
+      wiremock-auth:
+        image: wiremock/wiremock:3.13.1
+        ports: ['18097:8080']
+        # The image appends `$WIREMOCK_OPTIONS` to its command, which is the only way to pass
+        # arguments to a service container — `docker create` takes no CMD here.
+        env:
+          WIREMOCK_OPTIONS: --admin-api-basic-auth mkuser:mkpass
       # A second backend, so the conformance tier proves the model is portable rather than
       # proving the suite runs.
       mockserver:
@@ -166,6 +177,16 @@ jobs:
           done
           echo '::error::MockServer never became healthy'; exit 1
 
+      - name: Wait for the secured WireMock
+        run: |
+          for i in $(seq 1 60); do
+            # 401 *is* healthy here: it means the admin API is up and refusing anonymous calls,
+            # which is the premise the auth tier asserts before it tests anything.
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18097/__admin/version)" = "401" ] && exit 0
+            sleep 1
+          done
+          echo '::error::The secured WireMock never returned 401'; exit 1
+
       - name: Wait for WireMock
         run: |
           for i in $(seq 1 60); do
@@ -175,6 +196,8 @@ jobs:
           echo '::error::WireMock never became healthy'; exit 1
 
       - run: pnpm test:integration
+        env:
+          MOCK_KNIGHT_TEST_WIREMOCK_AUTH_URL: http://localhost:18097
 
       # The adapter contract, asserted by a suite that lives in `core` and is identical for
       # every backend — all four run it. It lives here rather than in its own job because it

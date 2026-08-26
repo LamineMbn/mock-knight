@@ -74,6 +74,26 @@ export function environmentCapabilities(mode: RuntimeMode): readonly CapabilityB
  * Reading `process.env` here and nowhere else keeps the blast radius of a secret to this
  * function's return value.
  */
+/**
+ * The environment variables a profile's auth refers to that are not set in this process.
+ *
+ * A referenced-but-missing variable is a *local* misconfiguration, and it is worth saying so
+ * precisely. Without this the credential is built from empty strings, sent, and refused, and the
+ * user is told "this server requires credentials" — which they knew, having just configured
+ * some. Naming the variable turns a round trip into a fix.
+ */
+export function missingAuthVariables(
+  profile: Pick<Profile, 'authKind' | 'authRef'>,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  if (profile.authKind === 'none' || profile.authRef === null) return []
+  const named =
+    profile.authKind === 'headers'
+      ? profile.authRef.split(',').map((pair) => pair.split('=')[1] ?? '')
+      : profile.authRef.split(':')
+  return named.map((name) => name.trim()).filter((name) => name !== '' && (env[name] ?? '') === '')
+}
+
 export function resolveAuth(profile: Profile, env: NodeJS.ProcessEnv = process.env): ResolvedAuth {
   if (profile.authKind === 'none' || profile.authRef === null) return { kind: 'none' }
   switch (profile.authKind) {
@@ -119,6 +139,18 @@ export interface ConnectionFailure {
   readonly nextAttemptAt: number
 }
 
+/**
+ * A profile that cannot be used as configured — distinct from the server refusing us.
+ *
+ * Separate from `AdapterHttpError` because the fix is in a different place: nothing was sent, no
+ * server said no, and the person reading it needs to change their own setup rather than
+ * investigate the mock server. A plain `Error` here surfaced as `internal_error` with a 500,
+ * which blames the wrong party.
+ */
+export class ProfileConfigurationError extends Error {
+  override readonly name = 'ProfileConfigurationError'
+}
+
 export class ConnectionRegistry {
   private readonly connections = new Map<string, Connection>()
   /** Per-profile retry state, held only while a profile is failing. */
@@ -136,6 +168,23 @@ export class ConnectionRegistry {
 
   async connect(profile: Profile): Promise<Connection> {
     await this.disconnect(profile.id)
+
+    /*
+     * Fail on a missing credential *variable* before opening a connection.
+     *
+     * Otherwise the header is built from empty strings, the server refuses it, and the user is
+     * told the server requires credentials — which they knew, having configured some. The useful
+     * sentence names the variable that is not set, and this process is the only thing that can
+     * know that.
+     */
+    const missing = missingAuthVariables(profile)
+    if (missing.length > 0) {
+      throw new ProfileConfigurationError(
+        `${missing.join(' and ')} ${missing.length === 1 ? 'is' : 'are'} not set in this ` +
+          `process, so ${profile.name} has no credential to send. Mock Knight stores the name ` +
+          `of an environment variable, never the secret — set it where you start Mock Knight.`,
+      )
+    }
 
     // Chosen by the profile rather than assumed: this build has more than one backend.
     const implementation = createAdapter(profile.adapter)
