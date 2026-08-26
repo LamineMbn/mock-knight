@@ -17,7 +17,7 @@ jobs:
     name: Preflight
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # The tag is the source of truth for the version. Publishing something that disagrees
       # with it makes the Release page a lie for good — npm versions are immutable.
@@ -67,13 +67,13 @@ jobs:
       contents: write # create the GitHub Release
       id-token: write # npm provenance
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Tags, for the "compare with the previous release" link. The default shallow clone
           # fetches none, so `git tag --list` comes back empty and the link disappears silently.
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
