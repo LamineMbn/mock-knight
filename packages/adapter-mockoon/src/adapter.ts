@@ -160,6 +160,21 @@ export class MockoonAdapter implements MockBackendAdapter {
     return draftToRoute(draft)
   }
 
+  /**
+   * One stub, re-read from the document.
+   *
+   * `mock.read` was declared without this, which the conformance suite let through while its
+   * capability check was vacuous. It matters beyond tidiness: the write path re-reads through
+   * `getMock` immediately before writing, so a missing one means invariant 5 has nothing to
+   * compare against.
+   */
+  async getMock(id: string): Promise<Mock> {
+    const { mocks } = environmentToMocks(await this.transport.readEnvironment())
+    const found = mocks.find((mock) => mock.id === id)
+    if (found === undefined) throw new Error(`No stub in the document with id "${id}".`)
+    return found
+  }
+
   async listMocks(query: { limit?: number; offset?: number } = {}): Promise<Page<Mock>> {
     const environment = await this.transport.readEnvironment()
     const { mocks } = environmentToMocks(environment)

@@ -60,9 +60,15 @@ const DECLARED_ON: readonly CapabilityBit[] = [
   'state.machine',
   'state.read',
   'state.resetAll',
-  'files.export',
-  'files.import',
-  'files.serverSave',
+  /*
+   * `files.export`, `files.import` and `files.serverSave` were declared here and never
+   * implemented — WireMock supports all three, this adapter does not. Nothing consumed the bits,
+   * so no control failed, but the capability report told the user three things about this build
+   * that were not true, and that screen exists precisely to be believed.
+   *
+   * Found when the conformance test that was supposed to catch it stopped being vacuous. They
+   * come back the day the methods do.
+   */
 ]
 
 /**

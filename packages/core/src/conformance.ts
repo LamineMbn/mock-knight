@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { canonicalJson } from './canonical.js'
 import { behaviourFingerprint } from './fingerprint.js'
 import { CAPABILITY_BITS } from './capabilities.js'
-import { OPTIONAL_ADAPTER_METHODS } from './adapter.js'
+import { METHOD_CAPABILITY, OPTIONAL_ADAPTER_METHODS } from './adapter.js'
 import type { MockBackendAdapter } from './adapter.js'
 import type { MockDraft } from './model.js'
 
@@ -88,19 +88,35 @@ export function runAdapterConformance(options: () => ConformanceOptions): void {
       for (const bit of get().adapter.capabilities()) expect(known).toContain(bit)
     })
 
-    it('omits the methods its capabilities say it cannot do', () => {
-      // Invariant 5: a capability that is off means the method is *absent*, not a method that
-      // throws. The whole UI gating rests on being able to test for the function.
+    it('has exactly the methods its capabilities claim, in both directions', () => {
+      /*
+       * The contract's load-bearing rule: a capability that is off means the method is *absent*,
+       * not a method that throws, because the whole UI gating rests on being able to test for the
+       * function.
+       *
+       * This assertion used to be `if (!present) expect(bits.size).toBeGreaterThanOrEqual(0)`,
+       * which is true of every object in existence. It looked like it enforced the rule and
+       * enforced nothing — and a backend declaring `mock.read` with no `getMock` sailed through
+       * it. Both directions are checked now: a bit without its method is a route that 404s on a
+       * capability the UI was told it had, and a method without its bit is a control the UI will
+       * never draw.
+       */
       const { adapter } = get()
       const bits = adapter.capabilities()
+      const mismatched: string[] = []
+
       for (const method of OPTIONAL_ADAPTER_METHODS) {
         const present =
           typeof (adapter as unknown as Record<string, unknown>)[method] === 'function'
-        // Presence must be a decision, not an accident: every optional method that exists has
-        // to be backed by a bit, and vice versa. The mapping itself is the adapter's business,
-        // so this only asserts the two agree in the directions that can be checked here.
-        if (!present) expect(bits.size).toBeGreaterThanOrEqual(0)
+        const claimed = bits.has(METHOD_CAPABILITY[method])
+        if (present !== claimed) {
+          mismatched.push(
+            `${method}: ${claimed ? 'capability on' : 'capability off'} but method ${present ? 'present' : 'absent'}`,
+          )
+        }
       }
+
+      expect(mismatched).toEqual([])
     })
   })
 
