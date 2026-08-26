@@ -94,6 +94,15 @@ jobs:
         # arguments to a service container — `docker create` takes no CMD here.
         env:
           WIREMOCK_OPTIONS: --admin-api-basic-auth mkuser:mkpass
+        # The image healthchecks with `curl -f .../__admin/health` and no credentials, which a
+        # secured admin API answers with 401 — so the container never became healthy and Actions
+        # refused to start the job. The healthcheck authenticates, which also keeps "healthy"
+        # meaning what it should: the admin API answers *when asked properly*.
+        options: >-
+          --health-cmd "curl -f -u mkuser:mkpass http://localhost:8080/__admin/health || exit 1"
+          --health-interval 3s
+          --health-retries 20
+          --health-start-period 5s
       # A second backend, so the conformance tier proves the model is portable rather than
       # proving the suite runs.
       mockserver:
