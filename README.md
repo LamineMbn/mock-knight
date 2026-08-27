@@ -166,20 +166,24 @@ screen shows the full report and explains what each one being off costs you.
 
 ## Servers that need credentials
 
-Set authentication on the Servers screen: bearer token, basic auth, or arbitrary headers. Every
-one of them takes **the name of an environment variable**, never the secret itself —
+WireMock can put its admin API behind HTTP basic auth. Set a username and password on the Servers
+screen — the field appears only for backends that accept one, which among those supported is
+WireMock alone.
 
-```bash
-WIREMOCK_USER=ci WIREMOCK_PASS=… npx mock-knight --url https://wiremock.internal
+The password is stored in Mock Knight's state database on your machine, **in plain text**. The
+file is created `0600` so other accounts cannot read it, but it is not encrypted: encrypting it
+with a key kept beside it would stop someone reading over your shoulder and nothing more, and
+this is a local developer tool rather than a vault. It is never sent to the browser, never
+written to the audit trail, and never put in a log line or a URL.
+
+For a `mock-knight.json` you share or commit, reference the environment instead so the file
+itself holds nothing:
+
+```json
+{ "profiles": [{ "name": "staging", "baseUrl": "https://wiremock.internal",
+                 "authKind": "basic", "authUsername": "ci",
+                 "authSecret": "${env:WIREMOCK_PASS}" }] }
 ```
-
-— and the profile stores `WIREMOCK_USER:WIREMOCK_PASS`. The resolved value lives in the Mock
-Knight process for the life of a request and reaches nothing else: not the state database, not a
-log line, not a URL, and not anything sent to the browser. Paste a secret into that field instead
-of a variable name and the form says so.
-
-If a referenced variable is not set when you connect, Mock Knight names it rather than sending an
-empty credential and reporting whatever the server says about it.
 
 ## Security
 

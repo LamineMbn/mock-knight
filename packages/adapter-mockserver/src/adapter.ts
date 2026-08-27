@@ -45,6 +45,8 @@ export class MockServerAdapter implements MockBackendAdapter {
    * an unset priority comes back as **0**, and of two expectations on one path the **higher**
    * priority answers (§17.34).
    */
+  /** MockServer's control API is unauthenticated; a credential here would go nowhere. */
+  readonly authentication = null
   readonly priorityModel: PriorityModel = {
     implicit: 0,
     direction: 'higher-wins',

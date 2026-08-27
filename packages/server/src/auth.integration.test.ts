@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Database as Db } from 'better-sqlite3'
 import { openDatabase } from './db/database.js'
 import { createProfile } from './profiles.js'
-import { ConnectionRegistry, missingAuthVariables } from './runtime.js'
+import { ConnectionRegistry, incompleteAuth } from './runtime.js'
 import { createApp } from './app.js'
 
 /**
@@ -54,7 +54,11 @@ afterAll(async () => {
   rmSync(directory, { recursive: true, force: true })
 })
 
-const profileWith = (authKind: string, authRef: string | null, name: string): string =>
+const profileWith = (
+  authKind: string,
+  credential: { username?: string; secret?: string },
+  name: string,
+): string =>
   createProfile(db, {
     name,
     adapter: 'wiremock',
@@ -65,14 +69,15 @@ const profileWith = (authKind: string, authRef: string | null, name: string): st
     readOnly: false,
     mappingsDir: null,
     authKind: authKind as 'basic',
-    authRef,
+    authUsername: credential.username ?? null,
+    authSecret: credential.secret ?? null,
     correlationHeader: null,
     redactHeaders: [],
   }).id
 
 describe('connecting to a server that requires credentials', () => {
   it('is refused, and says a credential is what is missing', async () => {
-    const id = profileWith('none', null, 'no auth')
+    const id = profileWith('none', {}, 'no auth')
     const response = await app.request(`/api/profiles/${id}/connect`, { method: 'POST' })
     const body = (await response.json()) as { message: string; upstream: { status: number } }
 
@@ -83,89 +88,53 @@ describe('connecting to a server that requires credentials', () => {
     expect(body.message).toMatch(/requires credentials/)
   })
 
-  it('succeeds with basic auth resolved from environment variables', async () => {
-    const id = profileWith('basic', 'MK_TEST_USER:MK_TEST_PASS', 'basic')
-    process.env['MK_TEST_USER'] = USER
-    process.env['MK_TEST_PASS'] = PASS
-    try {
-      const response = await app.request(`/api/profiles/${id}/connect`, { method: 'POST' })
-      const body = (await response.json()) as { connected: boolean; version: string | null }
-      expect(response.status).toBe(200)
-      expect(body.connected).toBe(true)
-      expect(body.version).not.toBeNull()
+  it('succeeds with a username and password entered directly', async () => {
+    const id = profileWith('basic', { username: USER, secret: PASS }, 'basic')
+    const response = await app.request(`/api/profiles/${id}/connect`, { method: 'POST' })
+    const body = (await response.json()) as { connected: boolean; version: string | null }
+    expect(response.status).toBe(200)
+    expect(body.connected).toBe(true)
+    expect(body.version).not.toBeNull()
 
-      // And the corpus is actually readable, not just the version probe.
-      const refresh = await app.request(`/api/${id}/refresh`, { method: 'POST' })
-      expect(refresh.status).toBe(200)
-    } finally {
-      delete process.env['MK_TEST_USER']
-      delete process.env['MK_TEST_PASS']
-    }
+    // And the corpus is actually readable, not just the version probe.
+    expect((await app.request(`/api/${id}/refresh`, { method: 'POST' })).status).toBe(200)
   })
 
-  it('names the variable that is not set, rather than sending an empty credential', async () => {
-    const id = profileWith('basic', 'MK_TEST_USER:MK_ABSENT', 'unset')
-    process.env['MK_TEST_USER'] = USER
-    try {
-      const response = await app.request(`/api/profiles/${id}/connect`, { method: 'POST' })
-      const body = (await response.json()) as { error: string; message: string }
+  it('says which half of the credential is missing, before sending anything', async () => {
+    const id = profileWith('basic', { username: USER }, 'no password')
+    const response = await app.request(`/api/profiles/${id}/connect`, { method: 'POST' })
+    const body = (await response.json()) as { error: string; message: string }
 
-      // 400, not 502: nothing was sent and no server refused us, so blaming the mock server —
-      // which `internal_error` and a 500 both did — points at the wrong thing entirely.
-      expect(response.status).toBe(400)
-      expect(body.error).toBe('profile_misconfigured')
-      // This process is the only thing that can know the variable is unset. "MK_ABSENT is not
-      // set" is a fix; "requires credentials" restates what the user just tried to configure.
-      expect(body.message).toContain('MK_ABSENT')
-      expect(body.message).toMatch(/not set in this process/)
-    } finally {
-      delete process.env['MK_TEST_USER']
-    }
+    // 400, not 502: nothing was sent and no server refused us, so blaming the mock server — as
+    // `internal_error` and a 500 both did — points at the wrong thing entirely.
+    expect(response.status).toBe(400)
+    expect(body.error).toBe('profile_misconfigured')
+    expect(body.message).toMatch(/no a password/)
   })
 
-  it('never returns the secret to the browser, only the variable name', async () => {
-    const id = profileWith('basic', 'MK_TEST_USER:MK_TEST_PASS', 'secrecy')
-    process.env['MK_TEST_USER'] = USER
-    process.env['MK_TEST_PASS'] = PASS
-    try {
-      await app.request(`/api/profiles/${id}/connect`, { method: 'POST' })
-      const listed = await (await app.request('/api/profiles')).text()
-      // PRD §12: the resolved value lives in this process for the life of a request and nowhere
-      // else — not the database, not a log line, not anything sent to the browser.
-      expect(listed).not.toContain(PASS)
-      expect(listed).toContain('MK_TEST_PASS')
-    } finally {
-      delete process.env['MK_TEST_USER']
-      delete process.env['MK_TEST_PASS']
-    }
+  it('never sends the stored password to the browser', async () => {
+    const id = profileWith('basic', { username: USER, secret: PASS }, 'secrecy')
+    await app.request(`/api/profiles/${id}/connect`, { method: 'POST' })
+
+    const listed = await (await app.request('/api/profiles')).text()
+    // The credential is stored now rather than referenced, which makes this the load-bearing
+    // assertion: it must not cross the socket, or every browser tab and every screenshot has it.
+    expect(listed).not.toContain(PASS)
+    // The username is not secret and does come back, so an edit does not silently blank it, and
+    // the form learns that a password exists without being given it.
+    expect(listed).toContain(USER)
+    expect(listed).toContain('"authSecretSet":true')
   })
 })
 
-describe('missingAuthVariables', () => {
-  it('names each referenced variable that this process does not have', () => {
-    expect(
-      missingAuthVariables(
-        { authKind: 'basic', authRef: 'PRESENT_USER:ABSENT_PASS' },
-        { PRESENT_USER: 'someone' },
-      ),
-    ).toEqual(['ABSENT_PASS'])
+describe('incompleteAuth', () => {
+  it('names the half that is missing', () => {
+    expect(incompleteAuth({ authKind: 'basic', authUsername: 'ci', authSecret: null })).toBe(
+      'a password',
+    )
   })
 
-  it('reads the variable out of a header pair, not the header name', () => {
-    // `Authorization=WM_TOKEN` refers to WM_TOKEN. Reporting "Authorization is not set" would
-    // send someone looking for an environment variable named after a header.
-    expect(
-      missingAuthVariables({ authKind: 'headers', authRef: 'Authorization=WM_TOKEN' }, {}),
-    ).toEqual(['WM_TOKEN'])
-  })
-
-  it('treats an empty value as missing, because an empty credential is not one', () => {
-    expect(missingAuthVariables({ authKind: 'bearer', authRef: 'TOKEN' }, { TOKEN: '' })).toEqual([
-      'TOKEN',
-    ])
-  })
-
-  it('has nothing to report when auth is off', () => {
-    expect(missingAuthVariables({ authKind: 'none', authRef: null }, {})).toEqual([])
+  it('has nothing to say once both halves are there', () => {
+    expect(incompleteAuth({ authKind: 'basic', authUsername: 'ci', authSecret: 'p' })).toBeNull()
   })
 })

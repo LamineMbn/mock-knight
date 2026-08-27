@@ -33,6 +33,8 @@ export interface AdapterDescriptor {
   readonly corpusDocument: { readonly label: string; readonly hint: string } | null
   /** How it ranks contenders, which differs between backends in both default and direction. */
   readonly priorityModel: PriorityModel
+  /** The credentials its control plane accepts, or null when it takes none. */
+  readonly authentication: { readonly kinds: readonly string[]; readonly note: string } | null
 }
 
 /**
@@ -50,6 +52,7 @@ export const ADAPTERS: readonly AdapterDescriptor[] = Object.values(FACTORIES).m
     defaultAdminPath: instance.defaultAdminPath,
     corpusDocument: instance.corpusDocument,
     priorityModel: instance.priorityModel,
+    authentication: instance.authentication,
   }
 })
 

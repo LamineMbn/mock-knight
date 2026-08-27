@@ -131,6 +131,15 @@ export interface MockBackendAdapter {
   readonly corpusDocument: { readonly label: string; readonly hint: string } | null
 
   /**
+   * The authentication this backend's control plane accepts, or `null` when it takes none.
+   *
+   * Declared rather than assumed, like `corpusDocument` and `priorityModel`: the Servers form
+   * asks for credentials only where they can be used, so a backend that ignores them never grows
+   * a field that does nothing.
+   */
+  readonly authentication: { readonly kinds: readonly AuthKind[]; readonly note: string } | null
+
+  /**
    * How this backend ranks stubs that contend for the same request.
    *
    * On the contract because backends disagree on both the default and the *direction*, and the

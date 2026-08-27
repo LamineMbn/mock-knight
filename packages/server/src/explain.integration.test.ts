@@ -166,7 +166,8 @@ describe('the BFF routes behind the screen', () => {
       readOnly: false,
       mappingsDir: null,
       authKind: 'none',
-      authRef: null,
+      authUsername: null,
+      authSecret: null,
       correlationHeader: null,
       redactHeaders: [],
     })
@@ -256,7 +257,8 @@ describe('scenarios', () => {
       readOnly: false,
       mappingsDir: null,
       authKind: 'none',
-      authRef: null,
+      authUsername: null,
+      authSecret: null,
       correlationHeader: null,
       redactHeaders: [],
     })

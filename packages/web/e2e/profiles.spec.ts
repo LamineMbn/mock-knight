@@ -343,37 +343,24 @@ test('a backend that reads a file asks for it, and will not save without it', as
   await expect(page.getByLabel('Environment file')).toHaveCount(0)
 })
 
-test('authentication asks for a variable name, and says so when given a secret', async ({
-  page,
-}) => {
+test('credentials are asked for only where the backend takes them', async ({ page }) => {
   /*
-   * The form had no auth fields at all until now: `authKind` and `authRef` existed on the
-   * profile, were honoured by the transport, and could only be set through the API or a config
-   * file. The connect error for a 401 even told people to set authentication "on the Servers
-   * screen", where there was nothing to set.
+   * Two things this pins. Authentication is declared by the backend — only WireMock secures its
+   * control plane among the four here — so a field that could do nothing is never drawn. And the
+   * password is entered directly: it used to be the *name* of an environment variable, which
+   * meant a credential could only be added by restarting the process with the variable exported,
+   * which a UI cannot do at all.
    */
   await page.goto('/?screen=profiles')
   await expect(page.getByLabel('Authentication')).toBeVisible()
 
-  // Off by default, so the variable field is absent rather than an empty box to wonder about.
-  await expect(page.getByLabel('Variable holding the token')).toHaveCount(0)
-
-  await page.getByLabel('Authentication').selectOption('bearer')
-  await expect(page.getByLabel('Variable holding the token')).toBeVisible()
-
-  // A pasted credential would be stored in the state database and shown in the servers list,
-  // so the form says so rather than accepting it silently.
-  await page.getByLabel('Variable holding the token').fill('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9')
-  await expect(
-    page.getByRole('status').filter({ hasText: /environment variable name/ }),
-  ).toBeVisible()
-
-  await page.getByLabel('Variable holding the token').fill('WIREMOCK_TOKEN')
-  await expect(
-    page.getByRole('status').filter({ hasText: /environment variable name/ }),
-  ).toHaveCount(0)
-
-  // And the shape changes with the method: basic auth needs two variables, not one.
   await page.getByLabel('Authentication').selectOption('basic')
-  await expect(page.getByLabel('Two variables, user:password')).toBeVisible()
+  await expect(page.getByLabel('Username')).toBeVisible()
+  // Masked, and never prefilled: the browser is not given the stored value to prefill it with.
+  await expect(page.getByLabel('Password')).toHaveAttribute('type', 'password')
+  await expect(page.getByLabel('Password')).toHaveValue('')
+
+  // A backend whose control plane takes no credential offers no field rather than a dead one.
+  await page.locator('select').first().selectOption('mockserver')
+  await expect(page.getByLabel('Authentication')).toHaveCount(0)
 })

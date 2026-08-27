@@ -85,11 +85,15 @@ export interface Profile {
   /** The corpus document, for a document-backed backend. Null for the API-driven ones. */
   mappingsDir: string | null
   authKind: string
+  /** Not secret, so it round-trips; the password never does. */
+  authUsername: string | null
   /**
-   * The *name* of the environment variable(s) holding the credential — never the credential.
-   * The resolved value exists only in the server process, for the life of a request.
+   * Whether a credential is stored — never the credential itself.
+   *
+   * The server strips it on the way out, so the form can say "leave blank to keep it" without
+   * the password ever crossing the socket.
    */
-  authRef: string | null
+  authSecretSet: boolean
   capabilities: string[] | null
   createdAt: string
 }
@@ -106,6 +110,8 @@ export interface AdapterDescriptor {
    * which case a profile without one cannot work and the form asks for it.
    */
   corpusDocument: { label: string; hint: string } | null
+  /** The credentials this backend's control plane accepts, or null when it takes none. */
+  authentication: { kinds: string[]; note: string } | null
   /**
    * How this backend ranks contenders — both the default and which end wins, which differ
    * between backends. The Priority column names the wrong winner if it assumes one rule.
@@ -135,8 +141,9 @@ export interface NewProfile {
   /** The corpus document, for a backend that reads one. Null for the API-driven backends. */
   mappingsDir: string | null
   authKind: string
-  /** An environment variable name, never a secret. */
-  authRef: string | null
+  authUsername: string | null
+  /** Sent when set or changed; `null` on an edit means "keep what is stored". */
+  authSecret: string | null
 }
 
 /**

@@ -63,7 +63,8 @@ beforeAll(async () => {
     readOnly: false,
     mappingsDir: null,
     authKind: 'none',
-    authRef: null,
+    authUsername: null,
+    authSecret: null,
     correlationHeader: null,
     redactHeaders: [],
   }).id

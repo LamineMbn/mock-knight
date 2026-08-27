@@ -42,6 +42,8 @@ export class PrismAdapter implements MockBackendAdapter {
    * OpenAPI has no priority field. Prism serves the lowest 2xx, which is read as a rank only
    * where an operation declares more than one response.
    */
+  /** Prism has no control plane at all, so there is nothing to authenticate against. */
+  readonly authentication = null
   readonly priorityModel: PriorityModel = {
     implicit: null,
     direction: 'lower-wins',

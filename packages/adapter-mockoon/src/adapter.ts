@@ -55,6 +55,15 @@ export class MockoonAdapter implements MockBackendAdapter {
    * order is read as a rank where there is a contest, and left alone where there is not — hence
    * no implicit value to fill in.
    */
+  /**
+   * Not offered, on purpose.
+   *
+   * Mockoon's admin API *is* token-protected, and that token is what the traffic log needs — so
+   * without it `journal.read` probes false and the Traffic screen is absent for a Mockoon
+   * profile. The corpus, which comes from the document, is unaffected. This is a scoping
+   * decision rather than a gap: the field comes back the day the traffic log is worth it.
+   */
+  readonly authentication = null
   readonly priorityModel: PriorityModel = {
     implicit: null,
     direction: 'lower-wins',

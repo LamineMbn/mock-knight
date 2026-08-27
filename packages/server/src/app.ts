@@ -33,6 +33,7 @@ import {
   listProfiles,
   profileInputSchema,
   updateProfile,
+  redactProfile,
 } from './profiles.js'
 import { ProfileConfigurationError } from './runtime.js'
 import type { Connection, ConnectionRegistry, RuntimeMode } from './runtime.js'
@@ -437,7 +438,7 @@ export function createApp(options: AppOptions) {
       }),
     )
 
-    .get('/api/profiles', (c) => c.json({ profiles: listProfiles(db) }))
+    .get('/api/profiles', (c) => c.json({ profiles: listProfiles(db).map(redactProfile) }))
 
     .post('/api/profiles', async (c) => {
       const parsed = profileInputSchema.safeParse(await c.req.json())
@@ -463,7 +464,7 @@ export function createApp(options: AppOptions) {
           409,
         )
       }
-      return c.json({ profile: createProfile(db, parsed.data) }, 201)
+      return c.json({ profile: redactProfile(createProfile(db, parsed.data)) }, 201)
     })
 
     .patch('/api/profiles/:id', async (c) => {
@@ -485,7 +486,28 @@ export function createApp(options: AppOptions) {
         )
       }
 
-      const updated = updateProfile(db, id, parsed.data)
+      /*
+       * A password the browser never received cannot be sent back, so an absent one means
+       * "unchanged", not "clear it".
+       *
+       * Without this, renaming a server would silently wipe its credential: the form has no
+       * value to resend because `redactProfile` withheld it, so a straight PATCH would write
+       * null over the stored secret and the next connect would fail with no obvious cause.
+       * Clearing is still possible — switch the method to none, which drops both fields.
+       */
+      const existing = getProfile(db, id)
+      const input =
+        parsed.data.authKind === 'none'
+          ? { ...parsed.data, authUsername: null, authSecret: null }
+          : {
+              ...parsed.data,
+              authSecret:
+                (parsed.data.authSecret ?? '') === ''
+                  ? (existing?.authSecret ?? null)
+                  : parsed.data.authSecret,
+            }
+
+      const updated = updateProfile(db, id, input)
       if (updated === null) return c.json({ error: 'not_found' }, 404)
 
       // Re-point the live connection too: leaving the old adapter in place would answer for a
@@ -494,7 +516,10 @@ export function createApp(options: AppOptions) {
         await registry.disconnect(id)
         await registry.connect(updated.profile).catch(() => undefined)
       }
-      return c.json({ profile: updated.profile, mirrorCleared: updated.targetChanged })
+      return c.json({
+        profile: redactProfile(updated.profile),
+        mirrorCleared: updated.targetChanged,
+      })
     })
 
     .delete('/api/profiles/:id', (c) =>

@@ -30,8 +30,18 @@ export const profileInputSchema = z.object({
   readOnly: z.boolean().default(false),
   mappingsDir: z.string().nullable().default(null),
   authKind: authKindSchema.default('none'),
-  /** Env-var NAME(s), never a value. */
-  authRef: z.string().nullable().default(null),
+  /**
+   * The credential itself, entered once and stored in the state database.
+   *
+   * This replaced an environment-variable *name*, which could only be set by restarting the
+   * process with the variable exported — impossible to offer from a UI. Stored in plain text,
+   * which is what the field says where it is offered; see migration 6.
+   *
+   * `authSecret` never leaves the server: the profile API strips it on the way out, so editing a
+   * profile does not round-trip the password through the browser.
+   */
+  authUsername: z.string().nullable().default(null),
+  authSecret: z.string().nullable().default(null),
   correlationHeader: z.string().nullable().default(null),
   redactHeaders: z.array(z.string()).default([]),
 })
@@ -56,7 +66,8 @@ interface ProfileRow {
   read_only: number
   mappings_dir: string | null
   auth_kind: string | null
-  auth_ref: string | null
+  auth_username: string | null
+  auth_secret: string | null
   correlation_header: string | null
   redact_headers: string | null
   capabilities: string | null
@@ -77,7 +88,8 @@ function toProfile(row: ProfileRow): Profile {
     readOnly: row.read_only === 1,
     mappingsDir: row.mappings_dir,
     authKind: (row.auth_kind ?? 'none') as Profile['authKind'],
-    authRef: row.auth_ref,
+    authUsername: row.auth_username,
+    authSecret: row.auth_secret,
     correlationHeader: row.correlation_header,
     redactHeaders: row.redact_headers === null ? [] : (JSON.parse(row.redact_headers) as string[]),
     capabilities: row.capabilities === null ? null : (JSON.parse(row.capabilities) as string[]),
@@ -126,6 +138,22 @@ export function findProfileByAdminUrl(
   )
 }
 
+/**
+ * A profile as the browser may see it: everything except the credential.
+ *
+ * The one place that decides this, so a new route cannot forget. `authSecret` is replaced by a
+ * boolean — the form needs to know a password is *set* in order to show "leave blank to keep it",
+ * and that is the only fact about it the browser is entitled to.
+ *
+ * The username is not secret and is returned, so an edit does not silently blank it.
+ */
+export type PublicProfile = Omit<Profile, 'authSecret'> & { authSecretSet: boolean }
+
+export function redactProfile(profile: Profile): PublicProfile {
+  const { authSecret, ...rest } = profile
+  return { ...rest, authSecretSet: (authSecret ?? '') !== '' }
+}
+
 export function listProfiles(db: Db): Profile[] {
   const rows = db.prepare(`SELECT * FROM profile ORDER BY created_at, name`).all() as ProfileRow[]
   return rows.map(toProfile)
@@ -145,11 +173,11 @@ export function createProfile(
   const createdAt = (options.now ?? new Date()).toISOString()
   db.prepare(
     `INSERT INTO profile (id, name, adapter, base_url, admin_path, colour, protected, read_only,
-                          mappings_dir, auth_kind, auth_ref, correlation_header, redact_headers,
-                          origin, created_at)
+                          mappings_dir, auth_kind, auth_username, auth_secret,
+                          correlation_header, redact_headers, origin, created_at)
      VALUES (@id, @name, @adapter, @base_url, @admin_path, @colour, @protected, @read_only,
-             @mappings_dir, @auth_kind, @auth_ref, @correlation_header, @redact_headers,
-             @origin, @created_at)`,
+             @mappings_dir, @auth_kind, @auth_username, @auth_secret,
+             @correlation_header, @redact_headers, @origin, @created_at)`,
   ).run({
     id,
     name: input.name,
@@ -161,7 +189,8 @@ export function createProfile(
     read_only: input.readOnly ? 1 : 0,
     mappings_dir: input.mappingsDir,
     auth_kind: input.authKind,
-    auth_ref: input.authRef,
+    auth_username: input.authUsername,
+    auth_secret: input.authSecret,
     correlation_header: input.correlationHeader,
     redact_headers: JSON.stringify(input.redactHeaders),
     origin: options.origin ?? 'runtime',
@@ -199,7 +228,8 @@ export function updateProfile(
     `UPDATE profile SET name = @name, base_url = @base_url, admin_path = @admin_path,
        colour = @colour, protected = @protected, read_only = @read_only,
        mappings_dir = @mappings_dir,
-       auth_kind = @auth_kind, auth_ref = @auth_ref, correlation_header = @correlation_header,
+       auth_kind = @auth_kind, auth_username = @auth_username, auth_secret = @auth_secret,
+       correlation_header = @correlation_header,
        redact_headers = @redact_headers
      WHERE id = @id`,
   ).run({
@@ -212,7 +242,8 @@ export function updateProfile(
     read_only: input.readOnly ? 1 : 0,
     mappings_dir: input.mappingsDir,
     auth_kind: input.authKind,
-    auth_ref: input.authRef,
+    auth_username: input.authUsername,
+    auth_secret: input.authSecret,
     correlation_header: input.correlationHeader,
     redact_headers: JSON.stringify(input.redactHeaders),
   })

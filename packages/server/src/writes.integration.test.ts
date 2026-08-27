@@ -70,7 +70,8 @@ beforeEach(async () => {
     readOnly: false,
     mappingsDir: null,
     authKind: 'none',
-    authRef: null,
+    authUsername: null,
+    authSecret: null,
     correlationHeader: null,
     redactHeaders: [],
   }).id
@@ -260,7 +261,8 @@ describe('profiles that must not be written to', () => {
       readOnly: true,
       mappingsDir: null,
       authKind: 'none',
-      authRef: null,
+      authUsername: null,
+      authSecret: null,
       correlationHeader: null,
       redactHeaders: [],
     })

@@ -18,7 +18,6 @@ import { createAdapter } from './adapters.js'
 import type { Database as Db } from 'better-sqlite3'
 import { recordConnection } from './profiles.js'
 import type { Profile } from './profiles.js'
-import { setKey } from '@mock-knight/core'
 
 /**
  * Live connections, one per profile.
@@ -75,47 +74,50 @@ export function environmentCapabilities(mode: RuntimeMode): readonly CapabilityB
  * function's return value.
  */
 /**
- * The environment variables a profile's auth refers to that are not set in this process.
+ * A profile whose credential is incomplete for the scheme it selected.
  *
- * A referenced-but-missing variable is a *local* misconfiguration, and it is worth saying so
- * precisely. Without this the credential is built from empty strings, sent, and refused, and the
- * user is told "this server requires credentials" — which they knew, having just configured
- * some. Naming the variable turns a round trip into a fix.
+ * Checked before connecting rather than after: basic auth with no password is a request that
+ * will be refused, and "you did not finish filling this in" is a better sentence than whatever
+ * the server says about the resulting 401.
  */
-export function missingAuthVariables(
-  profile: Pick<Profile, 'authKind' | 'authRef'>,
-  env: NodeJS.ProcessEnv = process.env,
-): string[] {
-  if (profile.authKind === 'none' || profile.authRef === null) return []
-  const named =
-    profile.authKind === 'headers'
-      ? profile.authRef.split(',').map((pair) => pair.split('=')[1] ?? '')
-      : profile.authRef.split(':')
-  return named.map((name) => name.trim()).filter((name) => name !== '' && (env[name] ?? '') === '')
+export function incompleteAuth(
+  profile: Pick<Profile, 'authKind' | 'authUsername' | 'authSecret'>,
+): string | null {
+  if (profile.authKind === 'none') return null
+  if (profile.authKind === 'basic') {
+    if ((profile.authUsername ?? '') === '') return 'a username'
+    if ((profile.authSecret ?? '') === '') return 'a password'
+    return null
+  }
+  return (profile.authSecret ?? '') === '' ? 'a token' : null
 }
 
-export function resolveAuth(profile: Profile, env: NodeJS.ProcessEnv = process.env): ResolvedAuth {
-  if (profile.authKind === 'none' || profile.authRef === null) return { kind: 'none' }
+/**
+ * Auth as the adapter needs it: resolved values, server-side only.
+ *
+ * These come from the state database now rather than from environment variables. The value
+ * exists in this process for the life of a request and reaches nothing else — not the audit
+ * table, not a log line, not a URL, and not anything sent to the browser, which is enforced by
+ * the profile API stripping it on the way out (PRD §12, TECH-DESIGN §13).
+ */
+export function resolveAuth(profile: Profile): ResolvedAuth {
+  if (profile.authKind === 'none') return { kind: 'none' }
   switch (profile.authKind) {
     case 'bearer':
-      return { kind: 'bearer', token: env[profile.authRef] ?? '' }
-    case 'basic': {
-      const [userVar, passVar] = profile.authRef.split(':')
+      return { kind: 'bearer', token: profile.authSecret ?? '' }
+    case 'basic':
       return {
         kind: 'basic',
-        username: env[userVar ?? ''] ?? '',
-        password: env[passVar ?? ''] ?? '',
+        username: profile.authUsername ?? '',
+        password: profile.authSecret ?? '',
       }
-    }
-    case 'headers': {
-      const headers: Record<string, string> = {}
-      for (const pair of profile.authRef.split(',')) {
-        const [header, variable] = pair.split('=')
-        if (header !== undefined && variable !== undefined)
-          setKey(headers, header, env[variable] ?? '')
+    case 'headers':
+      // One header, named by the username field. Kept because the contract has it; nothing in
+      // the UI offers it, since no backend here needs it.
+      return {
+        kind: 'headers',
+        headers: { [profile.authUsername ?? '']: profile.authSecret ?? '' },
       }
-      return { kind: 'headers', headers }
-    }
     default:
       return { kind: 'none' }
   }
@@ -139,14 +141,6 @@ export interface ConnectionFailure {
   readonly nextAttemptAt: number
 }
 
-/**
- * A profile that cannot be used as configured — distinct from the server refusing us.
- *
- * Separate from `AdapterHttpError` because the fix is in a different place: nothing was sent, no
- * server said no, and the person reading it needs to change their own setup rather than
- * investigate the mock server. A plain `Error` here surfaced as `internal_error` with a 500,
- * which blames the wrong party.
- */
 export class ProfileConfigurationError extends Error {
   override readonly name = 'ProfileConfigurationError'
 }
@@ -177,12 +171,11 @@ export class ConnectionRegistry {
      * sentence names the variable that is not set, and this process is the only thing that can
      * know that.
      */
-    const missing = missingAuthVariables(profile)
-    if (missing.length > 0) {
+    const missing = incompleteAuth(profile)
+    if (missing !== null) {
       throw new ProfileConfigurationError(
-        `${missing.join(' and ')} ${missing.length === 1 ? 'is' : 'are'} not set in this ` +
-          `process, so ${profile.name} has no credential to send. Mock Knight stores the name ` +
-          `of an environment variable, never the secret — set it where you start Mock Knight.`,
+        `${profile.name} is set to use ${profile.authKind} authentication but has no ${missing}. ` +
+          `Add it on the Servers screen, or set authentication to none.`,
       )
     }
 

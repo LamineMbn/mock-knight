@@ -39,77 +39,17 @@ export interface ServerFormProps {
 }
 
 /**
- * The authentication methods, and how to ask for each one's variable names.
+ * The credential fields, shown only where the chosen backend accepts one.
  *
- * Every one of them takes the **name of an environment variable**, never a secret: the value is
- * read from the environment in the server process when a connection is made, and never stored,
- * logged, or sent to the browser (PRD §12). The labels say so because a field asking for
- * "credentials" invites someone to paste a token straight into the state database.
- */
-const AUTH_CHOICES = [
-  { kind: 'none', label: 'None' },
-  {
-    kind: 'bearer',
-    label: 'Bearer token',
-    field: 'Variable holding the token',
-    placeholder: 'WIREMOCK_TOKEN',
-    hint: 'The name of an environment variable. Mock Knight sends its value as a Bearer token.',
-  },
-  {
-    kind: 'basic',
-    label: 'Basic auth',
-    field: 'Two variables, user:password',
-    placeholder: 'WIREMOCK_USER:WIREMOCK_PASS',
-    hint: 'Two environment variable names separated by a colon — not the username and password themselves.',
-  },
-  {
-    kind: 'headers',
-    label: 'Custom headers',
-    field: 'Header=VARIABLE pairs',
-    placeholder: 'Authorization=WM_TOKEN,X-Api-Key=WM_KEY',
-    hint: 'Comma-separated. Each pair is a header name and the environment variable holding its value.',
-  },
-] as const
-
-/**
- * Whether what was typed looks like a secret rather than a variable name.
+ * Entered directly rather than as the name of an environment variable, which was the previous
+ * design and could not be used from a UI at all: adding a credential meant stopping the process
+ * and restarting it with the variable exported.
  *
- * Deliberately loose, and it only warns. Environment variable names are conventionally
- * `UPPER_SNAKE_CASE`; a JWT, a hex key or anything with the punctuation of a real credential is
- * not one. The cost of a false negative is a secret in the state database, so the check leans
- * towards asking.
+ * The value is stored in the state database in plain text, and the form says so. Encrypting it
+ * with a key kept beside it would stop someone reading over your shoulder and nothing else, so
+ * it is not claimed. A shared `mock-knight.json` can still say `"authSecret": "${env:VAR}"` and
+ * keep the secret out of the file.
  */
-export function looksLikeSecret(kind: string, value: string): boolean {
-  const trimmed = value.trim()
-  if (kind === 'none' || trimmed === '') return false
-  // Split on the separators each kind legitimately uses, and judge the variable names alone.
-  const names = trimmed
-    .split(/[:,]/)
-    .map((part) => (part.includes('=') ? part.slice(part.indexOf('=') + 1) : part))
-  return names.some((name) => {
-    const candidate = name.trim()
-    if (candidate === '') return false
-
-    // Punctuation an identifier cannot contain: `:` and `,` are already split on, so anything
-    // left is a credential's alphabet, not a name's.
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(candidate)) return true
-    // Nothing anyone names a variable is this long.
-    if (candidate.length > 40) return true
-    /*
-     * Mixed case past twenty characters.
-     *
-     * A JWT header segment — `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9` — is *entirely
-     * alphanumeric*, so it passes the identifier test above and slipped through the first
-     * version of this check. Variable names are conventionally one case throughout;
-     * base64 is not.
-     */
-    if (candidate.length > 20 && /[a-z]/.test(candidate) && /[A-Z]/.test(candidate)) return true
-    // A long run with no underscore and digits mixed in: hex keys and API tokens look like this,
-    // and variable names of that length almost always separate words.
-    if (candidate.length > 24 && !candidate.includes('_') && /\d/.test(candidate)) return true
-    return false
-  })
-}
 
 export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: ServerFormProps) {
   const adapters = useQuery({ queryKey: ['adapters'], queryFn: api.adapters })
@@ -133,7 +73,14 @@ export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: S
    */
   const [documentPath, setDocumentPath] = useState(existing?.mappingsDir ?? '')
   const [authKind, setAuthKind] = useState<string>(existing?.authKind ?? 'none')
-  const [authRef, setAuthRef] = useState(existing?.authRef ?? '')
+  const [authUsername, setAuthUsername] = useState(existing?.authUsername ?? '')
+  /**
+   * Always starts empty, even when a password is stored.
+   *
+   * The browser never receives it — `redactProfile` withholds it — so there is nothing to
+   * prefill, and an empty box on an edit means "leave it as it is" rather than "clear it".
+   */
+  const [authSecret, setAuthSecret] = useState('')
   const document = chosen?.corpusDocument ?? null
   const documentMissing = document !== null && documentPath.trim() === ''
 
@@ -144,10 +91,10 @@ export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: S
   // computed separately can drift from where the request actually goes, and it would drift on
   // precisely the input this exists to catch. Empty while the base URL is still half-typed and
   // does not parse.
-  const choice = AUTH_CHOICES.find((entry) => entry.kind === authKind)
-  // `none` carries no variable field, so the input is absent rather than disabled.
-  const auth = choice !== undefined && 'field' in choice ? choice : null
-  const looksLikeASecret = looksLikeSecret(authKind, authRef)
+  // Offered only where the backend accepts one: a field that cannot do anything is worse than
+  // no field, and only WireMock secures its control plane among the backends here.
+  const authentication = chosen?.authentication ?? null
+  const wantsCredential = authentication !== null && authKind !== 'none'
 
   const preview = (() => {
     try {
@@ -178,10 +125,13 @@ export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: S
       colour,
       protected: isProtected,
       readOnly,
-      authKind,
-      // The *name* of an environment variable, never a secret. Empty means no auth configured
-      // even if a kind is selected, which the transport reads as `none`.
-      authRef: authKind === 'none' || authRef.trim() === '' ? null : authRef.trim(),
+      // A backend that takes no credential never stores one, whatever was typed before the
+      // backend was switched.
+      authKind: authentication === null ? 'none' : authKind,
+      authUsername: wantsCredential && authUsername !== '' ? authUsername : null,
+      // Empty on an edit means "unchanged": the server keeps what it holds rather than clearing
+      // it, because the browser was never given the value to send back.
+      authSecret: wantsCredential && authSecret !== '' ? authSecret : null,
       // Only for a backend that reads one, so switching a profile to an API-driven backend
       // clears a path that would otherwise sit in the database meaning nothing.
       mappingsDir: document === null || documentPath.trim() === '' ? null : documentPath.trim(),
@@ -279,77 +229,99 @@ export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: S
         </label>
       )}
 
-      <fieldset
-        style={{
-          display: 'flex',
-          gap: 8,
-          flexWrap: 'wrap',
-          alignItems: 'flex-end',
-          margin: '8px 0 0',
-          padding: 0,
-          border: 0,
-          minWidth: 0,
-        }}
-      >
-        <legend
-          style={{ padding: 0, fontSize: 12, color: 'var(--mk-text-secondary)', marginBottom: 3 }}
-        >
-          Authentication
-        </legend>
-        <label style={{ display: 'grid', gap: 3, flex: '0 1 150px' }}>
-          <span style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>Method</span>
-          <select
-            aria-label="Authentication"
-            value={authKind}
-            onChange={(event) => setAuthKind(event.target.value)}
-            style={field}
-          >
-            {AUTH_CHOICES.map((choice) => (
-              <option key={choice.kind} value={choice.kind}>
-                {choice.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {auth !== null && (
-          <label style={{ display: 'grid', gap: 3, flex: '2 1 260px', minWidth: 0 }}>
-            <span style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>{auth.field}</span>
-            <input
-              aria-label={auth.field}
-              placeholder={auth.placeholder}
-              value={authRef}
-              onChange={(event) => setAuthRef(event.target.value)}
-              style={field}
-            />
-            <span style={{ fontSize: 12, color: 'var(--mk-text-tertiary)', minWidth: 0 }}>
-              {auth.hint}
-            </span>
-          </label>
-        )}
-      </fieldset>
-
       {/*
-        A warning, not a refusal: the rule is a convention, not a law, and someone with a
-        lowercase variable name should not be blocked. But a pasted secret would be stored in the
-        state database and shown in every profile listing, so it is worth saying loudly.
+        Only where the backend accepts a credential. WireMock secures its admin API with basic
+        auth; the others here take none, and a field that cannot do anything is worse than none.
       */}
-      {looksLikeASecret && (
-        <p
-          role="status"
+      {authentication !== null && (
+        <fieldset
           style={{
-            margin: '6px 0 0',
-            padding: '6px 8px',
-            fontSize: 12,
-            color: 'var(--mk-warning-text)',
-            background: 'var(--mk-warning-bg)',
-            border: '1px solid var(--mk-warning-border)',
-            borderRadius: 'var(--mk-radius-sm)',
+            display: 'flex',
+            gap: 8,
+            flexWrap: 'wrap',
+            // `flex-start`, not `flex-end`. With the hint line under one field the boxes are
+            // different heights, and aligning their *bottoms* pushed the labels out of line with
+            // each other. Tops line up because every label here is one row.
+            alignItems: 'flex-start',
+            margin: '8px 0 0',
+            padding: 0,
+            border: 0,
+            minWidth: 0,
           }}
         >
-          That does not look like an environment variable name. This field takes the{' '}
-          <strong>name of a variable</strong> — <code>WIREMOCK_TOKEN</code> — and Mock Knight reads
-          the value from the environment when it connects. A secret typed here would be stored in
-          the state database and shown in the servers list.
+          <legend
+            style={{
+              padding: 0,
+              fontSize: 12,
+              color: 'var(--mk-text-secondary)',
+              marginBottom: 3,
+            }}
+          >
+            Authentication
+          </legend>
+          <label style={{ display: 'grid', gap: 3, flex: '0 1 150px' }}>
+            <span style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>Method</span>
+            <select
+              aria-label="Authentication"
+              value={authKind}
+              onChange={(event) => setAuthKind(event.target.value)}
+              style={field}
+            >
+              <option value="none">None</option>
+              {authentication.kinds.map((kind) => (
+                <option key={kind} value={kind}>
+                  {kind === 'basic' ? 'Basic auth' : kind === 'bearer' ? 'Bearer token' : kind}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {wantsCredential && authKind === 'basic' && (
+            <label style={{ display: 'grid', gap: 3, flex: '1 1 200px', minWidth: 0 }}>
+              <span style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>Username</span>
+              <input
+                aria-label="Username"
+                autoComplete="off"
+                value={authUsername}
+                onChange={(event) => setAuthUsername(event.target.value)}
+                style={field}
+              />
+            </label>
+          )}
+
+          {wantsCredential && (
+            <label style={{ display: 'grid', gap: 3, flex: '1 1 200px', minWidth: 0 }}>
+              <span style={{ fontSize: 12, color: 'var(--mk-text-secondary)' }}>
+                {authKind === 'basic' ? 'Password' : 'Token'}{' '}
+                {existing?.authSecretSet === true && (
+                  <span style={{ color: 'var(--mk-text-tertiary)' }}>(leave blank to keep)</span>
+                )}
+              </span>
+              <input
+                aria-label={authKind === 'basic' ? 'Password' : 'Token'}
+                type="password"
+                autoComplete="new-password"
+                placeholder={existing?.authSecretSet === true ? '••••••••' : ''}
+                value={authSecret}
+                onChange={(event) => setAuthSecret(event.target.value)}
+                style={field}
+              />
+            </label>
+          )}
+        </fieldset>
+      )}
+
+      {wantsCredential && (
+        <p
+          style={{
+            margin: '6px 0 0',
+            fontSize: 12,
+            color: 'var(--mk-text-tertiary)',
+          }}
+        >
+          {authentication?.note} Stored in Mock Knight&rsquo;s state database on this machine, in
+          plain text — the file is not readable by other accounts, but it is not encrypted. A shared{' '}
+          <code>mock-knight.json</code> can use <code>{'${env:VAR}'}</code> instead.
         </p>
       )}
 

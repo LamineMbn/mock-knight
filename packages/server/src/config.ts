@@ -21,14 +21,20 @@ import { profileInputSchema } from './profiles.js'
 const ENV_REFERENCE = /\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}/g
 
 /**
- * Fields that name an environment variable rather than holding a value.
+ * Fields never interpolated — currently none.
  *
- * `authRef` is the whole of the secret-handling design (§13): the file stores the *name* of the
- * variable, the value is resolved per request and never persisted. Interpolating it would turn
- * the config file — a file people commit — into somewhere a token can be written by accident,
- * so it is excluded from interpolation and the exclusion is tested.
+ * `authRef` used to be here, and the reasoning inverted rather than disappeared. It held the
+ * *name* of a variable, so interpolating it would have resolved the very indirection it existed
+ * to provide. Credentials are now entered directly, which is what makes them settable from the
+ * UI at all — and that would put a literal secret in a file people commit, except that
+ * `authSecret` is an ordinary string and therefore *does* interpolate:
+ *
+ *   "authSecret": "${env:WIREMOCK_PASS}"
+ *
+ * So a shared config keeps a reference and an interactive user types a value, which is the right
+ * answer for each.
  */
-const NEVER_INTERPOLATED = new Set(['authRef'])
+const NEVER_INTERPOLATED = new Set<string>()
 
 export class ConfigError extends Error {
   override readonly name = 'ConfigError'

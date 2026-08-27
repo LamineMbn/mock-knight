@@ -221,12 +221,39 @@ ALTER TABLE serve_event ADD COLUMN matched_fingerprint TEXT;
 CREATE INDEX mock_fingerprint ON mock(profile_id, fingerprint);
 `
 
+/**
+ * Credentials entered directly, replacing the environment-variable reference.
+ *
+ * `auth_ref` held the *name* of a variable, which meant a credential could only be added by
+ * stopping the process and restarting it with the variable exported — not something a UI can
+ * offer at all. The value is stored here instead.
+ *
+ * It is stored **in plain text**, in this file. That is what every local HTTP client does with a
+ * saved password, and it is stated wherever the field is offered rather than dressed up:
+ * encrypting it with a key kept beside it would stop a shoulder-surf and nothing more. The file
+ * is created 0600 so it is at least not world-readable.
+ *
+ * Any existing `auth_ref` is dropped rather than migrated: it names a variable, not a secret, so
+ * there is nothing to carry across. Those profiles keep working and need the credential typed in
+ * once.
+ */
+const ADD_DIRECT_CREDENTIALS = `
+ALTER TABLE profile ADD COLUMN auth_username TEXT;
+ALTER TABLE profile ADD COLUMN auth_secret TEXT;
+UPDATE profile SET auth_kind = 'none', auth_ref = NULL WHERE auth_ref IS NOT NULL;
+`
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: 'initial mirror schema', sql: INITIAL },
   { version: 2, name: 'index request header matchers', sql: ADD_HEADER_MATCHERS },
   { version: 3, name: 'index url and method for overlap detection', sql: ADD_PATH_INDEX },
   { version: 4, name: 'record serve timing', sql: ADD_SERVE_TIMING },
   { version: 5, name: 'identify a stub by behaviour as well as by id', sql: ADD_FINGERPRINT },
+  {
+    version: 6,
+    name: 'store credentials directly rather than by variable name',
+    sql: ADD_DIRECT_CREDENTIALS,
+  },
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version

@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs'
+import { chmodSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import Database from 'better-sqlite3'
 import type { Database as Db } from 'better-sqlite3'
@@ -23,6 +23,21 @@ export function openDatabase(path: string, options: OpenDatabaseOptions = {}): D
   if (!inMemory) mkdirSync(dirname(path), { recursive: true })
 
   const db = new Database(path)
+
+  /*
+   * Not world-readable. The state database holds saved credentials in plain text, so the default
+   * 0644 would put them in reach of any other account on the machine. This is the floor, not
+   * protection: anyone who can read the user's own files can still read them, which is exactly
+   * what the UI says where the field is offered.
+   */
+  if (!inMemory) {
+    try {
+      chmodSync(path, 0o600)
+    } catch {
+      // Best effort. A filesystem that does not carry POSIX modes is not a reason to refuse to
+      // start, and the alternative — failing here — would be worse than the exposure.
+    }
+  }
 
   if (options.wal ?? !inMemory) db.pragma('journal_mode = WAL')
   // NORMAL is safe here *because the mirror is disposable*: if the process is killed mid-ingest

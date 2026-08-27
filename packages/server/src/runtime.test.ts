@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   ConnectionRegistry,
   RESTART_TOLERANCE_MS,
+  incompleteAuth,
   environmentCapabilities,
   hasRestarted,
   resolveAuth,
@@ -34,41 +35,45 @@ const profile = (over: Partial<Profile>): Profile =>
   }) as Profile
 
 describe('resolveAuth', () => {
-  it('reads a bearer token from the named environment variable, never from the profile', () => {
-    const auth = resolveAuth(profile({ authKind: 'bearer', authRef: 'TOKEN_VAR' }), {
-      TOKEN_VAR: 'secret-value',
-    })
-    expect(auth).toEqual({ kind: 'bearer', token: 'secret-value' })
-  })
-
-  it('resolves basic credentials from two named variables', () => {
-    expect(
-      resolveAuth(profile({ authKind: 'basic', authRef: 'U:P' }), { U: 'dana', P: 'hunter2' }),
-    ).toEqual({ kind: 'basic', username: 'dana', password: 'hunter2' })
-  })
-
-  it('resolves custom headers from a name=VAR list', () => {
-    expect(
-      resolveAuth(profile({ authKind: 'headers', authRef: 'x-key=KEY,x-org=ORG' }), {
-        KEY: 'k',
-        ORG: 'o',
-      }),
-    ).toEqual({ kind: 'headers', headers: { 'x-key': 'k', 'x-org': 'o' } })
-  })
-
-  it('yields an empty credential rather than throwing when the variable is unset', () => {
-    // A missing variable is a misconfiguration to surface as a 401 from upstream, not a crash
-    // on connect that tells the user nothing about which variable is missing.
-    expect(resolveAuth(profile({ authKind: 'bearer', authRef: 'ABSENT' }), {})).toEqual({
+  it('reads a bearer token from the profile, which is where it now lives', () => {
+    expect(resolveAuth(profile({ authKind: 'bearer', authSecret: 'tok' }))).toEqual({
       kind: 'bearer',
-      token: '',
+      token: 'tok',
     })
   })
 
-  it('is none when the profile names no variable', () => {
-    expect(resolveAuth(profile({ authKind: 'bearer', authRef: null }), {})).toEqual({
+  it('resolves basic credentials from the two stored fields', () => {
+    expect(
+      resolveAuth(profile({ authKind: 'basic', authUsername: 'ci', authSecret: 'hunter2' })),
+    ).toEqual({ kind: 'basic', username: 'ci', password: 'hunter2' })
+  })
+
+  it('is none when the profile selects none, whatever is stored', () => {
+    // Switching the method off must stop sending, even if a value is still on the row.
+    expect(resolveAuth(profile({ authKind: 'none', authSecret: 'left-over' }))).toEqual({
       kind: 'none',
     })
+  })
+})
+
+describe('incompleteAuth', () => {
+  it('names the half that is missing, before anything is sent', () => {
+    // "You have not finished filling this in" beats whatever the server says about the 401 it
+    // would otherwise answer.
+    expect(incompleteAuth({ authKind: 'basic', authUsername: 'ci', authSecret: null })).toBe(
+      'a password',
+    )
+    expect(incompleteAuth({ authKind: 'basic', authUsername: null, authSecret: 'p' })).toBe(
+      'a username',
+    )
+    expect(incompleteAuth({ authKind: 'bearer', authUsername: null, authSecret: '' })).toBe(
+      'a token',
+    )
+  })
+
+  it('has nothing to say when the credential is complete or unused', () => {
+    expect(incompleteAuth({ authKind: 'basic', authUsername: 'ci', authSecret: 'p' })).toBeNull()
+    expect(incompleteAuth({ authKind: 'none', authUsername: null, authSecret: null })).toBeNull()
   })
 })
 

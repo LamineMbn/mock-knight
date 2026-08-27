@@ -54,25 +54,29 @@ describe('loadConfig', () => {
     expect(config.profiles?.[0]?.baseUrl).toBe('http://localhost:19000/ctx')
   })
 
-  it('never interpolates authRef, which names a variable rather than holding one', () => {
-    // The whole secret design depends on this: the file stores the name, the value is resolved
-    // per request and never persisted. Interpolating would let a token into a committed file.
-    process.env['MK_TEST_TOKEN'] = 'super-secret'
+  it('interpolates a credential, so a shared config references it instead of holding it', () => {
+    /*
+     * The inverse of the rule this replaced. `authRef` named a variable and so had to be left
+     * alone; `authSecret` holds a value, which is what makes it settable from the UI — and what
+     * would put a literal token in a committed file, were it not for this.
+     */
+    process.env['MK_TEST_PASS'] = 'hunter2'
     const { config } = loadConfig(
       write({
         profiles: [
           {
             name: 'p',
             adapter: 'wiremock',
-            baseUrl: 'http://localhost:8080',
-            authKind: 'bearer',
-            authRef: 'MK_TEST_TOKEN',
+            baseUrl: 'http://x',
+            authKind: 'basic',
+            authUsername: 'ci',
+            authSecret: '${env:MK_TEST_PASS}',
           },
         ],
       }),
     )
-    expect(config.profiles?.[0]?.authRef).toBe('MK_TEST_TOKEN')
-    expect(JSON.stringify(config)).not.toContain('super-secret')
+    expect(config.profiles?.[0]?.authSecret).toBe('hunter2')
+    delete process.env['MK_TEST_PASS']
   })
 
   it('refuses rather than substituting an empty string for an unset variable', () => {

@@ -110,6 +110,14 @@ export class WireMockAdapter implements MockBackendAdapter {
   /** Its corpus is reachable over the admin API, so there is no file to point at. */
   readonly corpusDocument = null
   /** Documented and long-standing: an unset priority is 5, and lower wins. */
+  /**
+   * WireMock secures its admin API with HTTP basic auth (`--admin-api-basic-auth user:pass`),
+   * which is the only scheme it offers.
+   */
+  readonly authentication = {
+    kinds: ['basic'] as const,
+    note: 'WireMock secures its admin API with HTTP basic authentication.',
+  }
   readonly priorityModel: PriorityModel = {
     implicit: 5,
     direction: 'lower-wins',

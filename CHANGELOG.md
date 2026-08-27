@@ -15,20 +15,20 @@
 
 ### Added
 
-- **Authentication is configurable from the Servers screen.** Bearer token, basic auth, or custom
-  headers. Each takes the *name of an environment variable*, never the secret — the value is read
-  in the Mock Knight process when it connects and reaches nothing else: not the state database,
-  not a log line, not the browser. Paste a credential in and the form says so.
+- **Authentication is configurable from the Servers screen**, for the backends that accept it —
+  which among those supported is WireMock, whose admin API takes HTTP basic auth. Type a username
+  and password; no restart, no environment variable.
 
-  This existed and worked; it simply had no fields in the UI, so it could only be set through the
-  API or a config file. The 401 error even pointed at a Servers screen with nothing on it.
+  The password is stored in the state database in plain text and the form says so, with the file
+  created `0600`. It is never sent to the browser, so an edit shows "leave blank to keep" rather
+  than round-tripping it. A shared `mock-knight.json` can still say `"authSecret": "${env:VAR}"`
+  and hold nothing itself.
 
 ### Fixed
 
 - **A 401 now says a credential is what is missing**, rather than "the mock server rejected GET
-  /__admin/version" — true, and no help. And a referenced environment variable that is not set is
-  named before connecting, instead of sending an empty credential and reporting whatever the
-  server says about it.
+  /__admin/version" — true, and no help. And a half-filled credential is named before anything is
+  sent, instead of being refused by the server and reported as the server's problem.
 
 - **"Why didn't this match?" was offered by backends that cannot answer it.** On a Mockoon
   profile — a traffic log with no near-miss support — every unmatched row drew the explainer, and
