@@ -111,7 +111,18 @@
               "headers"
             ]
           },
-          "authRef": {
+          "authUsername": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "authSecret": {
             "default": null,
             "anyOf": [
               {
