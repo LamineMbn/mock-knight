@@ -1,17 +1,6 @@
 # Changelog
 
-## Unreleased
-
-### Added
-
-- **Mockoon stubs can be edited.** The edit rewrites the environment file — deliberately not the
-  admin API, whose write never reaches the file — and rewrites only the part that changed, so a
-  document in version control still produces a diff someone can review. Fields Mock Knight does
-  not model survive untouched. Run Mockoon with `--watch` and it serves the change about a second
-  later.
-
-  Adding and deleting stubs stay off: both rewrite `rootChildren` as well as `routes`, and a
-  route missing from that list is silently never served.
+## 0.7.0
 
 ### Added
 
@@ -31,11 +20,16 @@
   network — where reading the file is not even necessary to use it. `--allow-stored-credentials`
   is there for anyone running it behind their own auth.
 
-### Fixed
+- **Mockoon stubs can be edited.** The edit rewrites the environment file — deliberately not the
+  admin API, whose write never reaches the file — and rewrites only the part that changed, so a
+  document in version control still produces a diff someone can review. Fields Mock Knight does
+  not model survive untouched. Run Mockoon with `--watch` and it serves the change about a second
+  later.
 
-- **A 401 now says a credential is what is missing**, rather than "the mock server rejected GET
-  /__admin/version" — true, and no help. And a half-filled credential is named before anything is
-  sent, instead of being refused by the server and reported as the server's problem.
+  Adding and deleting stubs stay off: both rewrite `rootChildren` as well as `routes`, and a
+  route missing from that list is silently never served.
+
+### Fixed
 
 - **"Why didn't this match?" was offered by backends that cannot answer it.** On a Mockoon
   profile — a traffic log with no near-miss support — every unmatched row drew the explainer, and
@@ -51,6 +45,10 @@
   conformance test meant to catch exactly this was asserting `bits.size >= 0` — true of every
   object that has ever existed. Made real, it also found `mock.read` declared without the method
   behind it on two backends.
+
+- **A 401 now says a credential is what is missing**, rather than "the mock server rejected GET
+  /__admin/version" — true, and no help. And a half-filled credential is named before anything is
+  sent, instead of being refused by the server and reported as the server's problem.
 
 ## 0.6.0
 
