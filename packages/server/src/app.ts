@@ -35,6 +35,7 @@ import {
   updateProfile,
   redactProfile,
 } from './profiles.js'
+import { CredentialStore } from './credentials.js'
 import { ProfileConfigurationError } from './runtime.js'
 import type { Connection, ConnectionRegistry, RuntimeMode } from './runtime.js'
 
@@ -70,6 +71,8 @@ export interface AppOptions {
    * a server other than the one they just typed.
    */
   launchProfileId?: () => string | null
+  /** Shared with the connection registry, so a session credential reaches the adapter. */
+  credentials?: CredentialStore
   /**
    * Whether a logo file has been dropped in for a backend, and where.
    *
@@ -125,6 +128,16 @@ const eventsQuerySchema = z.object({
  * Both then go down the identical hash-checked path, so there is one write story and one
  * conflict story rather than two.
  */
+/**
+ * Saving a profile, plus one instruction that is not part of the profile.
+ *
+ * `rememberSecret` says whether the credential should reach the disk at all. It defaults to
+ * **false**: a password typed here is held for this run and gone when the process exits, which is
+ * the safest place for a secret — somewhere it was never written. Ticking the box is a decision
+ * the user makes, not one this code makes for them.
+ */
+const profileSaveSchema = profileInputSchema.extend({ rememberSecret: z.boolean().default(false) })
+
 const writeBodySchema = z.union([
   z.object({
     raw: z.record(z.string(), z.any()),
@@ -325,6 +338,11 @@ export function describeUpstreamRejection(error: AdapterHttpError): string {
 
 export function createApp(options: AppOptions) {
   const { db, registry, mode } = options
+  /**
+   * Credentials the user chose not to store. Defaults to a fresh store so a caller that does not
+   * care — every test that predates this — behaves as before.
+   */
+  const credentials = options.credentials ?? new CredentialStore()
   // Resolved once: shelling out to git on every write would be absurd, and the answer cannot
   // change while the process runs.
   const actor = options.actor ?? resolveActor(mode)
@@ -438,10 +456,16 @@ export function createApp(options: AppOptions) {
       }),
     )
 
-    .get('/api/profiles', (c) => c.json({ profiles: listProfiles(db).map(redactProfile) }))
+    .get('/api/profiles', (c) =>
+      c.json({
+        profiles: listProfiles(db).map((profile) =>
+          redactProfile(profile, credentials.has(profile.id)),
+        ),
+      }),
+    )
 
     .post('/api/profiles', async (c) => {
-      const parsed = profileInputSchema.safeParse(await c.req.json())
+      const parsed = profileSaveSchema.safeParse(await c.req.json())
       if (!parsed.success) {
         return c.json({ error: 'invalid_profile', issues: parsed.error.issues }, 400)
       }
@@ -464,12 +488,27 @@ export function createApp(options: AppOptions) {
           409,
         )
       }
-      return c.json({ profile: redactProfile(createProfile(db, parsed.data)) }, 201)
+      /*
+       * A credential the user did not ask to keep is held for this run only, never written.
+       * `createProfile` therefore stores null and the value goes to the session store instead —
+       * which is why the redacted profile is asked whether one is held, not just whether one
+       * was saved.
+       */
+      const remember = parsed.data.rememberSecret
+      const secret = parsed.data.authSecret ?? ''
+      const created = createProfile(db, {
+        ...parsed.data,
+        authSecret: remember && secret !== '' ? secret : null,
+      })
+      if (!remember && secret !== '') {
+        credentials.set(created.id, { username: parsed.data.authUsername, secret })
+      }
+      return c.json({ profile: redactProfile(created, credentials.has(created.id)) }, 201)
     })
 
     .patch('/api/profiles/:id', async (c) => {
       const id = c.req.param('id')
-      const parsed = profileInputSchema.safeParse(await c.req.json())
+      const parsed = profileSaveSchema.safeParse(await c.req.json())
       if (!parsed.success) {
         return c.json({ error: 'invalid_profile', issues: parsed.error.issues }, 400)
       }
@@ -496,16 +535,36 @@ export function createApp(options: AppOptions) {
        * Clearing is still possible — switch the method to none, which drops both fields.
        */
       const existing = getProfile(db, id)
-      const input =
-        parsed.data.authKind === 'none'
-          ? { ...parsed.data, authUsername: null, authSecret: null }
-          : {
-              ...parsed.data,
-              authSecret:
-                (parsed.data.authSecret ?? '') === ''
-                  ? (existing?.authSecret ?? null)
-                  : parsed.data.authSecret,
-            }
+      const typed = parsed.data.authSecret ?? ''
+      const remember = parsed.data.rememberSecret
+
+      let input
+      if (parsed.data.authKind === 'none') {
+        // Switching authentication off clears both halves, on disk and in memory. This is the
+        // only way to remove a stored credential, so it has to actually remove it.
+        input = { ...parsed.data, authUsername: null, authSecret: null }
+        credentials.forget(id)
+      } else if (typed !== '') {
+        input = { ...parsed.data, authSecret: remember ? typed : null }
+        if (remember) credentials.forget(id)
+        else credentials.set(id, { username: parsed.data.authUsername, secret: typed })
+      } else {
+        /*
+         * Nothing typed means unchanged — the browser was never given the password, so it has
+         * nothing to resend. Without this, renaming a server would silently wipe its credential.
+         *
+         * Unticking "remember" without retyping is the one case that cannot be honoured: the
+         * value to move into memory is on disk and this process would have to read it out to do
+         * it, so it is read out and moved, which is exactly what the user asked for.
+         */
+        const stored = existing?.authSecret ?? null
+        if (!remember && stored !== null && stored !== '') {
+          credentials.set(id, { username: parsed.data.authUsername, secret: stored })
+          input = { ...parsed.data, authSecret: null }
+        } else {
+          input = { ...parsed.data, authSecret: stored }
+        }
+      }
 
       const updated = updateProfile(db, id, input)
       if (updated === null) return c.json({ error: 'not_found' }, 404)
@@ -517,16 +576,19 @@ export function createApp(options: AppOptions) {
         await registry.connect(updated.profile).catch(() => undefined)
       }
       return c.json({
-        profile: redactProfile(updated.profile),
+        profile: redactProfile(updated.profile, credentials.has(id)),
         mirrorCleared: updated.targetChanged,
       })
     })
 
-    .delete('/api/profiles/:id', (c) =>
-      deleteProfile(db, c.req.param('id'))
-        ? c.json({ deleted: true })
-        : c.json({ error: 'not_found' }, 404),
-    )
+    .delete('/api/profiles/:id', (c) => {
+      const id = c.req.param('id')
+      if (!deleteProfile(db, id)) return c.json({ error: 'not_found' }, 404)
+      // The row is gone; a credential held for it would otherwise outlive the thing it belonged
+      // to and sit in memory for the rest of the run.
+      credentials.forget(id)
+      return c.json({ deleted: true })
+    })
 
     .post('/api/profiles/:id/connect', async (c) => {
       const profile = getProfile(db, c.req.param('id'))

@@ -6,6 +6,7 @@ import { parseArgs } from 'node:util'
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import {
+  CredentialStore,
   ADAPTER_IDS,
   ConfigError,
   ConnectionRegistry,
@@ -48,6 +49,9 @@ mock-knight — a local-first web UI for HTTP mock servers
 Options
   --url <url>       Mock server base URL. Creates a profile on first run.
   --port <n>        Port to listen on (default ${DEFAULT_PORT})
+  --allow-stored-credentials
+                    Permit a non-loopback bind while profiles hold stored credentials.
+                    Refused by default: this tool has no authentication of its own.
   --host <addr>     Bind address (default 127.0.0.1). A non-loopback address
                     turns on deployed mode and prints an exposure warning.
   --mode <m>        local | deployed. Inferred from --host when omitted.
@@ -105,6 +109,7 @@ async function main(): Promise<void> {
         // A separate key, not a negation of `--config`: parseArgs only auto-negates booleans,
         // and `--config` carries a path.
         'no-config': { type: 'boolean', default: false },
+        'allow-stored-credentials': { type: 'boolean', default: false },
         verbose: { type: 'boolean', default: false },
         version: { type: 'boolean', default: false },
         help: { type: 'boolean', default: false },
@@ -191,7 +196,39 @@ async function main(): Promise<void> {
     throw error
   }
 
-  const registry = new ConnectionRegistry(db, mode, file.allowedHosts)
+  /*
+   * Refuse the combination that actually matters, rather than warning about it.
+   *
+   * Mock Knight has no authentication of its own, so anyone who can reach the port can *use*
+   * every configured server. A stored credential turns that into "and here is a working
+   * credential for the mock server your team shares" — reachable by whoever is on the network,
+   * without them ever needing to read the file it is stored in.
+   *
+   * Loopback is a different proposition and is left alone. `--allow-stored-credentials` is for
+   * someone who has put their own authentication in front of this and knows what they are doing;
+   * it exists so the refusal is a considered gate rather than a wall with no door.
+   */
+  if (mode === 'deployed' && flags['allow-stored-credentials'] !== true) {
+    const stored = listProfiles(db).filter((profile) => (profile.authSecret ?? '') !== '')
+    if (stored.length > 0) {
+      console.error(
+        `\n  Refusing to start.\n\n` +
+          `  ${stored.length === 1 ? 'A profile has' : `${stored.length} profiles have`} a stored ` +
+          `credential (${stored.map((p) => p.name).join(', ')}), and binding to ${host} puts an\n` +
+          `  unauthenticated UI holding ${stored.length === 1 ? 'it' : 'them'} on your network. ` +
+          `Anyone who can reach this port could use\n` +
+          `  ${stored.length === 1 ? 'that server' : 'those servers'} without ever reading the file.\n\n` +
+          `  Clear the stored credentials on the Servers screen and re-enter them without\n` +
+          `  "remember", or pass --allow-stored-credentials if this is behind your own auth.\n`,
+      )
+      process.exitCode = 1
+      db.close()
+      return
+    }
+  }
+
+  const credentials = new CredentialStore()
+  const registry = new ConnectionRegistry(db, mode, file.allowedHosts, credentials)
   if (file.allowedHosts !== undefined) {
     console.log(
       file.allowedHosts.length === 0
@@ -225,6 +262,7 @@ async function main(): Promise<void> {
     mode,
     version: VERSION,
     launchProfileId: () => launchProfileId,
+    credentials,
     // Checked once, against the SPA's own asset directory. Dropping a file in needs a restart,
     // which is the same as every other static asset in a built bundle.
     backendLogo: (adapterId) => {

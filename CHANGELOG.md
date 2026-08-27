@@ -19,10 +19,17 @@
   which among those supported is WireMock, whose admin API takes HTTP basic auth. Type a username
   and password; no restart, no environment variable.
 
-  The password is stored in the state database in plain text and the form says so, with the file
-  created `0600`. It is never sent to the browser, so an edit shows "leave blank to keep" rather
-  than round-tripping it. A shared `mock-knight.json` can still say `"authSecret": "${env:VAR}"`
-  and hold nothing itself.
+  **It is not written down unless you ask.** By default the password is held for the life of the
+  process and re-entered after a restart, which keeps it out of backups, synced folders and
+  screen shares. *Remember on this machine* writes it to the state database in plain text, and
+  the form says exactly that. Either way it never reaches the browser, so an edit offers "leave
+  blank to keep" rather than round-tripping it, and a shared `mock-knight.json` can still say
+  `"authSecret": "${env:VAR}"` and hold nothing itself.
+
+- **A non-loopback bind with a stored credential is refused.** Mock Knight has no authentication
+  of its own, so that combination puts a working credential behind an unauthenticated UI on your
+  network — where reading the file is not even necessary to use it. `--allow-stored-credentials`
+  is there for anyone running it behind their own auth.
 
 ### Fixed
 

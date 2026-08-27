@@ -170,11 +170,22 @@ WireMock can put its admin API behind HTTP basic auth. Set a username and passwo
 screen — the field appears only for backends that accept one, which among those supported is
 WireMock alone.
 
-The password is stored in Mock Knight's state database on your machine, **in plain text**. The
-file is created `0600` so other accounts cannot read it, but it is not encrypted: encrypting it
-with a key kept beside it would stop someone reading over your shoulder and nothing more, and
-this is a local developer tool rather than a vault. It is never sent to the browser, never
-written to the audit trail, and never put in a log line or a URL.
+**By default the password is never written down.** It is held in the Mock Knight process for as
+long as it is running and re-entered after a restart, which keeps it out of backups, a synced
+home directory, a support bundle and anything you screen-share. Tick *Remember on this machine*
+and it is written to the state database in plain text — the file is `0600` so other accounts
+cannot read it, but it is not encrypted, and encrypting it with a key kept beside it would stop
+someone reading over your shoulder and nothing more.
+
+Either way it is never sent to the browser, never written to the audit trail, and never put in a
+log line or a URL.
+
+**The bigger exposure is not the file.** Mock Knight has no authentication of its own, so anyone
+who can reach its port can *use* every server you have configured without ever reading a
+credential. On loopback that is anything running as you. Because of that, binding to a
+non-loopback address while any profile holds a stored credential is **refused**, not warned
+about — clear the stored ones and re-enter them without *remember*, or pass
+`--allow-stored-credentials` if you have put your own authentication in front.
 
 For a `mock-knight.json` you share or commit, reference the environment instead so the file
 itself holds nothing:

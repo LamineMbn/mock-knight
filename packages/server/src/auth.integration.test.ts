@@ -109,7 +109,7 @@ describe('connecting to a server that requires credentials', () => {
     // `internal_error` and a 500 both did — points at the wrong thing entirely.
     expect(response.status).toBe(400)
     expect(body.error).toBe('profile_misconfigured')
-    expect(body.message).toMatch(/no a password/)
+    expect(body.message).toMatch(/is missing a password/)
   })
 
   it('never sends the stored password to the browser', async () => {

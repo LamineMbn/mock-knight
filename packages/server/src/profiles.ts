@@ -147,11 +147,17 @@ export function findProfileByAdminUrl(
  *
  * The username is not secret and is returned, so an edit does not silently blank it.
  */
-export type PublicProfile = Omit<Profile, 'authSecret'> & { authSecretSet: boolean }
+export type PublicProfile = Omit<Profile, 'authSecret'> & {
+  /** A credential is available — stored, or typed in during this run. */
+  authSecretSet: boolean
+  /** It is on disk, so it survives a restart. Drives the "remember" box on the form. */
+  authSecretRemembered: boolean
+}
 
-export function redactProfile(profile: Profile): PublicProfile {
+export function redactProfile(profile: Profile, heldForSession = false): PublicProfile {
   const { authSecret, ...rest } = profile
-  return { ...rest, authSecretSet: (authSecret ?? '') !== '' }
+  const stored = (authSecret ?? '') !== ''
+  return { ...rest, authSecretSet: stored || heldForSession, authSecretRemembered: stored }
 }
 
 export function listProfiles(db: Db): Profile[] {

@@ -44,6 +44,7 @@ export function FirstRun({ onAdded }: { onAdded: (id: string) => void }) {
         authKind: 'none',
         authUsername: null,
         authSecret: null,
+        rememberSecret: false,
         protected: false,
         readOnly: false,
       })

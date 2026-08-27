@@ -81,6 +81,14 @@ export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: S
    * prefill, and an empty box on an edit means "leave it as it is" rather than "clear it".
    */
   const [authSecret, setAuthSecret] = useState('')
+  /**
+   * Off unless this profile already has a stored credential.
+   *
+   * The default matters: a password held only for this run cannot be read out of a backup, a
+   * synced home directory, or the state database, so persisting is the user's decision to make
+   * rather than the one they get by not noticing a checkbox.
+   */
+  const [rememberSecret, setRememberSecret] = useState(existing?.authSecretRemembered ?? false)
   const document = chosen?.corpusDocument ?? null
   const documentMissing = document !== null && documentPath.trim() === ''
 
@@ -132,6 +140,7 @@ export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: S
       // Empty on an edit means "unchanged": the server keeps what it holds rather than clearing
       // it, because the browser was never given the value to send back.
       authSecret: wantsCredential && authSecret !== '' ? authSecret : null,
+      rememberSecret: wantsCredential && rememberSecret,
       // Only for a backend that reads one, so switching a profile to an API-driven backend
       // clears a path that would otherwise sit in the database meaning nothing.
       mappingsDir: document === null || documentPath.trim() === '' ? null : documentPath.trim(),
@@ -308,6 +317,27 @@ export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: S
               />
             </label>
           )}
+          {wantsCredential && (
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                // Aligned to the inputs rather than to their labels: this control has no label
+                // row of its own, so without the offset it floats a row too high.
+                marginTop: 20,
+                fontSize: 13,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={rememberSecret}
+                onChange={(event) => setRememberSecret(event.target.checked)}
+              />
+              Remember on this machine
+            </label>
+          )}
         </fieldset>
       )}
 
@@ -319,9 +349,11 @@ export function ServerForm({ existing, pending, failure, onSubmit, onCancel }: S
             color: 'var(--mk-text-tertiary)',
           }}
         >
-          {authentication?.note} Stored in Mock Knight&rsquo;s state database on this machine, in
-          plain text — the file is not readable by other accounts, but it is not encrypted. A shared{' '}
-          <code>mock-knight.json</code> can use <code>{'${env:VAR}'}</code> instead.
+          {authentication?.note}{' '}
+          {rememberSecret
+            ? 'Remembered means written to Mock Knight’s state database on this machine, in plain text — the file is not readable by other accounts, but it is not encrypted.'
+            : 'Kept for this run only and never written to disk; you will re-enter it after a restart.'}{' '}
+          A shared <code>mock-knight.json</code> can use <code>{'${env:VAR}'}</code> instead.
         </p>
       )}
 

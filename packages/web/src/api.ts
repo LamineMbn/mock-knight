@@ -88,12 +88,14 @@ export interface Profile {
   /** Not secret, so it round-trips; the password never does. */
   authUsername: string | null
   /**
-   * Whether a credential is stored — never the credential itself.
+   * Whether a credential is available — never the credential itself.
    *
    * The server strips it on the way out, so the form can say "leave blank to keep it" without
    * the password ever crossing the socket.
    */
   authSecretSet: boolean
+  /** It is on disk rather than held for this run, which is what the "remember" box reflects. */
+  authSecretRemembered: boolean
   capabilities: string[] | null
   createdAt: string
 }
@@ -144,6 +146,11 @@ export interface NewProfile {
   authUsername: string | null
   /** Sent when set or changed; `null` on an edit means "keep what is stored". */
   authSecret: string | null
+  /**
+   * Whether to write the credential to disk. Off by default: a password held only for this run
+   * cannot be read out of a backup, a synced home directory, or the state database.
+   */
+  rememberSecret: boolean
 }
 
 /**

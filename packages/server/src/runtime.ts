@@ -15,6 +15,7 @@ import type {
   ResolvedAuth,
 } from '@mock-knight/core'
 import { createAdapter } from './adapters.js'
+import { CredentialStore } from './credentials.js'
 import type { Database as Db } from 'better-sqlite3'
 import { recordConnection } from './profiles.js'
 import type { Profile } from './profiles.js'
@@ -154,13 +155,37 @@ export class ConnectionRegistry {
     private readonly db: Db,
     private readonly mode: RuntimeMode,
     private readonly allowedHosts?: readonly string[],
+    /**
+     * Credentials typed in but deliberately not stored. Optional so existing callers — and every
+     * test that does not care — keep working; without one, only persisted credentials are used.
+     */
+    private readonly credentials: CredentialStore = new CredentialStore(),
   ) {}
+
+  /**
+   * The profile as it should be *used*: persisted credential, or the one held for this run.
+   *
+   * The session credential wins, because it is the one the user typed most recently. Everything
+   * downstream — the completeness check, the header the adapter builds — works from this rather
+   * than from the row, so "stored" and "typed in this session" are the same thing at the point of
+   * use and differ only in whether they outlive the process.
+   */
+  private withCredential(profile: Profile): Profile {
+    const session = this.credentials.get(profile.id)
+    if (session === null) return profile
+    return {
+      ...profile,
+      authUsername: session.username ?? profile.authUsername,
+      authSecret: session.secret,
+    }
+  }
 
   get(profileId: string): Connection | null {
     return this.connections.get(profileId) ?? null
   }
 
-  async connect(profile: Profile): Promise<Connection> {
+  async connect(input: Profile): Promise<Connection> {
+    const profile = this.withCredential(input)
     await this.disconnect(profile.id)
 
     /*
@@ -174,7 +199,7 @@ export class ConnectionRegistry {
     const missing = incompleteAuth(profile)
     if (missing !== null) {
       throw new ProfileConfigurationError(
-        `${profile.name} is set to use ${profile.authKind} authentication but has no ${missing}. ` +
+        `${profile.name} is set to use ${profile.authKind} authentication but is missing ${missing}. ` +
           `Add it on the Servers screen, or set authentication to none.`,
       )
     }
