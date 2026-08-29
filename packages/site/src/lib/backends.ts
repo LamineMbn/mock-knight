@@ -39,7 +39,7 @@ export interface Backend {
   readonly external: { readonly label: string; readonly url: string } | null
   /**
    * Basename, under `docs/images/`, of *this backend's own* corpus screenshot — Mock Knight
-   * actually connected to it, with its name and version in the top bar.
+   * actually connected to it.
    *
    * One shared file (`corpus.png`, WireMock's) used to be interpolated into every backend's alt
    * text regardless of which server the picture showed, which made three of the four pages
@@ -47,6 +47,22 @@ export interface Backend {
    * instead of a filename it invents, is what keeps that from happening silently again.
    */
   readonly screenshot: string
+  /**
+   * What this backend's *own* screenshot actually shows, one clause per fold — read against
+   * `docs/images/{screenshot}.png`, not copied from another backend's.
+   *
+   * The bug one level down from the shared-screenshot one: a single templated sentence
+   * ("the top bar names {backend} … a folder tree … header and priority columns …") was
+   * interpolated across all four pages and was true of only one of them. MockServer has no
+   * folder tree — a MockServer expectation carries no folder of its own, unlike the HEADER
+   * column, which `CorpusList` shows only when the mirrored corpus has a header-matched stub
+   * (`App.tsx`'s `showHeaderColumn`) — the Mockoon and Prism fixtures happen not to have one,
+   * not a limit of either adapter. And Mockoon's top bar never names it: `App.tsx` prints the
+   * backend name and version only when the adapter reports a version, and `MockoonAdapter`
+   * reports `version: null` by design. This field exists so each page's alt text can only
+   * describe what its own picture contains.
+   */
+  readonly screenshotAlt: string
 }
 
 const CAPABILITY_ORDER = [
@@ -86,6 +102,8 @@ export const BACKENDS: readonly Backend[] = [
     caveat: null,
     external: { label: 'WireMock', url: 'https://wiremock.org/' },
     screenshot: 'corpus-wiremock',
+    screenshotAlt:
+      'the top bar names WireMock as the active server, above a searchable list of its stubs with a folder tree, faceted filters for method and status, header and priority columns, and a detail pane for the selected stub',
   },
   {
     slug: 'mockserver',
@@ -114,6 +132,8 @@ export const BACKENDS: readonly Backend[] = [
     caveat: null,
     external: { label: 'MockServer', url: 'https://www.mock-server.com/' },
     screenshot: 'corpus-mockserver',
+    screenshotAlt:
+      'the top bar names MockServer as the active server, above a searchable list of its stubs with faceted filters for method and status, header and priority columns, and a detail pane for the selected stub — there is no folder tree, because MockServer expectations carry no folder of their own',
   },
   {
     slug: 'mockoon',
@@ -147,6 +167,8 @@ export const BACKENDS: readonly Backend[] = [
     ],
     external: { label: 'Mockoon', url: 'https://mockoon.com/' },
     screenshot: 'corpus-mockoon',
+    screenshotAlt:
+      'the top bar shows an icon and the connected address rather than a name — Mockoon reports no version, so nothing there names it — above a searchable list of its stubs with a folder tree, faceted filters for method and status, a priority column, and a detail pane for the selected stub; this corpus has no header-matched stub, so there is no header column',
   },
   {
     slug: 'prism',
@@ -176,6 +198,8 @@ export const BACKENDS: readonly Backend[] = [
     ],
     external: { label: 'Stoplight Prism', url: 'https://stoplight.io/open-source/prism' },
     screenshot: 'corpus-prism',
+    screenshotAlt:
+      'the top bar names Prism as the active server, above a searchable list of its stubs with a folder tree, faceted filters for method and status, a priority column, and a detail pane for the selected stub; this corpus has no header-matched stub, so there is no header column',
   },
 ]
 
