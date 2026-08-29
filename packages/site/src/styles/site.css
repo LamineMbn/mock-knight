@@ -254,9 +254,18 @@ pre {
   font-size: 0.8125rem;
 }
 
-/* Wide content scrolls inside its own box; the page body never scrolls sideways. */
-table {
-  display: block;
+/* Wide content scrolls inside its own box; the page body never scrolls sideways.
+ *
+ * The scrolling box is a wrapper `div`, not the `table` itself. `table { display: block;
+ * overflow-x: auto }` was tried first and gave every table a border box wider than its rows:
+ * `display: block` makes the table a plain block box sized by `width: 100%` on its scroll
+ * ancestor, while the table-layout algorithm still sizes rows and columns by content, so the
+ * two disagree once a table's natural width is narrower than its container. A `<table>` left as
+ * `display: table` doesn't have that conflict — `width: 100%` on it sizes the whole table,
+ * columns included. The wrapper also carries the `tabindex`/`role`/`aria-label` a scrollable
+ * region needs for keyboard and screen-reader access (axe: `scrollable-region-focusable`) —
+ * see `CapabilityMatrix.astro`, `SchemaTable.astro`, `MatchHero.astro`. */
+.table-scroll {
   overflow-x: auto;
   max-width: 100%;
 }
@@ -281,8 +290,8 @@ img {
 }
 
 /* The hero (spec §5.3): a request on the left, the closest stub's field-by-field comparison on
- * the right. Below 360px both stack — the table scrolls inside its own box (the generic `table`
- * rule above already gives it `overflow-x: auto`), the page body never does. */
+ * the right. Below 360px both stack — the table scrolls inside its own box (the `.table-scroll`
+ * wrapper rendered by MatchHero.astro gives it `overflow-x: auto`), the page body never does. */
 .hero {
   display: grid;
   gap: 2rem;
@@ -497,6 +506,18 @@ img {
   background: var(--mk-bg-surface);
   border: 1px solid var(--mk-border-default);
   border-radius: 0.5rem;
+}
+
+/* Same treatment as `.capabilities caption` — the config page's two schema tables now carry a
+ * caption of their own, since the top-level table and the `profiles` table need distinct names
+ * on their scroll wrappers, and a visible caption is the one wording a screen reader and a
+ * sighted reader can both check against each other (`SchemaTable.astro`). */
+.schema caption {
+  caption-side: top;
+  text-align: left;
+  padding: 0 0 0.75rem;
+  color: var(--mk-text-secondary);
+  font-size: 0.8125rem;
 }
 
 .schema th,

@@ -57,33 +57,40 @@ const rows = [
       </select>
     </p>
 
-    <table>
-      <thead>
-        <tr
-          ><th scope="col">Field</th><th scope="col">Expected</th><th scope="col">Actual</th><th
-            scope="col">Result</th
-          ></tr
-        >
-      </thead>
-      <tbody>
-        {
-          rows.map((row) => (
-            <tr
-              data-testid={`row-${row.id}`}
-              data-state={row.expected === row.actual ? 'pass' : 'fail'}
-            >
-              <td>{row.field}</td>
-              <td>{row.expected}</td>
-              <td data-cell={row.id === 'header' ? 'actual-tenant' : undefined}>{row.actual}</td>
-              <td class="result">
-                <span aria-hidden="true">{row.expected === row.actual ? '✓' : '✗'}</span>
-                <span>{row.expected === row.actual ? 'matched' : 'failed'}</span>
-              </td>
-            </tr>
-          ))
-        }
-      </tbody>
-    </table>
+    <div
+      class="table-scroll"
+      role="region"
+      aria-label="Field-by-field comparison of the incoming request against the closest stub"
+      tabindex="0"
+    >
+      <table>
+        <thead>
+          <tr
+            ><th scope="col">Field</th><th scope="col">Expected</th><th scope="col">Actual</th><th
+              scope="col">Result</th
+            ></tr
+          >
+        </thead>
+        <tbody>
+          {
+            rows.map((row) => (
+              <tr
+                data-testid={`row-${row.id}`}
+                data-state={row.expected === row.actual ? 'pass' : 'fail'}
+              >
+                <td>{row.field}</td>
+                <td>{row.expected}</td>
+                <td data-cell={row.id === 'header' ? 'actual-tenant' : undefined}>{row.actual}</td>
+                <td class="result">
+                  <span aria-hidden="true">{row.expected === row.actual ? '✓' : '✗'}</span>
+                  <span>{row.expected === row.actual ? 'matched' : 'failed'}</span>
+                </td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
 
     <p data-testid="verdict" aria-live="polite" data-state="fail" class="verdict">
       ✗ 1 of 3 predicates failed

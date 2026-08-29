@@ -26,6 +26,11 @@ interface Props {
 const { only } = Astro.props
 const shown = only === undefined ? BACKENDS : BACKENDS.filter((b) => b.slug === only)
 
+/** One string, used for both the visible `<caption>` and the scroll wrapper's `aria-label`, so
+ *  the two can never say something different — see `table-scroll` in site.css. */
+const caption =
+  'What each backend can answer. A capability that is off says why. So does one that is on only with setup.'
+
 /** `on` with a note is present, but only once the reader has done something the default path
  *  does not — that is not the same claim as an unconditional `on`, so it gets its own state. */
 function stateOf(capability: Capability): 'on' | 'off' | 'conditional' {
@@ -48,40 +53,39 @@ function labelOf(capability: Capability): string {
 }
 ---
 
-<table class="capabilities">
-  <caption
-    >What each backend can answer. A capability that is off says why. So does one that is on only
-    with setup.</caption
-  >
-  <thead>
-    <tr>
-      <th scope="col">Capability</th>
+<div class="table-scroll" role="region" aria-label={caption} tabindex="0">
+  <table class="capabilities">
+    <caption>{caption}</caption>
+    <thead>
+      <tr>
+        <th scope="col">Capability</th>
+        {
+          shown.map((backend) => (
+            <th scope="col">
+              <a href={href(`/${backend.slug}/`)}>{backend.name}</a>
+            </th>
+          ))
+        }
+      </tr>
+    </thead>
+    <tbody>
       {
-        shown.map((backend) => (
-          <th scope="col">
-            <a href={href(`/${backend.slug}/`)}>{backend.name}</a>
-          </th>
+        CAPABILITY_ORDER.map((label, index) => (
+          <tr>
+            <th scope="row">{label}</th>
+            {shown.map((backend) => {
+              const capability = backend.capabilities[index]!
+              return (
+                <td data-state={stateOf(capability)}>
+                  <span aria-hidden="true">{glyphOf(capability)}</span>
+                  <span>{labelOf(capability)}</span>
+                  {capability.note !== null && <p class="why">{capability.note}</p>}
+                </td>
+              )
+            })}
+          </tr>
         ))
       }
-    </tr>
-  </thead>
-  <tbody>
-    {
-      CAPABILITY_ORDER.map((label, index) => (
-        <tr>
-          <th scope="row">{label}</th>
-          {shown.map((backend) => {
-            const capability = backend.capabilities[index]!
-            return (
-              <td data-state={stateOf(capability)}>
-                <span aria-hidden="true">{glyphOf(capability)}</span>
-                <span>{labelOf(capability)}</span>
-                {capability.note !== null && <p class="why">{capability.note}</p>}
-              </td>
-            )
-          })}
-        </tr>
-      ))
-    }
-  </tbody>
-</table>
+    </tbody>
+  </table>
+</div>
