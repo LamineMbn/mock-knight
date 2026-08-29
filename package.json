@@ -19,6 +19,7 @@
     "dev:server": "pnpm --filter mock-knight dev",
     "dev:web": "pnpm --filter @mock-knight/web dev",
     "build": "pnpm --filter @mock-knight/web build && pnpm --filter mock-knight build",
+    "build:site": "pnpm --filter @mock-knight/site build",
     "test:perf": "vitest run --config vitest.perf.config.ts",
     "schema": "pnpm --filter @mock-knight/core --filter \"@mock-knight/adapter-*\" build && tsx packages/server/scripts/emit-schema.mts",
     "test:conformance": "vitest run --config vitest.conformance.config.ts"
@@ -30,6 +31,7 @@
     "eslint": "^10.9.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "prettier": "^3.4.2",
+    "prettier-plugin-astro": "^0.14.1",
     "tsup": "^8.3.5",
     "tsx": "^4.23.12",
     "typescript": "^5.7.2",

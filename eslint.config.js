@@ -46,6 +46,8 @@ export default tseslint.config(
       'test-results/**',
       'playwright-report/**',
       'packages/web/src/styles/tokens.css',
+      // Astro's own generated type declarations, not code anyone here wrote.
+      'packages/site/.astro/**',
     ],
   },
 
@@ -125,6 +127,29 @@ export default tseslint.config(
       'The CLI composes the server and the built SPA; adapters reach it through the server.',
     ),
   },
+  /**
+   * The documentation site imports nothing from the workspace.
+   *
+   * It is the only package with no workspace dependency at all, deliberately: everything it
+   * renders from is either its own, or a committed file it reads at build time. An import from
+   * `core` would make a marketing page a reason not to refactor a domain type.
+   */
+  {
+    files: ['packages/site/**/*.{ts,mts,mjs}'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@mock-knight/**'],
+              message: 'The site imports nothing from the workspace (CLAUDE.md invariant 1).',
+            },
+          ],
+        },
+      ],
+    },
+  },
 
   /**
    * `core`'s browser-safe surface, kept browser-safe.
@@ -171,6 +196,32 @@ export default tseslint.config(
           selector: 'Literal[value=/(^|[^\\w-])(#[0-9a-fA-F]{3,8}\\b|(rgb|hsl)a?\\s*\\()/]',
           message:
             'No literal colour in a component (CLAUDE.md invariant 8). Add a --mk-* token in ' +
+            'design/design-tokens.py, run `pnpm tokens:css`, and reference it with var().',
+        },
+      ],
+    },
+  },
+
+  /**
+   * Invariant 8 reaches the site as well.
+   *
+   * A literal colour here is the same bug it is in the app — it cannot follow a theme switch,
+   * because switching swaps token *values* — and the site renders in both themes.
+   *
+   * Known gap, stated rather than dropped: this covers `.ts`, `.mts` and `.mjs`. ESLint cannot
+   * parse `.astro` without `astro-eslint-parser`, which is a further dependency for a rule that
+   * `pnpm test:site`'s axe pass would catch as a contrast failure anyway. Revisit if a literal
+   * ever lands in a component.
+   */
+  {
+    files: ['packages/site/**/*.{ts,mts,mjs}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'Literal[value=/(^|[^\\w-])(#[0-9a-fA-F]{3,8}\\b|(rgb|hsl)a?\\s*\\()/]',
+          message:
+            'No literal colour (CLAUDE.md invariant 8). Add a --mk-* token in ' +
             'design/design-tokens.py, run `pnpm tokens:css`, and reference it with var().',
         },
       ],
