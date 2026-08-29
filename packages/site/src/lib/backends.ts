@@ -1,7 +1,29 @@
 export interface Capability {
   readonly label: string
   readonly state: 'on' | 'off'
-  /** Required when state is 'off'. Why the backend cannot do it — never left as an absence. */
+  /**
+   * Required when state is 'off'. Why the backend cannot do it — never left as an absence.
+   *
+   * Allowed when state is 'on' too, for the capability that is present but conditional: a
+   * reader following the default path must not be shown a plain "Yes" for something that is
+   * only true once they have done something the page never told them about.
+   */
+  readonly note: string | null
+}
+
+/**
+ * How a reader actually starts this backend under Mock Knight.
+ *
+ * Per backend rather than one template line, because two of the four are document-backed:
+ * `MockoonAdapter.connect()` and `PrismAdapter.connect()` both read a file named by the
+ * profile's `mappingsDir`, and the CLI has no flag for it. A single
+ * `npx mock-knight --url … --adapter mockoon` is not an install command for those two — it is a
+ * profile that fails to connect.
+ */
+export interface Install {
+  /** The shell block, one command per line, in the order they are run. */
+  readonly commands: readonly string[]
+  /** What the commands alone do not do, or null when the one-liner is the whole story. */
   readonly note: string | null
 }
 
@@ -10,6 +32,7 @@ export interface Backend {
   readonly name: string
   readonly h1: string
   readonly lede: string
+  readonly install: Install
   readonly capabilities: readonly Capability[]
   /** Shown above the fold where the honest story needs stating before anything is claimed. */
   readonly caveat: string | null
@@ -27,6 +50,8 @@ const CAPABILITY_ORDER = [
 ] as const
 
 const on = (label: string): Capability => ({ label, state: 'on', note: null })
+/** Present, but only once the reader has done something the default path does not do. */
+const onIf = (label: string, note: string): Capability => ({ label, state: 'on', note })
 const off = (label: string, note: string): Capability => ({ label, state: 'off', note })
 
 export const BACKENDS: readonly Backend[] = [
@@ -35,6 +60,10 @@ export const BACKENDS: readonly Backend[] = [
     name: 'WireMock',
     h1: 'A UI for WireMock',
     lede: 'WireMock ships an admin API and no interface. Point Mock Knight at the WireMock you already run and you get one, without changing anything about how your mocks are served.',
+    install: {
+      commands: ['npx mock-knight --url http://localhost:8080 --adapter wiremock'],
+      note: null,
+    },
     capabilities: [
       on('Search the corpus'),
       on('Read a stub'),
@@ -52,6 +81,10 @@ export const BACKENDS: readonly Backend[] = [
     name: 'MockServer',
     h1: 'A UI for MockServer',
     lede: 'Search, read and edit every expectation on a MockServer from a browser, as a form or as raw JSON.',
+    install: {
+      commands: ['npx mock-knight --url http://localhost:1080 --adapter mockserver'],
+      note: null,
+    },
     capabilities: [
       on('Search the corpus'),
       on('Read a stub'),
@@ -74,19 +107,29 @@ export const BACKENDS: readonly Backend[] = [
     slug: 'mockoon',
     name: 'Mockoon',
     h1: 'Mockoon, from a browser',
-    lede: 'Read and edit the routes in a Mockoon environment file, with a traffic log, from anywhere that can reach it.',
+    lede: 'Read and edit the routes in a Mockoon environment file from anywhere that can reach it, with a traffic log once the admin API token is in the profile.',
     // Mockoon has a good desktop application. Pretending otherwise loses the reader in one line.
     caveat:
       'Mockoon has its own desktop app, and for local work it is the better tool. This is for the setups it does not cover: an environment file in version control, a mockoon-cli running in CI, or a team that wants one interface across four different mock servers.',
+    install: {
+      commands: [
+        'mockoon-cli start --data ./env.json --port 3000 --watch',
+        'npx mock-knight --url http://localhost:3000 --adapter mockoon',
+      ],
+      note: 'A Mockoon profile also needs the path to its environment JSON file — the Servers screen asks for it once Mockoon is chosen as the backend, because its admin API cannot read routes. Start Mockoon with --watch and the file is authoritative: edit it and the server follows.',
+    },
     capabilities: [
       on('Search the corpus'),
       on('Read a stub'),
       on('Edit a stub'),
       off(
         'Create and delete',
-        'Both also rewrite `rootChildren`, where a mistake silently stops a route being served. Not worth the risk for a convenience.',
+        'Both also rewrite `rootChildren`, where a mistake silently stops a route being served.',
       ),
-      on('Traffic log'),
+      onIf(
+        'Traffic log',
+        'Needs Mockoon’s admin API token. That API is token-protected by default, so Mock Knight probes it on connect: a profile without the token gets a 401 and the Traffic screen is absent.',
+      ),
       off('Why a request did not match', 'Mockoon’s admin API reports no near misses.'),
       off('Scenarios', 'Mockoon has no equivalent of named scenario states.'),
     ],
@@ -97,6 +140,13 @@ export const BACKENDS: readonly Backend[] = [
     name: 'Prism',
     h1: 'A UI for Prism',
     lede: 'See what a Prism mock will actually return: every operation as one stub per declared response, ranked the way Prism picks — lowest 2xx first.',
+    install: {
+      commands: [
+        'prism mock ./openapi.yaml --port 4010',
+        'npx mock-knight --url http://localhost:4010 --adapter prism',
+      ],
+      note: 'A Prism profile also needs the path to the OpenAPI document it serves — the Servers screen asks for it once Prism is chosen as the backend, because Prism has no control API and the document is the corpus.',
+    },
     caveat:
       'Read-only. Prism has no control API, so its corpus is the OpenAPI document it serves and the document is the only place to change it.',
     capabilities: [
@@ -104,7 +154,7 @@ export const BACKENDS: readonly Backend[] = [
       on('Read a stub'),
       off(
         'Edit a stub',
-        'Prism has no control API. Editing would mean rewriting your OpenAPI document, which is a specification rather than a set of mocks.',
+        'Prism has no control API. Editing would mean rewriting your OpenAPI document.',
       ),
       off('Create and delete', 'Same reason: the corpus is your specification.'),
       off('Traffic log', 'Prism exposes no request journal.'),

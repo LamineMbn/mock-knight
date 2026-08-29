@@ -43,7 +43,7 @@ export const ROUTES: readonly Route[] = [
     path: '/mockoon/',
     title: 'Mockoon environments in a shared web UI',
     description:
-      'Read and edit a Mockoon environment file from a browser, with a traffic log — for the shared and CI setups where Mockoon’s desktop app is not what is running.',
+      'Read and edit a Mockoon environment file from a browser, for the shared and CI setups its desktop app does not cover. Traffic log needs the admin API token.',
     nav: 'Mockoon',
   },
   {

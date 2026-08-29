@@ -1,8 +1,14 @@
 ---
 /**
- * One template, four pages. `backends.ts` already holds every backend's lede, caveat and
- * capability notes — copied from README.md, which is checked against the adapter conformance
- * suite — so this file renders that data rather than restating it.
+ * One template, four pages. `backends.ts` already holds every backend's lede, caveat,
+ * install block and capability notes — copied from README.md, which is checked against the
+ * adapter conformance suite — so this file renders that data rather than restating it.
+ *
+ * The install block in particular is per backend rather than one templated one-liner. Mockoon
+ * and Prism are document-backed: their adapters' `connect()` reads a file named by the
+ * profile's `mappingsDir`, and the CLI has no flag for it — so
+ * `npx mock-knight --url … --adapter mockoon` on its own builds a profile that cannot connect.
+ * Those two carry the extra step as prose, in the README's own words.
  */
 import CapabilityMatrix from '../components/CapabilityMatrix.astro'
 import Screenshot from '../components/Screenshot.astro'
@@ -31,7 +37,9 @@ const backend = backendFor(slug!)
       )
     }
 
-    <pre><code>npx mock-knight --url http://localhost:8080 --adapter {backend.slug}</code></pre>
+    <pre><code>{backend.install.commands.join('\n')}</code></pre>
+
+    {backend.install.note !== null && <p class="prose">{backend.install.note}</p>}
   </section>
 
   <section class="section">
