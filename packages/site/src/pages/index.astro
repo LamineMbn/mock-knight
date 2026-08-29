@@ -1,8 +1,83 @@
 ---
+import CapabilityMatrix from '../components/CapabilityMatrix.astro'
 import MatchHero from '../components/MatchHero.astro'
+import Screenshot from '../components/Screenshot.astro'
 import Base from '../layouts/Base.astro'
 ---
 
 <Base path="/">
   <MatchHero />
+
+  <section>
+    <h2>Find a stub among thousands</h2>
+    <p class="prose">
+      Full text over paths and bodies, plus a structured query language — <code
+        >method:POST status:5xx header:X-Tenant</code
+      > — with faceted filters whose counts follow the query, and a list that stays fluid at 10,000 rows.
+      The view lives in the URL, so a broken stub is a link you can paste into Slack.
+    </p>
+    <Screenshot
+      name="search"
+      alt="Structured search in the Mock Knight WireMock UI: the query method:POST status:5xx filters the stub list while the facet counts for method, status, scenario, header and tag update alongside it"
+      caption="Structured search, with the facet counts following the query."
+      width={2880}
+      height={1760}
+    />
+  </section>
+
+  <section>
+    <h2>Watch traffic as it arrives</h2>
+    <p class="prose">
+      The request journal, live, with match state and filters by method, status and path. Arrivals
+      hold while your pointer is over the list, so a click lands on the row you aimed at.
+    </p>
+    <Screenshot
+      name="traffic"
+      alt="Mock Knight's traffic screen: a live WireMock request log with matched and unmatched requests, each row showing method, path, response status and duration"
+      caption="The request journal, with matched and unmatched side by side."
+      width={2880}
+      height={1760}
+    />
+  </section>
+
+  <section>
+    <h2>Drive stateful scenarios</h2>
+    <p class="prose">
+      Stateful stubs as a state graph, with the current state highlighted, unreachable states and
+      dead ends flagged, and a reset that says who else it affects.
+    </p>
+    <Screenshot
+      name="scenarios"
+      alt="Mock Knight's scenarios screen showing a WireMock checkout scenario as six states and six transitions, flagging one state that cannot be reached and one that nothing advances out of"
+      caption="A scenario as a state graph. Two faults flagged."
+      width={2880}
+      height={1200}
+    />
+  </section>
+
+  <section>
+    <h2>Light and dark</h2>
+    <p class="prose">
+      It follows the OS by default, or pin either. It is a debugging tool; it gets used at both ends
+      of the day.
+    </p>
+    <Screenshot
+      name="corpus-dark"
+      alt="The same Mock Knight corpus screen in dark mode"
+      caption="The same corpus screen in dark mode."
+      width={2880}
+      height={1760}
+    />
+  </section>
+
+  <section>
+    <h2>Four mock servers, one interface</h2>
+    <CapabilityMatrix />
+  </section>
+
+  <section>
+    <h2>Install</h2>
+    <p class="prose">Node 22 or newer. No Docker, no account, no configuration file.</p>
+    <pre><code>npx mock-knight --url http://localhost:8080</code></pre>
+  </section>
 </Base>

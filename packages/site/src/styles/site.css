@@ -289,3 +289,56 @@ img {
   font-size: 0.8125rem;
   color: inherit;
 }
+
+/* Landing page sections: a heading, a paragraph of prose, then (mostly) a screenshot. A rule
+ * between sections is enough separation on a page whose content is otherwise plain flow. */
+main > section {
+  padding: 2rem 0;
+  border-top: 1px solid var(--mk-border-subtle);
+}
+
+main > section:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+main > section h2 {
+  margin: 0 0 0.75rem;
+}
+
+/* The screenshot and its caption. The image itself carries the border — a screenshot of a UI
+ * with its own chrome reads as floating without one. The caption says something the alt text
+ * does not: what to notice, not what is pictured. */
+figure {
+  margin: 1.5rem 0 0;
+}
+
+figure img {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--mk-border-default);
+  border-radius: 0.5rem;
+  background: var(--mk-bg-subtle);
+}
+
+figcaption {
+  margin: 0.625rem 0 0;
+  color: var(--mk-text-secondary);
+  font-size: 0.875rem;
+}
+
+/* The install command. A single line, so it gets the code chrome without a scroll box. */
+main > section pre {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background: var(--mk-code-bg);
+  border: 1px solid var(--mk-border-default);
+  border-radius: 0.375rem;
+  overflow-x: auto;
+}
+
+main > section pre code {
+  border: none;
+  padding: 0;
+  background: none;
+}

@@ -1,0 +1,36 @@
+---
+/**
+ * One screenshot, captioned. `name` is the basename under `/images/` with no extension —
+ * the pages that show one backend's screenshot reuse this same component.
+ *
+ * `asset()`, not `href()`: `href()` appends the trailing slash a route needs, which turns
+ * `/images/x.png` into `/images/x.png/` and 404s it on a static host (Task 2's favicon bug).
+ *
+ * `width`/`height` are the real pixel dimensions of the captured PNG, not a shared guess —
+ * they reserve the layout space before the image loads, which is what keeps Cumulative
+ * Layout Shift at zero.
+ */
+import { asset } from '../lib/href.js'
+
+interface Props {
+  name: string
+  alt: string
+  caption: string
+  width: number
+  height: number
+}
+
+const { name, alt, caption, width, height } = Astro.props
+---
+
+<figure>
+  <img
+    src={asset(`/images/${name}.png`)}
+    alt={alt}
+    width={width}
+    height={height}
+    loading="lazy"
+    decoding="async"
+  />
+  <figcaption>{caption}</figcaption>
+</figure>
