@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.7.1
+
+### Fixed
+
+- **`--help` named only two of the four backends it accepts.** Mockoon and Prism have been
+  selectable with `--adapter` since their adapters were registered, but the help text still
+  listed `wiremock` and `mockserver`, so two supported backends were reachable and undocumented.
+  The list now comes from the same registry the flag validates against, which is the only way it
+  stays true when a fifth is added.
+
+### Changed
+
+- **The README and the npm listing say what the thing is.** Both opened with "a local-first web
+  UI for HTTP mock servers" and did not name WireMock — or MockServer, Mockoon or Prism — until
+  well down the page, which is the wrong order for anyone deciding whether this is relevant to
+  them. The README now leads with the backends, shows the four screens before the configuration
+  reference, and answers the questions people actually arrive with. Its images and links are
+  absolute, because the same file is the npm package page and relative paths resolve to nothing
+  there — which is why the published logo was broken.
+
+- **Three things the README stated were wrong.** Its security summary claimed no secret is ever
+  stored, contradicting the paragraph above it describing what *Remember on this machine* writes
+  to disk. Its configuration example still used `authRef`, which 0.7.0 replaced with
+  `authUsername` and `authSecret` and which the schema no longer contains. And `--state` was
+  documented as defaulting to an OS data directory rather than `~/.mock-knight/state.db`, while
+  `--allow-stored-credentials` was missing entirely.
+
 ## 0.7.0
 
 ### Added

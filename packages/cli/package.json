@@ -1,6 +1,6 @@
 {
   "name": "mock-knight",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Web UI for WireMock, MockServer, Mockoon and Prism \u2014 search, edit and debug HTTP mock stubs in the browser. Runs locally with npx.",
   "license": "Apache-2.0",
   "type": "module",
