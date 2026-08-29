@@ -1,4 +1,4 @@
-import { REDACTION_MARKER, redactRawHeaders, setKey } from '@mock-knight/core'
+import { REDACTION_MARKER, redactRawHeaders, scrubSecrets, setKey } from '@mock-knight/core'
 import type { ServeEvent } from '@mock-knight/core'
 import type { Database as Db } from 'better-sqlite3'
 
@@ -35,25 +35,102 @@ ON CONFLICT (profile_id, upstream_id) DO NOTHING`
 /**
  * Redact before storage, not before display — the mirror must not become a secret store.
  *
- * Both copies, because there are two. The canonical `request.headers` is what the Traffic list
- * renders; `raw` is the vendor payload kept verbatim, and it is the one that reaches disk in the
- * `raw` column and comes back out again for the match explainer and create-from-request. Through
- * 0.7.1 only the first was scrubbed and the second was stored whole, which made the whole feature
- * a no-op: every surface that shows a header reads it back from `raw`.
+ * Everything that reaches the database has to derive from this, because `serve_event` holds more
+ * than the payload: `url`, `method` and `correlation` are columns of their own, and each is read
+ * off the request. Through 0.7.1 only the canonical `request.headers` was scrubbed, and that is
+ * the one copy no column holds — so the feature was a no-op, and the columns beside it carried
+ * the secret in the clear.
+ *
+ * Three things happen here, in order:
+ *
+ *  1. `redactRawHeaders` scrubs the retained vendor payload and reports which values it replaced.
+ *  2. The canonical `headers` and `cookies` are scrubbed the same way, and any value only they
+ *     carry joins the list.
+ *  3. Everything else derived from the request — the URL, the body, the query, the correlation
+ *     id — goes through `scrubSecrets` with that list, so no column can hold what the payload no
+ *     longer does.
+ *
+ * `cookies` matters as much as `headers`: `Cookie` is the header a developer is most likely to
+ * declare sensitive, and both backends store its individual values in a sibling object that no
+ * header-scoped rule reaches.
  */
 function redact(event: ServeEvent, headerNames: readonly string[]): ServeEvent {
   if (headerNames.length === 0) return event
   const wanted = new Set(headerNames.map((name) => name.toLowerCase()))
+  // Every cookie is part of the `Cookie` header's value, so declaring that header covers all of
+  // them; a cookie whose own name matches a declared header is covered too.
+  const cookieDeclared = (name: string): boolean =>
+    wanted.has('cookie') || wanted.has(name.toLowerCase())
+
+  const { payload, values } = redactRawHeaders(event.raw, headerNames)
+
+  // Collect before rendering, the same way core does: a value the canonical copy carries and the
+  // vendor payload does not still has to leave the URL, the body and the columns.
+  const secrets = new Set(values)
+  for (const [key, value] of Object.entries(event.request.headers)) {
+    if (!wanted.has(key.toLowerCase())) continue
+    for (const item of Array.isArray(value) ? value : [value]) {
+      remember(item, secrets)
+      // A `Cookie` header is a list of `name=value` pairs and it is the individual value that
+      // gets quoted elsewhere, never the whole header string.
+      if (key.toLowerCase() === 'cookie') {
+        for (const pair of item.split(';')) {
+          const at = pair.indexOf('=')
+          if (at !== -1) remember(pair.slice(at + 1).trim(), secrets)
+        }
+      }
+    }
+  }
+  for (const [key, value] of Object.entries(event.request.cookies))
+    if (cookieDeclared(key)) remember(value, secrets)
+
+  const all = [...secrets].sort((a, b) => b.length - a.length)
+  const scrub = (text: string): string => scrubSecrets(text, all)
+
   const headers: Record<string, string | string[]> = {}
   for (const [key, value] of Object.entries(event.request.headers)) {
+    const redacted = wanted.has(key.toLowerCase())
     // setKey: a header literally named `__proto__` must not vanish from the stored journal.
-    setKey(headers, key, wanted.has(key.toLowerCase()) ? REDACTION_MARKER : value)
+    setKey(
+      headers,
+      key,
+      Array.isArray(value)
+        ? value.map((item) => (redacted ? REDACTION_MARKER : scrub(item)))
+        : redacted
+          ? REDACTION_MARKER
+          : scrub(value),
+    )
   }
+
+  const cookies: Record<string, string> = {}
+  for (const [key, value] of Object.entries(event.request.cookies))
+    setKey(cookies, key, cookieDeclared(key) ? REDACTION_MARKER : scrub(value))
+
+  const queryParameters: Record<string, string[]> = {}
+  for (const [key, value] of Object.entries(event.request.queryParameters))
+    setKey(queryParameters, key, value.map(scrub))
+
   return {
     ...event,
-    request: { ...event.request, headers },
-    raw: redactRawHeaders(event.raw, headerNames),
+    request: {
+      ...event.request,
+      headers,
+      cookies,
+      queryParameters,
+      url: scrub(event.request.url),
+      absoluteUrl: event.request.absoluteUrl === null ? null : scrub(event.request.absoluteUrl),
+      method: scrub(event.request.method),
+      body: event.request.body === null ? null : scrub(event.request.body),
+    },
+    correlation: event.correlation === null ? null : scrub(event.correlation),
+    raw: payload,
   }
+}
+
+/** Blank values substitute into everything; the marker is what redaction writes. */
+function remember(value: string, into: Set<string>): void {
+  if (value.trim() === '' || value === REDACTION_MARKER) return
+  into.add(value)
 }
 
 export function recordServeEvents(

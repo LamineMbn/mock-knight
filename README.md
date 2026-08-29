@@ -255,11 +255,27 @@ machine you control.
   `--allow-stored-credentials` if you have put your own authentication in front.
 - A profile in a config file holds the *name* of an environment variable, never a value, so the
   file you commit contains nothing sensitive.
-- Header names listed in a profile's `redactHeaders` are replaced before a request journal entry
-  is stored — in the mock server's own payload as well as in the record Mock Knight builds from
-  it, so nothing reads the value back out. Matching is case-insensitive. The value is then
-  scrubbed from every string in the retained payload, because a near-miss diff quotes it in
-  prose; that is deliberately blunt, so a diff may read `«redacted»` mid-sentence.
+- The *values* of the header names listed in a profile's `redactHeaders` are replaced before a
+  request journal entry is stored. The names themselves are kept, so the Traffic screen still
+  shows `X-Api-Key: «redacted»`. Matching is case-insensitive.
+
+  Redaction covers every copy the entry contains, not only the header it was named in: the mock
+  server's own payload as well as the record Mock Knight builds from it, the `cookies` object
+  that sits beside the headers, the `url`, the body and the base64 twin the backends store next
+  to it, and the columns derived from all of those. Whatever was replaced is then scrubbed from
+  every string in the entry, because a near-miss diff quotes a header value in prose.
+
+  That sweep is deliberately blunt — a declared value is replaced wherever it occurs, with no
+  minimum length — so a near-miss report can read `«redacted»` mid-sentence. Declaring `Cookie`
+  sensitive also covers each individual cookie value, and a short one is not exempt: a cookie of
+  `n=1` turns every `1` in that entry into a marker, so `localhost:11080` is displayed as
+  `localhost:«redacted»«redacted»080`. Ugly, and the deliberate direction to fail in.
+
+  **It costs you something on the Traffic screen.** The match explainer and *create stub from
+  request* rebuild the request from the redacted entry, so a redacted header always reports as a
+  mismatch in the explainer, and a stub generated from that request carries a literal
+  `«redacted»` matcher you will want to edit. That is the deliberate trade: better a degraded
+  explainer than your credential written into the corpus.
 
 ## FAQ
 

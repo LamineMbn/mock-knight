@@ -31,6 +31,43 @@
   that is a hole, and a hole is what this closes. A near-miss report with `«redacted»` in the
   middle of a sentence is correct output, not a bug.
 
+  **A header value does not only live in a header, and four further copies were leaking.** Each
+  was found by replacing hand-trimmed test fixtures with journal entries captured verbatim from
+  a live server — the trimmed ones had no `cookies`, no `bodyAsBase64` and a URL with the secret
+  conveniently absent, so a correct assertion passed on a payload no server produces.
+
+  - **`request.cookies`.** `Cookie` is the header most likely to be declared sensitive, and both
+    WireMock and MockServer store its individual values in an object *beside* `headers`, which
+    no header-scoped rule reached. It is now treated as the `Cookie` header decomposed:
+    declaring that header redacts every cookie in it.
+  - **`bodyAsBase64` and `body.rawBytes`.** Both backends store a base64 twin next to every
+    body, so a scrubbed body shipped with an unscrubbed copy one decode away — a row that passed
+    a plaintext search while still holding the secret. A blob that decodes to a declared value is
+    now replaced whole.
+  - **The `url` column**, which is what the Traffic list renders and what the `?path=` filter
+    searches. `POST /probe?token=SECRET123` stored the scrubbed copy in the payload and the
+    plaintext one in the column beside it.
+  - **The `correlation` column**, when `correlationHeader` named a header that was also declared
+    sensitive — the secret in a dedicated indexed column, exposed as an API filter.
+
+  Every column now derives from redacted data, and the test that guards this reads all of them
+  and then decodes anything that looks like base64.
+
+  **Deeply nested payloads no longer break ingest.** The walk caps its depth and replaces
+  anything past the limit, rather than throwing a `RangeError` inside the write transaction and
+  leaving the Traffic screen dead for that profile until the upstream journal was cleared.
+  MockServer stores request bodies as parsed JSON, so this was reachable.
+
+  **What it costs.** The match explainer and *create stub from request* rebuild the request from
+  the redacted entry, so a redacted header always reports as a mismatch and a generated stub
+  carries a literal `«redacted»` matcher. Better a degraded explainer than a credential written
+  into the corpus — but it is a real cost, and it falls on the people who configured redaction.
+
+  The sweep has no minimum length, by design, and declaring `Cookie` covers each cookie value
+  individually — so a cookie of `n=1` replaces every `1` in that entry and `localhost:11080`
+  reads `localhost:«redacted»«redacted»080` on the Traffic screen. That is the direction chosen
+  deliberately: a length guard is a hole, and a hole is what this release closes.
+
   **Rows already recorded are not rewritten.** If a profile has been running with
   `redactHeaders` set and traffic in it, the secrets are in the mirror now — the mirror is a
   disposable cache, so delete `~/.mock-knight/state.db` (or the path `--state` names) and it
