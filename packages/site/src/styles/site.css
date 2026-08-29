@@ -6,29 +6,214 @@
 @import '@fontsource-variable/inter';
 @import '@fontsource-variable/jetbrains-mono';
 
+/* Local custom properties, deliberately `--site-*` and never `--mk-*`.
+ *
+ * `design/design-tokens.py` emits colour and nothing else — there is no `--mk-space-*`,
+ * `--mk-radius-*` or `--mk-font-*` — and CI fails on a hand-edited `tokens.generated.css`. So
+ * the non-colour values this shell needs live here, under a prefix that can never be mistaken
+ * for a generated one. Every *colour* below is still `var(--mk-*)`; invariant 8 is unchanged. */
 :root {
   color-scheme: light dark;
+
+  --site-font-sans: 'Inter Variable', Inter, -apple-system, 'Segoe UI', system-ui, sans-serif;
+  --site-font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* One measure for the page. Wide enough for a 2880px screenshot and a five-column capability
+   * matrix to read at a sensible scale; narrow enough that the eye still finds the next line. */
+  --site-container: 1100px;
+  --site-gutter: 20px;
+  --site-radius: 4px;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --site-gutter: 32px;
+  }
 }
 
 body {
   margin: 0;
   background: var(--mk-bg-canvas);
   color: var(--mk-text-primary);
-  font-family:
-    'Inter Variable',
-    Inter,
-    -apple-system,
-    'Segoe UI',
-    system-ui,
-    sans-serif;
+  font-family: var(--site-font-sans);
   font-size: 16px;
   line-height: 1.625;
+}
+
+/* The one container. `header`'s inner row, `main` and `footer`'s inner row all carry it, so the
+ * three align on one left edge at every width — and the gutter survives 360px, where the body
+ * text otherwise touches both edges. */
+.container {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--site-container);
+  margin-inline: auto;
+  padding-inline: var(--site-gutter);
+}
+
+main {
+  display: block;
+  padding-block: 2rem 3.5rem;
+}
+
+/* Vertical rhythm. Tailwind's preflight zeroes every margin, so without this the FAQ — the
+ * highest-intent page on the site — renders as one undifferentiated slab. */
+p,
+ul,
+ol,
+pre,
+blockquote {
+  margin: 0 0 1rem;
+}
+
+ul,
+ol {
+  padding-left: 1.5rem;
+}
+
+li {
+  margin: 0 0 0.25rem;
+}
+
+h1 {
+  margin: 0 0 1rem;
+}
+
+h2 {
+  margin: 2rem 0 0.75rem;
+}
+
+h3 {
+  margin: 1.5rem 0 0.5rem;
 }
 
 /* The site's one departure from the app's dense scale: prose at 13px is a readability defect
  * on a page people read rather than scan. */
 .prose {
   max-width: 68ch;
+}
+
+/* Links.
+ *
+ * Tailwind's preflight sets `a { color: inherit; text-decoration: inherit }`, which made every
+ * link on this site byte-identical to the text around it. Accent *and* an underline, because
+ * the project's "never colour alone" rule is about affordances too: a reader who cannot
+ * separate the two hues must still see which words are links. */
+a {
+  color: var(--mk-accent-text);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--mk-accent-border);
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  color: var(--mk-accent-solid-hover);
+  text-decoration-color: currentcolor;
+}
+
+a:active {
+  color: var(--mk-accent-solid-active);
+}
+
+/* Focus is the app's focus ring (`:focus-visible` below), plus a filled backing so the ring has
+ * something to sit against on a dense line of prose. Distinct from hover, which changes only
+ * the hue and the rule. */
+a:focus-visible {
+  color: var(--mk-accent-text);
+  background: var(--mk-accent-bg-subtle);
+  border-radius: var(--site-radius);
+}
+
+/* Off-screen until focused. Never `display: none`, which takes it out of the tab order and so
+ * removes the only thing it is for. */
+.skip {
+  position: absolute;
+  top: -100%;
+  left: 0;
+  z-index: 10;
+  padding: 0.5rem 0.75rem;
+  background: var(--mk-bg-raised);
+  border: 1px solid var(--mk-accent-border);
+  border-radius: var(--site-radius);
+  text-decoration: none;
+}
+
+.skip:focus {
+  top: 0.5rem;
+  left: var(--site-gutter);
+}
+
+/* The top bar. Mark and wordmark left, nav right, one hairline under the whole width. It wraps
+ * at 360px rather than overflowing — the nav is six items and they are allowed a second row. */
+header {
+  background: var(--mk-bg-surface);
+  border-bottom: 1px solid var(--mk-border-subtle);
+}
+
+header .bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  padding-block: 0.75rem;
+}
+
+/* The wordmark is the product's name set in the display face, beside the kit's mark at the size
+ * the mark was drawn to survive. It is not underlined: it is the site's identity, not a link in
+ * a sentence, and it is the one affordance a reader does not have to be taught. */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--mk-text-primary);
+  font-family: var(--site-font-mono);
+  font-weight: 500;
+  font-size: 0.9375rem;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+.brand:hover {
+  color: var(--mk-text-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--mk-border-strong);
+}
+
+.brand img {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+
+header nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  font-size: 0.9375rem;
+}
+
+/* The current page. Its own hue *and* a heavier rule under it, so the reader can tell where
+ * they are without separating two shades of the same colour. */
+header nav a[aria-current='page'] {
+  color: var(--mk-text-primary);
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--mk-accent-solid);
+}
+
+footer {
+  border-top: 1px solid var(--mk-border-subtle);
+}
+
+footer .bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.25rem;
+  padding-block: 1.5rem;
+  color: var(--mk-text-secondary);
+  font-size: 0.875rem;
 }
 
 /* Spec §5.2 — three roles, two families, no third webfont.
@@ -39,7 +224,7 @@ body {
 h1,
 h2,
 .eyebrow {
-  font-family: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  font-family: var(--site-font-mono);
   font-weight: 500;
   letter-spacing: -0.02em;
 }
@@ -64,7 +249,7 @@ h2 {
 table,
 code,
 pre {
-  font-family: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  font-family: var(--site-font-mono);
   font-variant-numeric: tabular-nums;
   font-size: 0.8125rem;
 }
@@ -287,13 +472,7 @@ img {
 .capabilities td .why {
   margin: 0.375rem 0 0;
   font-weight: 400;
-  font-family:
-    'Inter Variable',
-    Inter,
-    -apple-system,
-    'Segoe UI',
-    system-ui,
-    sans-serif;
+  font-family: var(--site-font-sans);
   font-size: 0.8125rem;
   color: inherit;
 }
@@ -343,6 +522,15 @@ img {
   border-top: 1px solid var(--mk-border-subtle);
 }
 
+/* A rule *between* sections. The backend pages and the config page have no hero to open with,
+ * so their first section landed a full-width hairline directly beneath the header's own — two
+ * lines a few pixels apart, separating nothing. The landing page is unaffected: its first child
+ * is the hero, which never carries `.section`. */
+main > .section:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
 .section h2 {
   margin: 0 0 0.75rem;
 }
@@ -351,7 +539,7 @@ img {
  * with its own chrome reads as floating without one. The caption says something the alt text
  * does not: what to notice, not what is pictured. */
 figure {
-  margin: 1.5rem 0 0;
+  margin: 1.5rem 0;
 }
 
 figure img {
@@ -368,9 +556,10 @@ figcaption {
   font-size: 0.875rem;
 }
 
-/* The install command. A single line, so it gets the code chrome without a scroll box. */
+/* The install command. Short lines, so it gets the code chrome without a scroll box. A backend
+ * that has to be started before Mock Knight can read it shows two lines in one block. */
 .section pre {
-  margin: 0;
+  margin: 0 0 0.75rem;
   padding: 0.75rem 1rem;
   background: var(--mk-code-bg);
   border: 1px solid var(--mk-border-default);

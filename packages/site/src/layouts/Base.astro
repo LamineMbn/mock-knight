@@ -14,6 +14,18 @@ const ogImage = new URL(asset('/images/corpus.png'), Astro.site).toString()
 const favicon = asset('/brand/mock-knight-mark-mono.svg')
 
 /**
+ * The top bar's mark, straight from `mock-knight-logo-kit/` via `public/brand/` — never a
+ * redraw, an emoji or an icon-font glyph. The application swaps the mark with the theme, so a
+ * `<picture>` with a `prefers-color-scheme: dark` source does the same here rather than
+ * filtering the colour variant. `alt` is empty because the wordmark beside it already names
+ * the link, and a second name would make the link read its own title twice.
+ *
+ * `asset()`, not `href()`: `href()` appends the trailing slash a route needs, which 404s a file.
+ */
+const mark = asset('/brand/mock-knight-mark.svg')
+const markDark = asset('/brand/mock-knight-mark-dark.svg')
+
+/**
  * schema.org SoftwareApplication. This is what lets a result carry an application category and
  * a price rather than reading as an ordinary article, and "free" is a fact worth stating in the
  * markup as well as the copy.
@@ -53,22 +65,32 @@ const jsonLd = {
   <body>
     <a class="skip" href="#main">Skip to content</a>
     <header>
-      <a href={href('/')}>mock-knight</a>
-      <nav aria-label="Backends and reference">
-        {
-          ROUTES.filter((entry) => entry.nav !== null).map((entry) => (
-            <a href={href(entry.path)} aria-current={entry.path === path ? 'page' : undefined}>
-              {entry.nav}
-            </a>
-          ))
-        }
-      </nav>
+      <div class="bar container">
+        <a class="brand" href={href('/')}>
+          <picture>
+            <source srcset={markDark} media="(prefers-color-scheme: dark)" />
+            <img src={mark} alt="" width="22" height="22" />
+          </picture>
+          <span>mock-knight</span>
+        </a>
+        <nav aria-label="Backends and reference">
+          {
+            ROUTES.filter((entry) => entry.nav !== null).map((entry) => (
+              <a href={href(entry.path)} aria-current={entry.path === path ? 'page' : undefined}>
+                {entry.nav}
+              </a>
+            ))
+          }
+        </nav>
+      </div>
     </header>
-    <main id="main"><slot /></main>
+    <main id="main" class="container"><slot /></main>
     <footer>
-      <a href="https://github.com/LamineMbn/mock-knight">GitHub</a>
-      <a href="https://www.npmjs.com/package/mock-knight">npm</a>
-      <span>Apache-2.0</span>
+      <div class="bar container">
+        <a href="https://github.com/LamineMbn/mock-knight">GitHub</a>
+        <a href="https://www.npmjs.com/package/mock-knight">npm</a>
+        <span>Apache-2.0</span>
+      </div>
     </footer>
   </body>
 </html>
