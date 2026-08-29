@@ -413,8 +413,9 @@ img {
 }
 
 /* The capability matrix (backends.ts → CapabilityMatrix.astro): the site's organising device,
- * so it gets the same treatment as the hero's explainer — passes quiet, failures carry a
- * reason and are the only ones that earn a filled cell. Colour never carries the meaning
+ * so it gets the same treatment as the hero's explainer — an unconditional pass stays quiet;
+ * a failure or a conditional pass carries a reason and is the only kind that earns a filled
+ * cell, each in its own tone so neither reads as the other. Colour never carries the meaning
  * alone: every cell also has the glyph and the word. */
 .capabilities {
   width: 100%;
@@ -466,6 +467,16 @@ img {
   background: var(--mk-danger-bg);
   color: var(--mk-danger-text);
   border-bottom-color: var(--mk-danger-border);
+  font-weight: 600;
+}
+
+/* Present, but only once the reader has done something the default path does not — a warning
+ * tone, not the plain success green, so the cell itself disagrees with a plain "Yes" and not
+ * only the prose note beneath it. */
+.capabilities td[data-state='conditional'] {
+  background: var(--mk-warning-bg);
+  color: var(--mk-warning-text);
+  border-bottom-color: var(--mk-warning-border);
   font-weight: 600;
 }
 

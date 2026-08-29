@@ -2,14 +2,19 @@ import { expect, test } from '@playwright/test'
 import { BACKENDS } from '../src/lib/backends.js'
 
 for (const backend of BACKENDS) {
-  test(`${backend.slug} page states every capability it lacks`, async ({ page }) => {
+  test(`${backend.slug} page states every capability it lacks, or grants only conditionally`, async ({
+    page,
+  }) => {
     await page.goto(`./${backend.slug}/`)
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(backend.h1)
 
     for (const capability of backend.capabilities) {
-      if (capability.state === 'off') {
-        // The reason must be on the page, not just in the data.
-        await expect(page.getByText(capability.note!, { exact: false })).toBeVisible()
+      // A note exists for `off` (why not) and for `on` with `onIf` (why only conditionally) —
+      // either way, the reason must be on the page, not just in the data. Checking `off` alone
+      // let a capability that is on but conditional (Mockoon's traffic log) render its "Yes"
+      // with the reason silently missing from the page.
+      if (capability.note !== null) {
+        await expect(page.getByText(capability.note, { exact: false })).toBeVisible()
       }
     }
   })
@@ -47,4 +52,19 @@ test('the Mockoon page does not pretend Mockoon has no UI', async ({ page }) => 
 test('the Prism page says read-only above the fold', async ({ page }) => {
   await page.goto('./prism/')
   await expect(page.getByText('Read-only', { exact: false })).toBeVisible()
+})
+
+/**
+ * Mockoon's traffic log is `onIf`, not `on`: present only once the admin API token is
+ * configured. Rendering it identically to an unconditional yes — same state, same glyph, same
+ * "Yes" — left only the prose note disagreeing, and the note inherited the same success green
+ * regardless. The cell itself has to disagree, not just the paragraph below it.
+ */
+test('the Mockoon traffic-log cell reads as conditional, not a plain yes', async ({ page }) => {
+  await page.goto('./mockoon/')
+  const row = page.locator('tr', { has: page.getByRole('rowheader', { name: 'Traffic log' }) })
+  const cell = row.locator('td')
+  await expect(cell).toHaveAttribute('data-state', 'conditional')
+  await expect(cell).toContainText('Yes, with setup')
+  await expect(cell).not.toHaveAttribute('data-state', 'on')
 })

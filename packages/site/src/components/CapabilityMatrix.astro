@@ -7,8 +7,15 @@
  * `only` renders one backend's column (a backend page showing just itself); omitted, it shows
  * all four side by side (the comparison view). Either way every row states its reason when off
  * — colour is never the only signal, so the page still reads correctly in black and white.
+ *
+ * A capability can also be *on* but conditional (`backends.ts`'s `onIf` — Mockoon's traffic log,
+ * present only once the admin API token is configured). Rendering that identically to an
+ * unconditional yes — same green, same glyph, same "Yes" — left only the prose note disagreeing,
+ * which inherited the same colour anyway. `conditional` is a third `data-state`, with its own
+ * glyph and label, so the default path's reader is never shown a plain "Yes" for something they
+ * have not yet done.
  */
-import { BACKENDS, CAPABILITY_ORDER } from '../lib/backends.js'
+import { BACKENDS, CAPABILITY_ORDER, type Capability } from '../lib/backends.js'
 import { href } from '../lib/href.js'
 
 interface Props {
@@ -18,10 +25,34 @@ interface Props {
 
 const { only } = Astro.props
 const shown = only === undefined ? BACKENDS : BACKENDS.filter((b) => b.slug === only)
+
+/** `on` with a note is present, but only once the reader has done something the default path
+ *  does not — that is not the same claim as an unconditional `on`, so it gets its own state. */
+function stateOf(capability: Capability): 'on' | 'off' | 'conditional' {
+  if (capability.state === 'off') return 'off'
+  return capability.note !== null ? 'conditional' : 'on'
+}
+
+function glyphOf(capability: Capability): string {
+  const state = stateOf(capability)
+  if (state === 'off') return '✗'
+  if (state === 'conditional') return '~'
+  return '✓'
+}
+
+function labelOf(capability: Capability): string {
+  const state = stateOf(capability)
+  if (state === 'off') return 'No'
+  if (state === 'conditional') return 'Yes, with setup'
+  return 'Yes'
+}
 ---
 
 <table class="capabilities">
-  <caption>What each backend can answer. A capability that is off says why.</caption>
+  <caption
+    >What each backend can answer. A capability that is off says why. So does one that is on only
+    with setup.</caption
+  >
   <thead>
     <tr>
       <th scope="col">Capability</th>
@@ -42,9 +73,9 @@ const shown = only === undefined ? BACKENDS : BACKENDS.filter((b) => b.slug === 
           {shown.map((backend) => {
             const capability = backend.capabilities[index]!
             return (
-              <td data-state={capability.state}>
-                <span aria-hidden="true">{capability.state === 'on' ? '✓' : '✗'}</span>
-                <span>{capability.state === 'on' ? 'Yes' : 'No'}</span>
+              <td data-state={stateOf(capability)}>
+                <span aria-hidden="true">{glyphOf(capability)}</span>
+                <span>{labelOf(capability)}</span>
                 {capability.note !== null && <p class="why">{capability.note}</p>}
               </td>
             )
