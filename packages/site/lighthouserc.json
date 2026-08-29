@@ -1,0 +1,18 @@
+{
+  "ci": {
+    "collect": {
+      "startServerCommand": "pnpm --filter @mock-knight/site preview --port 4322 --host 127.0.0.1",
+      "startServerReadyPattern": "Local.*http://127.0.0.1:4322",
+      "url": ["http://127.0.0.1:4322/mock-knight/"],
+      "settings": { "preset": "desktop" },
+      "numberOfRuns": 3
+    },
+    "assert": {
+      "assertions": {
+        "categories:seo": ["error", { "minScore": 1 }],
+        "categories:performance": ["error", { "minScore": 0.95 }],
+        "categories:accessibility": ["error", { "minScore": 1 }]
+      }
+    }
+  }
+}

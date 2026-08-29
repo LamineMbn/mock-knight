@@ -61,6 +61,15 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
 
+      # A broken site should fail a pull request, not fail after merge on a workflow nobody is
+      # watching.
+      - run: pnpm build:site
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - run: pnpm test:site
+
   perf:
     name: Perf budgets
     runs-on: ubuntu-latest
@@ -293,3 +302,37 @@ jobs:
           curl -fsS http://127.0.0.1:7911/ | grep -q '<!doctype html' \
             || { echo '::error::The installed package served no SPA.'; cat run.log; exit 1; }
           echo 'The installed tarball serves the SPA.'
+
+  site-budget:
+    name: Site performance and SEO budget
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - name: Does this change touch the site?
+        id: touched
+        run: |
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD \
+             | grep -qE '^(packages/site/|docs/images/|docs/faq\.md|design/|packages/web/src/styles/tokens\.css|schema/)'; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+            echo 'No site paths touched; skipping the budget.'
+          fi
+      - uses: pnpm/action-setup@v5
+        if: steps.touched.outputs.run == 'true'
+      - uses: actions/setup-node@v5
+        if: steps.touched.outputs.run == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: steps.touched.outputs.run == 'true'
+      - run: pnpm build:site
+        if: steps.touched.outputs.run == 'true'
+      # Run from the repo root, not packages/site: startServerCommand below needs the workspace
+      # root to resolve `pnpm --filter`, and the config path is already relative to the root.
+      - name: Lighthouse budget
+        if: steps.touched.outputs.run == 'true'
+        run: pnpm dlx @lhci/cli@0.14.x autorun --config packages/site/lighthouserc.json

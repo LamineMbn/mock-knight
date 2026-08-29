@@ -1,0 +1,52 @@
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/site/**'
+      - 'docs/images/**'
+      - 'docs/faq.md'
+      - 'design/**'
+      # The palette the site renders from is generated into the *web* package. A token change
+      # that never touches design/ would otherwise leave the site on the old colours.
+      - 'packages/web/src/styles/tokens.css'
+      - 'schema/mock-knight.schema.json'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# One deploy at a time, and never cancel one midway: a half-published site is worse than a slow
+# one. In-progress runs are left alone rather than cancelled, matching release.yml.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
