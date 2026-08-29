@@ -347,3 +347,19 @@ figcaption {
   padding: 0;
   background: none;
 }
+
+/* The backend pages' honesty note (Mockoon's own desktop app, Prism's read-only corpus): stated
+ * above the fold, before any capability is claimed. Warning tokens, not danger — this is a
+ * disclosure, not a failure. */
+.caveat {
+  margin: 1rem 0 0;
+  padding: 0.875rem 1rem;
+  background: var(--mk-warning-bg);
+  border: 1px solid var(--mk-warning-border);
+  border-radius: 0.375rem;
+  color: var(--mk-warning-text);
+}
+
+.caveat p {
+  margin: 0;
+}

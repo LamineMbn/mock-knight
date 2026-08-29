@@ -1,0 +1,66 @@
+---
+/**
+ * One template, four pages. `backends.ts` already holds every backend's lede, caveat and
+ * capability notes — copied from README.md, which is checked against the adapter conformance
+ * suite — so this file renders that data rather than restating it.
+ */
+import CapabilityMatrix from '../components/CapabilityMatrix.astro'
+import Screenshot from '../components/Screenshot.astro'
+import Base from '../layouts/Base.astro'
+import { BACKENDS, backendFor } from '../lib/backends.js'
+import { href } from '../lib/href.js'
+
+export function getStaticPaths() {
+  return BACKENDS.map((backend) => ({ params: { backend: backend.slug } }))
+}
+
+const { backend: slug } = Astro.params
+const backend = backendFor(slug!)
+---
+
+<Base path={`/${backend.slug}/`}>
+  <section class="section">
+    <h1>{backend.h1}</h1>
+    <p class="prose">{backend.lede}</p>
+
+    {
+      backend.caveat !== null && (
+        <aside class="caveat">
+          <p>{backend.caveat}</p>
+        </aside>
+      )
+    }
+
+    <pre><code>npx mock-knight --url http://localhost:8080 --adapter {backend.slug}</code></pre>
+  </section>
+
+  <section class="section">
+    <h2>What works with {backend.name}</h2>
+    <CapabilityMatrix only={backend.slug} />
+  </section>
+
+  <section class="section">
+    <Screenshot
+      name="corpus"
+      alt={`Mock Knight's corpus screen: a searchable list of ${backend.name} stubs with a folder tree, faceted filters for method and status, header and priority columns, and a detail pane for the selected stub`}
+      caption={`The corpus screen, connected to ${backend.name}.`}
+      width={2880}
+      height={1760}
+    />
+
+    {
+      backend.external !== null && (
+        <p class="prose">
+          Mock Knight is not a mock server and never serves mock traffic. It connects to the{' '}
+          <a href={backend.external.url}>{backend.external.label}</a> you already run. Stop it and
+          your mocks behave exactly as before.
+        </p>
+      )
+    }
+
+    <p class="prose">
+      <a href={href('/config/')}>Configuration reference</a> ·{' '}
+      <a href={href('/faq/')}>Questions</a>
+    </p>
+  </section>
+</Base>
