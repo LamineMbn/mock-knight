@@ -218,3 +218,74 @@ img {
   color: var(--mk-success-text);
   border: 1px solid var(--mk-success-border);
 }
+
+/* The capability matrix (backends.ts → CapabilityMatrix.astro): the site's organising device,
+ * so it gets the same treatment as the hero's explainer — passes quiet, failures carry a
+ * reason and are the only ones that earn a filled cell. Colour never carries the meaning
+ * alone: every cell also has the glyph and the word. */
+.capabilities {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--mk-bg-surface);
+  border: 1px solid var(--mk-border-default);
+  border-radius: 0.5rem;
+}
+
+.capabilities caption {
+  caption-side: top;
+  text-align: left;
+  padding: 0 0 0.75rem;
+  color: var(--mk-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.capabilities th,
+.capabilities td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--mk-border-subtle);
+}
+
+.capabilities thead th {
+  background: var(--mk-bg-subtle);
+  border-bottom: 1px solid var(--mk-border-default);
+}
+
+.capabilities thead th a {
+  color: var(--mk-accent-text);
+}
+
+.capabilities tbody th {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.capabilities td span:first-child {
+  margin-right: 0.375rem;
+}
+
+.capabilities td[data-state='on'] {
+  color: var(--mk-success-text);
+}
+
+.capabilities td[data-state='off'] {
+  background: var(--mk-danger-bg);
+  color: var(--mk-danger-text);
+  border-bottom-color: var(--mk-danger-border);
+  font-weight: 600;
+}
+
+.capabilities td .why {
+  margin: 0.375rem 0 0;
+  font-weight: 400;
+  font-family:
+    'Inter Variable',
+    Inter,
+    -apple-system,
+    'Segoe UI',
+    system-ui,
+    sans-serif;
+  font-size: 0.8125rem;
+  color: inherit;
+}

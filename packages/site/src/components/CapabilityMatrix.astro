@@ -1,0 +1,52 @@
+---
+/**
+ * The site's organising device: which backend can answer which question, and why not when it
+ * can't. One job — render the data in `backends.ts` as a table. It does not decide what the
+ * capabilities are; `backends.ts` and its test own that.
+ *
+ * `only` renders one backend's column (a backend page showing just itself); omitted, it shows
+ * all four side by side (the comparison view). Either way every row states its reason when off
+ * — colour is never the only signal, so the page still reads correctly in black and white.
+ */
+import { BACKENDS, CAPABILITY_ORDER } from '../lib/backends.js'
+import { href } from '../lib/href.js'
+
+interface Props {
+  /** One backend's column, or every backend side by side. */
+  only?: string
+}
+
+const { only } = Astro.props
+const shown = only === undefined ? BACKENDS : BACKENDS.filter((b) => b.slug === only)
+---
+
+<table class="capabilities">
+  <caption>What each backend can answer. A capability that is off says why.</caption>
+  <thead>
+    <tr>
+      <th scope="col">Capability</th>
+      {shown.map((backend) => (
+        <th scope="col"><a href={href(`/${backend.slug}/`)}>{backend.name}</a></th>
+      ))}
+    </tr>
+  </thead>
+  <tbody>
+    {
+      CAPABILITY_ORDER.map((label, index) => (
+        <tr>
+          <th scope="row">{label}</th>
+          {shown.map((backend) => {
+            const capability = backend.capabilities[index]!
+            return (
+              <td data-state={capability.state}>
+                <span aria-hidden="true">{capability.state === 'on' ? '✓' : '✗'}</span>
+                <span>{capability.state === 'on' ? 'Yes' : 'No'}</span>
+                {capability.note !== null && <p class="why">{capability.note}</p>}
+              </td>
+            )
+          })}
+        </tr>
+      ))
+    }
+  </tbody>
+</table>
