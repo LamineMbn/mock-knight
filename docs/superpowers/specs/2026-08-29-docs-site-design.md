@@ -291,6 +291,25 @@ examples, the `${env:VAR}` rules — is hand-written around the generated table.
 The result: a field cannot be added to the config without appearing on the site, and the site
 cannot document a field the program does not accept.
 
+### 7.1 The FAQ has one source
+
+The FAQ is the highest-intent content on either surface and both need it, so it is written once
+in `docs/faq.md` and injected rather than copied.
+
+- **README** — `pnpm faq` rewrites the block between `<!-- faq:start -->` and `<!-- faq:end -->`.
+- **Site** — `faq.astro` imports the same file.
+
+`ci.yml` runs `pnpm faq` and then `git diff --exit-code -- README.md`, failing with the same
+message shape as the existing staleness checks. This is the third instance of a pattern the
+repository already uses twice — `tokens.css` and `schema/mock-knight.schema.json` — so it costs a
+script and a CI step rather than a new idea.
+
+**Heading levels differ between the two surfaces**, which is the detail that makes a naive
+injector produce a broken document. The source writes each question as `##`. The README injector
+demotes them to `###`, because in the README they sit beneath a `## FAQ` heading. The site renders
+them unchanged as `<h2>` beneath the page's own `<h1>`. Both are correct outlines; neither is the
+source's literal level.
+
 **Not extended to the capability matrix.** Adapter capabilities are resolved at runtime after
 probing a live server, so there is no static artefact to generate from. The matrices are
 hand-written and their correctness rests on review, which is stated here rather than left as an
@@ -305,9 +324,9 @@ assumption.
 | Install, quick start, options | README | Site restates the quick start only; deep options link to the README |
 | Configuration reference | Site (generated, §7) | README keeps its short example and links onward |
 | Per-backend detail | Site | README's backend table becomes a summary with links |
-| FAQ | Both | Deliberate duplication: it is short, it is the highest-intent content, and both surfaces need it. Reviewed together or not at all |
+| FAQ | `docs/faq.md`, injected into both (§7.1) | One source, two renderings. CI fails if the README's copy is stale |
 
-The README stays a complete document. Someone who reaches the repository and never visits the site
+The README stays a complete document — it carries the full FAQ text, not a link to it. Someone who reaches the repository and never visits the site
 must still be able to install and use the tool — a README that is a stub pointing elsewhere is a
 worse artefact than the one that exists today.
 
@@ -322,7 +341,8 @@ worse artefact than the one that exists today.
 | The hero works with it | A Playwright spec selecting `acme` and asserting the verdict flips to matched, and that the live region announced |
 | No page ships without title, description, canonical, OG | A test over `dist/**/*.html` asserting all four on every page, and that no two pages share a title |
 | Config page matches the program | Already guaranteed by §7 plus CI's existing schema staleness check |
-| Performance and SEO | Lighthouse CI on the landing page, mobile profile, budget SEO 100 / Performance ≥ 95 |
+| The README's FAQ is not stale | `pnpm faq` then `git diff --exit-code -- README.md`, in `check` (§7.1) |
+| Performance and SEO | Lighthouse CI on the landing page, mobile profile, budget SEO 100 / Performance ≥ 95. Its own job, gated on the same paths as the deploy (§6.5), so a pull request touching only `core` or an adapter does not pay for it |
 | Accessibility | `axe` over each built page in the same Playwright run |
 
 **Where these live.** `playwright.config.ts` at the root is tier 4 — it points at
@@ -349,7 +369,7 @@ Per the convention in `TECH-DESIGN.md` §5, each is argued rather than assumed. 
 | `prettier-plugin-astro` | Without it, `.astro` files must be added to `.prettierignore` and the format gate silently stops covering the newest code in the repository |
 | `@tailwindcss/vite` | Already in the repository. `tokens.css` is a Tailwind 4 `@theme static` block; consuming it any other way means a second copy of the palette |
 | `@fontsource-variable/inter`, `@fontsource-variable/jetbrains-mono` | The two families the app already uses, self-hosted. Not workspace imports — the site declares them itself, which keeps it importing nothing from the workspace (§6.1). The alternative, a Google Fonts `<link>`, adds a third-party connection on the critical path and is a measurable performance cost on the one page that has to be fast |
-| `@lhci/cli` *(CI only)* | The performance and SEO budget in §9. Could be dropped if the budget is judged not worth a dependency |
+| `@lhci/cli` *(CI only)* | The performance and SEO budget in §9, in a path-gated job. The landing page's speed is itself a ranking factor, so the budget guards the reason the site exists; gating it means unrelated pull requests do not pay for that |
 
 No runtime dependency is added to anything a user installs. `mock-knight`'s published
 `dependencies` are unchanged.
@@ -365,10 +385,17 @@ i18n · a custom domain · analytics.
 
 ---
 
-## 12. Open questions
+## 12. Decisions closed after review
 
-1. **Lighthouse CI** adds a dependency and roughly a minute to `check`. Keep it, or assert the
-   budget by hand at review time?
-2. **The FAQ is duplicated** between README and site by decision, not accident. If that proves
-   annoying to maintain, the fallback is to generate both from one markdown file — deferred
-   because the machinery costs more than the duplication until it actually drifts.
+Both questions this document opened were answered on 2026-08-29 and are folded into the sections
+above. Recorded here so the reasoning is not lost.
+
+1. **Lighthouse CI stays**, in its own job gated on the site's paths (§6.5, §9). Rejected:
+   running it on every `check` (taxes every unrelated pull request) and dropping it (a budget
+   nobody enforces is a budget that degrades silently).
+2. **The FAQ is generated from one source** (§7.1) rather than duplicated. The machinery is a
+   script and a CI step, and the repository already runs this exact pattern for the token CSS and
+   the JSON Schema — so it is a third instance rather than a new mechanism.
+
+No open questions remain. Anything discovered during implementation that contradicts this
+document should amend it rather than be absorbed silently.
