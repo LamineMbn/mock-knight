@@ -52,6 +52,11 @@ jobs:
           git diff --exit-code -- schema/mock-knight.schema.json \
             || { echo '::error::schema/mock-knight.schema.json is stale. Run `pnpm schema` and commit it.'; exit 1; }
 
+      # docs/faq.md is the source; README.md holds a generated copy of it. Same pattern as the
+      # token CSS and the JSON Schema above.
+      - name: The README's FAQ is up to date
+        run: node scripts/faq.mjs --check
+
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test

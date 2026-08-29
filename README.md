@@ -259,6 +259,8 @@ machine you control.
 
 ## FAQ
 
+<!-- faq:start -->
+
 ### Does WireMock have a UI?
 
 Not in the open-source distribution. WireMock ships an admin REST API — `GET /__admin/mappings`
@@ -297,7 +299,7 @@ user. Read paths never mutate anything.
 
 ### Does it work with MockServer, Mockoon or Prism?
 
-Yes — see [Supported mock servers](#supported-mock-servers) for exactly what each one can and
+Yes — see [Supported mock servers](https://github.com/LamineMbn/mock-knight#supported-mock-servers) for exactly what each one can and
 can't do. Where a backend cannot answer a question (MockServer records no attribution for a
 served request, so there is no traffic log), the screen is absent rather than empty or wrong.
 
@@ -310,6 +312,8 @@ newer is the only requirement.
 
 No, and it never serves mock traffic. Stop Mock Knight and your mocks behave exactly as they did
 before you started it.
+
+<!-- faq:end -->
 
 ## Contributing
 

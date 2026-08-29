@@ -14,6 +14,7 @@
     "format": "prettier --write .",
     "tokens": "python3 design/design-tokens.py",
     "tokens:css": "python3 design/design-tokens.py --css > packages/web/src/styles/tokens.css",
+    "faq": "node scripts/faq.mjs",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "dev:server": "pnpm --filter mock-knight dev",
