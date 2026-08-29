@@ -1,0 +1,110 @@
+---
+/**
+ * The product's whole loop, in five seconds, with nothing installed.
+ *
+ * Rendered server-side in the state that explains the product — unmatched — so it is meaningful
+ * before, and without, the script. The script is progressive enhancement and roughly forty lines
+ * of it; nothing else on this site ships any.
+ *
+ * The shape is the real explainer's: candidates ranked, then a field-by-field comparison with
+ * the passes quiet and the failures loud (design brief §2.3).
+ *
+ * Accessible-name ruling: `aria-labelledby` beats a co-present `aria-label` on the same element,
+ * so the two names cannot share a node. The outer <section> keeps `aria-labelledby="hero-heading"`
+ * (the page's <h1>). The explainer — table, tenant picker, verdict — is its own <section> named
+ * "Why a request did not match", which is the node every test below targets.
+ */
+const TENANTS = ['acme', 'globex', 'umbrella', 'initech'] as const
+/** Tenants a stub exists for. `initech` is not one, which is the point. */
+const STUBBED = ['acme', 'globex', 'umbrella'] as const
+const INITIAL = 'initech'
+
+const closest = STUBBED[0]
+const rows = [
+  { field: 'method', expected: 'POST', actual: 'POST', id: 'method' },
+  { field: 'url', expected: '/payments/v2/charges', actual: '/payments/v2/charges', id: 'url' },
+  { field: 'headers.X-Tenant', expected: closest, actual: INITIAL, id: 'header' },
+]
+---
+
+<section aria-labelledby="hero-heading" class="hero">
+  <div class="thesis">
+    <h1 id="hero-heading">A web UI for WireMock</h1>
+    <p>Your mock server returned 404 and will not say why. This says why.</p>
+    <code>npx mock-knight --url http://localhost:8080</code>
+  </div>
+
+  <section aria-label="Why a request did not match" class="explainer" data-stubbed={STUBBED.join(',')} data-closest={closest}>
+    <p class="request">
+      <span class="method">POST</span> <span class="path">/payments/v2/charges</span>
+    </p>
+    <p class="tenant-picker">
+      <label for="tenant">X-Tenant</label>
+      <select id="tenant" name="tenant">
+        {TENANTS.map((tenant) => <option value={tenant} selected={tenant === INITIAL}>{tenant}</option>)}
+      </select>
+    </p>
+
+    <table>
+      <thead>
+        <tr><th scope="col">Field</th><th scope="col">Expected</th><th scope="col">Actual</th><th scope="col">Result</th></tr>
+      </thead>
+      <tbody>
+        {
+          rows.map((row) => (
+            <tr data-testid={`row-${row.id}`} data-state={row.expected === row.actual ? 'pass' : 'fail'}>
+              <td>{row.field}</td>
+              <td>{row.expected}</td>
+              <td data-cell={row.id === 'header' ? 'actual-tenant' : undefined}>{row.actual}</td>
+              <td class="result">
+                <span aria-hidden="true">{row.expected === row.actual ? '✓' : '✗'}</span>
+                <span>{row.expected === row.actual ? 'matched' : 'failed'}</span>
+              </td>
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+
+    <p data-testid="verdict" aria-live="polite" data-state="fail" class="verdict">
+      ✗ 1 of 3 predicates failed
+    </p>
+  </section>
+</section>
+
+<script>
+  /**
+   * Forty lines, no framework, no hydration. It reads the same data attributes the server
+   * rendered from, so the two can never disagree about which tenants have stubs.
+   */
+  const explainer = document.querySelector<HTMLElement>('.explainer')
+  const select = document.querySelector<HTMLSelectElement>('#tenant')
+  const headerRow = document.querySelector<HTMLElement>('[data-testid="row-header"]')
+  const verdict = document.querySelector<HTMLElement>('[data-testid="verdict"]')
+
+  if (explainer && select && headerRow && verdict) {
+    const stubbed = (explainer.dataset.stubbed ?? '').split(',')
+    const closest = explainer.dataset.closest ?? ''
+    const expectedCell = headerRow.children[1] as HTMLElement
+    const actualCell = headerRow.querySelector<HTMLElement>('[data-cell="actual-tenant"]')
+    const resultCell = headerRow.children[3] as HTMLElement
+
+    select.addEventListener('change', () => {
+      const tenant = select.value
+      const matched = stubbed.includes(tenant)
+      // When it matches, the stub being explained *is* that tenant's. When nothing matches, the
+      // explainer falls back to the closest — which is what the application does.
+      const expected = matched ? tenant : closest
+
+      expectedCell.textContent = expected
+      if (actualCell) actualCell.textContent = tenant
+      headerRow.dataset.state = matched ? 'pass' : 'fail'
+      resultCell.innerHTML = matched
+        ? '<span aria-hidden="true">✓</span><span>matched</span>'
+        : '<span aria-hidden="true">✗</span><span>failed</span>'
+
+      verdict.dataset.state = matched ? 'pass' : 'fail'
+      verdict.textContent = matched ? '✓ matched — 3 of 3 predicates' : '✗ 1 of 3 predicates failed'
+    })
+  }
+</script>
