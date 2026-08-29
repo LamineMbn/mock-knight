@@ -6,7 +6,7 @@
   "scripts": {
     "prepare-assets": "node scripts/prepare-assets.mjs",
     "dev": "pnpm prepare-assets && astro dev",
-    "build": "pnpm prepare-assets && astro build",
+    "build": "pnpm prepare-assets && astro build && node scripts/check-links.mjs",
     "preview": "astro preview",
     "typecheck": "pnpm prepare-assets && astro check"
   },
