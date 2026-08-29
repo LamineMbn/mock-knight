@@ -7,10 +7,12 @@ import type { Database as Db } from 'better-sqlite3'
 /**
  * The profile store.
  *
- * A profile never holds a secret — only the **name** of the environment variable a secret
- * lives in (`authRef`). The resolved value exists in the server process for the lifetime of a
- * request and nowhere else: not in the database, not in a log line, not in a URL, and not in
- * anything sent to the browser (PRD §12, TECH-DESIGN §13).
+ * A profile holds the credential itself, `authSecret`, entered once through the UI or a config
+ * file — not the *name* of an environment variable (`authRef`, removed in 0.7.0, commit
+ * a6a64ac). It is held in the server process for the lifetime of a request; written to the
+ * state database in plain text only when the caller opts to remember it (the "remember" box on
+ * the form, `rememberSecret` at the HTTP boundary — see `app.ts`); and never sent to the
+ * browser, a log line, or a URL (PRD §12, TECH-DESIGN §13).
  */
 
 export const PROFILE_COLOURS = ['slate', 'indigo', 'cyan', 'violet', 'rose', 'olive'] as const
@@ -108,8 +110,8 @@ export const profileInputSchema = z.object({
     .array(z.string())
     .default([])
     .describe(
-      'Header names to redact before a request journal entry is stored, so a secret carried ' +
-        'in a header never lands in the mirror.',
+      'Header names replaced with a placeholder in the structured request record shown on ' +
+        'the Traffic screen before a journal entry is stored.',
     ),
 })
 export type ProfileInput = z.infer<typeof profileInputSchema>

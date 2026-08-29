@@ -165,7 +165,7 @@
           },
           "redactHeaders": {
             "default": [],
-            "description": "Header names to redact before a request journal entry is stored, so a secret carried in a header never lands in the mirror.",
+            "description": "Header names replaced with a placeholder in the structured request record shown on the Traffic screen before a journal entry is stored.",
             "type": "array",
             "items": {
               "type": "string"

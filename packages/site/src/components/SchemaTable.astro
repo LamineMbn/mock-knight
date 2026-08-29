@@ -4,9 +4,16 @@
  * description. Copied in at build time by `prepare-assets.mjs` (invariant 1 — this package
  * imports nothing from `@mock-knight/server`, and the schema is generated there).
  *
- * `at` is a dotted path into the schema, or omitted for the document root. `profiles` is a
- * JSON Schema array, so its field descriptions live under `items.properties` rather than
- * `properties` directly — the reducer below falls through to `.items` for exactly that case.
+ * `at` is a dotted path into the schema, or omitted for the document root. A JSON Schema array
+ * (`profiles`, and any array nested under it) puts its element's `properties` under `items`
+ * rather than on the array node itself — the array node's own `properties` is empty or absent.
+ * `unwrapArray` follows `.items` until it reaches the actual object schema, and every step of
+ * the path (not just the final one) goes through it before its `properties` are indexed, so a
+ * deeper path like `profiles.something` descends past an array at any level, not only the last.
+ * Skipping that hop for the *final* resolved node — falling through to `.items` only when a key
+ * lookup misses — is exactly the bug this component shipped with: `at="profiles"` resolved to
+ * the array node itself, whose `properties` is empty, so the table rendered a header with no
+ * rows.
  */
 import schema from '../generated/mock-knight.schema.json'
 
@@ -17,6 +24,8 @@ interface JsonSchemaNode {
   properties?: Record<string, JsonSchemaNode>
   items?: JsonSchemaNode
   required?: string[]
+  anyOf?: JsonSchemaNode[]
+  oneOf?: JsonSchemaNode[]
 }
 
 interface Props {
@@ -26,19 +35,42 @@ interface Props {
 
 const { at } = Astro.props
 const root = schema as unknown as JsonSchemaNode
+
+/** Follow `.items` until the node is no longer an array wrapper, so its `properties` is real. */
+function unwrapArray(node: JsonSchemaNode): JsonSchemaNode {
+  let current = node
+  while (current.items !== undefined) current = current.items
+  return current
+}
+
 const node =
   at === undefined
     ? root
     : at.split('.').reduce<JsonSchemaNode>((current, key) => {
-        const next = current.properties?.[key] ?? current.items
+        const next = unwrapArray(current).properties?.[key]
         if (next === undefined) throw new Error(`No "${key}" in the schema at "${at}".`)
         return next
       }, root)
+const resolved = unwrapArray(node)
 
-const fields = Object.entries(node.properties ?? {})
-const required = new Set(node.required ?? [])
-const typeOf = (field: JsonSchemaNode): string =>
-  Array.isArray(field.type) ? field.type.join(' | ') : (field.type ?? 'any')
+const fields = Object.entries(resolved.properties ?? {})
+const required = new Set(resolved.required ?? [])
+
+/**
+ * A nullable field (`adminPath`, `authSecret`, …) compiles to `anyOf: [{type: 'string'}, {type:
+ * 'null'}]` rather than a plain `type`, because zod's `.nullable()` has no single-`type` JSON
+ * Schema equivalent. Unwrapping it into `string | null` is what makes the column honest — the
+ * unwrapped-away version rendered `any`, which tells a reader the field accepts arbitrary JSON
+ * (an object, a number, an array) rather than a tightly constrained nullable string. `'any'`
+ * stays only as the genuine last resort, for a branch this generator does not otherwise emit.
+ */
+const typeOf = (field: JsonSchemaNode): string => {
+  if (field.type !== undefined)
+    return Array.isArray(field.type) ? field.type.join(' | ') : field.type
+  const branches = field.anyOf ?? field.oneOf
+  if (branches !== undefined) return branches.map(typeOf).join(' | ')
+  return 'any'
+}
 ---
 
 <table class="schema">
