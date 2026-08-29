@@ -145,7 +145,7 @@ export const BACKENDS: readonly Backend[] = [
       'Mockoon has its own desktop app, and for local work it is the better tool. This is for the setups it does not cover: an environment file in version control, a mockoon-cli running in CI, or a team that wants one interface across four different mock servers.',
     install: {
       commands: [
-        'mockoon-cli start --data ./env.json --port 3000 --watch',
+        'mockoon-cli start --data ./env.json --port 3000 --watch --admin-api-token <token>',
         'npx mock-knight --url http://localhost:3000 --adapter mockoon',
       ],
       note: 'A Mockoon profile also needs the path to its environment JSON file — the Servers screen asks for it once Mockoon is chosen as the backend, because its admin API cannot read routes. Start Mockoon with --watch and the file is authoritative: edit it and the server follows.',
