@@ -120,6 +120,54 @@ describe('recordServeEvents with redactHeaders', () => {
     expect(storedRow()).not.toContain(SECRET)
   })
 
+  it("keeps the secret out of WireMock's near-miss report, which quotes it in free text", () => {
+    // The unmatched path — the one the match explainer exists for, and the one a developer
+    // debugging a 404 hits most. The value is in a prose diff under no key named `headers`.
+    recordServeEvents(
+      db,
+      'p1',
+      [
+        event({
+          request: {
+            url: '/near-miss-probe',
+            method: 'GET',
+            headers: { Host: 'localhost:18099', 'X-Api-Key': SECRET },
+          },
+          wasMatched: false,
+          subEvents: [
+            {
+              type: 'REQUEST_NOT_MATCHED',
+              data: {
+                status: 404,
+                contentType: 'text/plain',
+                report: `
+                                               Request was not matched
+                                               =======================
+
+-----------------------------------------------------------------------------------------------------------------------
+| Closest stub                                             | Request                                                  |
+-----------------------------------------------------------------------------------------------------------------------
+                                                           |
+redaction near-miss probe                                  |
+                                                           |
+GET                                                        | GET
+[path] /near-miss-probe                                    | /near-miss-probe
+                                                           |
+X-Api-Key: expected-value                                  | X-Api-Key: SECRET123                         <<<<< Header does not match
+                                                           |
+                                                           |
+-----------------------------------------------------------------------------------------------------------------------
+`,
+              },
+            },
+          ],
+        }),
+      ],
+      { redactHeaders: ['x-api-key'] },
+    )
+    expect(storedRow()).not.toContain(SECRET)
+  })
+
   it('stores the payload whole when no header is configured', () => {
     recordServeEvents(db, 'p1', [event({ request: { headers: { 'X-Api-Key': SECRET } } })], {
       redactHeaders: [],

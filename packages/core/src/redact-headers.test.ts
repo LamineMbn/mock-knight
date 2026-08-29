@@ -174,3 +174,125 @@ describe('redactRawHeaders', () => {
     expect(redactRawHeaders({ headers: 'a blob' }, [])).toEqual({ headers: 'a blob' })
   })
 })
+
+/**
+ * WireMock's near-miss diff, captured from 3.13.1 rather than written by hand — its exact
+ * formatting is the thing pass two has to survive. A stub requiring `X-Api-Key: expected-value`
+ * and a request carrying something else puts the request's value in the right-hand column, in
+ * free text, under no key named `headers` at all.
+ */
+const WIREMOCK_NEAR_MISS: JsonObject = {
+  id: '0c0fe5f2-84f4-4a25-9db3-2d4b0aa20a94',
+  request: {
+    url: '/near-miss-probe',
+    method: 'GET',
+    headers: { Host: 'localhost:18099', 'X-Api-Key': 'SECRET-IN-REPORT' },
+    body: '',
+  },
+  wasMatched: false,
+  subEvents: [
+    {
+      type: 'REQUEST_NOT_MATCHED',
+      timeOffsetNanos: 3172333,
+      data: {
+        status: 404,
+        contentType: 'text/plain',
+        report: `
+                                               Request was not matched
+                                               =======================
+
+-----------------------------------------------------------------------------------------------------------------------
+| Closest stub                                             | Request                                                  |
+-----------------------------------------------------------------------------------------------------------------------
+                                                           |
+redaction near-miss probe                                  |
+                                                           |
+GET                                                        | GET
+[path] /near-miss-probe                                    | /near-miss-probe
+                                                           |
+X-Api-Key: expected-value                                  | X-Api-Key: SECRET-IN-REPORT                         <<<<< Header does not match
+                                                           |
+                                                           |
+-----------------------------------------------------------------------------------------------------------------------
+`,
+      },
+    },
+  ],
+}
+
+describe('redactRawHeaders, second pass', () => {
+  it("scrubs the value out of WireMock's near-miss report, where no key is named headers", () => {
+    const safe = redactRawHeaders(WIREMOCK_NEAR_MISS, ['x-api-key'])
+    expect(JSON.stringify(safe)).not.toContain('SECRET-IN-REPORT')
+
+    const subEvents = safe['subEvents'] as JsonObject[]
+    const report = (subEvents[0]!['data'] as JsonObject)['report']
+    expect(report).toContain(REDACTION_MARKER)
+    // The stub's own expectation is not the request's secret and stays legible, which is the
+    // half of the report that explains the mismatch.
+    expect(report).toContain('X-Api-Key: expected-value')
+    expect(report).toContain('Header does not match')
+  })
+
+  it('scrubs the value wherever it appears, not only where a header key led us to it', () => {
+    const safe = redactRawHeaders(
+      {
+        headers: { 'X-Api-Key': 'hunter2' },
+        note: 'the token hunter2 was rejected',
+        trail: ['saw hunter2 twice: hunter2'],
+      },
+      ['x-api-key'],
+    )
+    expect(safe['note']).toBe(`the token ${REDACTION_MARKER} was rejected`)
+    expect(safe['trail']).toEqual([`saw ${REDACTION_MARKER} twice: ${REDACTION_MARKER}`])
+  })
+
+  it('accepts mangling ordinary text — a declared value is scrubbed wherever it occurs', () => {
+    // Deliberate. No minimum-length guard: a guard is a hole, and a hole is what this closes.
+    const safe = redactRawHeaders({ headers: { 'X-Api-Key': 'a' }, body: 'a cat sat' }, [
+      'x-api-key',
+    ])
+    expect(safe['body']).toBe(`${REDACTION_MARKER} c${REDACTION_MARKER}t s${REDACTION_MARKER}t`)
+  })
+
+  it('collects every string inside a redacted value, not only a bare one', () => {
+    const safe = redactRawHeaders(
+      { headers: { 'X-Api-Key': { values: ['one', 'two'] } }, note: 'one and two' },
+      ['x-api-key'],
+    )
+    expect(safe['note']).toBe(`${REDACTION_MARKER} and ${REDACTION_MARKER}`)
+  })
+
+  it('does not propagate a value from a container it could not parse', () => {
+    // Pass one scrubs the unreadable entry in place, but nothing in it was shown to be the
+    // configured header, so scrubbing it across the whole payload would be gratuitous.
+    const safe = redactRawHeaders({ headers: ['*/*'], body: 'accepts */*' }, ['x-api-key'])
+    expect(safe['headers']).toEqual([REDACTION_MARKER])
+    expect(safe['body']).toBe('accepts */*')
+  })
+
+  it('never substitutes an empty or whitespace-only value', () => {
+    const safe = redactRawHeaders({ headers: { 'X-Api-Key': '', 'X-Trace': '  ' }, body: 'ab' }, [
+      'x-api-key',
+      'x-trace',
+    ])
+    expect(safe['body']).toBe('ab')
+  })
+
+  it('does not re-substitute the marker pass one just wrote', () => {
+    // A payload that already holds the marker must not have it treated as a secret.
+    const safe = redactRawHeaders(
+      { headers: { 'X-Api-Key': REDACTION_MARKER }, body: `left ${REDACTION_MARKER} alone` },
+      ['x-api-key'],
+    )
+    expect(safe['body']).toBe(`left ${REDACTION_MARKER} alone`)
+  })
+
+  it('replaces the longer value first when one contains another', () => {
+    const safe = redactRawHeaders(
+      { headers: { 'X-Api-Key': 'abc', 'X-Other': 'abcdef' }, body: 'abcdef' },
+      ['x-api-key', 'x-other'],
+    )
+    expect(safe['body']).toBe(REDACTION_MARKER)
+  })
+})

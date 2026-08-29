@@ -20,6 +20,17 @@
   and anything it cannot recognise under that key it replaces rather than passes through: a
   marker where a header used to be is a cosmetic bug, and the alternative is this one again.
 
+  **A header value does not only live under a header key**, so the values that were replaced are
+  then scrubbed out of every string in the payload. WireMock's near-miss diff quotes the
+  request's header value inline in a free-text table — which is the *unmatched* path, the one
+  the match explainer exists for and the one a developer debugging a 404 hits most. A profile
+  with `redactHeaders` set was still writing the secret to disk on every 404.
+
+  That sweep is deliberately blunt: a value declared sensitive is replaced everywhere it occurs,
+  whatever text it is embedded in, with no minimum-length guard to protect prose — a guard like
+  that is a hole, and a hole is what this closes. A near-miss report with `«redacted»` in the
+  middle of a sentence is correct output, not a bug.
+
   **Rows already recorded are not rewritten.** If a profile has been running with
   `redactHeaders` set and traffic in it, the secrets are in the mirror now — the mirror is a
   disposable cache, so delete `~/.mock-knight/state.db` (or the path `--state` names) and it

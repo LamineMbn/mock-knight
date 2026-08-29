@@ -257,7 +257,9 @@ machine you control.
   file you commit contains nothing sensitive.
 - Header names listed in a profile's `redactHeaders` are replaced before a request journal entry
   is stored — in the mock server's own payload as well as in the record Mock Knight builds from
-  it, so nothing reads the value back out. Matching is case-insensitive.
+  it, so nothing reads the value back out. Matching is case-insensitive. The value is then
+  scrubbed from every string in the retained payload, because a near-miss diff quotes it in
+  prose; that is deliberately blunt, so a diff may read `«redacted»` mid-sentence.
 
 ## FAQ
 
