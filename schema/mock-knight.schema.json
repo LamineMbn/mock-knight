@@ -165,7 +165,7 @@
           },
           "redactHeaders": {
             "default": [],
-            "description": "Header names replaced with a placeholder in the structured request record shown on the Traffic screen before a journal entry is stored.",
+            "description": "Header names to redact from stored request journal entries.",
             "type": "array",
             "items": {
               "type": "string"
