@@ -37,6 +37,16 @@ export interface Backend {
   /** Shown above the fold where the honest story needs stating before anything is claimed. */
   readonly caveat: string | null
   readonly external: { readonly label: string; readonly url: string } | null
+  /**
+   * Basename, under `docs/images/`, of *this backend's own* corpus screenshot — Mock Knight
+   * actually connected to it, with its name and version in the top bar.
+   *
+   * One shared file (`corpus.png`, WireMock's) used to be interpolated into every backend's alt
+   * text regardless of which server the picture showed, which made three of the four pages
+   * assert something the image did not back up. A field per backend, read by the template
+   * instead of a filename it invents, is what keeps that from happening silently again.
+   */
+  readonly screenshot: string
 }
 
 const CAPABILITY_ORDER = [
@@ -75,6 +85,7 @@ export const BACKENDS: readonly Backend[] = [
     ],
     caveat: null,
     external: { label: 'WireMock', url: 'https://wiremock.org/' },
+    screenshot: 'corpus-wiremock',
   },
   {
     slug: 'mockserver',
@@ -102,6 +113,7 @@ export const BACKENDS: readonly Backend[] = [
     ],
     caveat: null,
     external: { label: 'MockServer', url: 'https://www.mock-server.com/' },
+    screenshot: 'corpus-mockserver',
   },
   {
     slug: 'mockoon',
@@ -134,6 +146,7 @@ export const BACKENDS: readonly Backend[] = [
       off('Scenarios', 'Mockoon has no equivalent of named scenario states.'),
     ],
     external: { label: 'Mockoon', url: 'https://mockoon.com/' },
+    screenshot: 'corpus-mockoon',
   },
   {
     slug: 'prism',
@@ -162,6 +175,7 @@ export const BACKENDS: readonly Backend[] = [
       off('Scenarios', 'Prism has no stateful stubs.'),
     ],
     external: { label: 'Stoplight Prism', url: 'https://stoplight.io/open-source/prism' },
+    screenshot: 'corpus-prism',
   },
 ]
 

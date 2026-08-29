@@ -79,6 +79,29 @@ describe('BACKENDS', () => {
   })
 
   /**
+   * The defect this repo shipped: `corpus.png`, WireMock's own screenshot, was interpolated into
+   * every backend's alt text regardless of which server it showed. A screenshot field per
+   * backend only prevents that if it actually names a *different* file per backend — a
+   * `screenshot` that was the same string for all four, or that still pointed at the old shared
+   * `corpus` basename, would reintroduce the exact bug this field exists to catch.
+   */
+  it('gives every backend its own screenshot, not the shared corpus.png', () => {
+    for (const backend of BACKENDS) {
+      expect(backend.screenshot, `${backend.slug} has no screenshot`).toBeTruthy()
+      expect(backend.screenshot, `${backend.slug} still points at the shared corpus.png`).not.toBe(
+        'corpus',
+      )
+      expect(
+        backend.screenshot,
+        `${backend.slug}'s screenshot name does not say which backend it is`,
+      ).toContain(backend.slug)
+    }
+
+    const filenames = new Set(BACKENDS.map((backend) => backend.screenshot))
+    expect(filenames.size, 'two backends share one screenshot file').toBe(BACKENDS.length)
+  })
+
+  /**
    * `CapabilityMatrix.astro` zips `CAPABILITY_ORDER` (the row labels) with each backend's
    * `capabilities[index]` (the row values) by position, not by label — so the row axis and the
    * column axis have to agree on both order and membership, not just agree with each other. A

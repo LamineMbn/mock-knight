@@ -13,6 +13,25 @@ for (const backend of BACKENDS) {
       }
     }
   })
+
+  /**
+   * The defect this suite exists to catch: all four pages rendered `corpus.png` — WireMock's
+   * screenshot — regardless of which backend the page was about. Twelve reviews missed it
+   * because they checked the alt text's wording against README.md and never checked it against
+   * the picture. This does the check no review did: the image's own filename has to name this
+   * page's backend, and the alt text has to say so too.
+   */
+  test(`${backend.slug} page's screenshot is its own, not a borrowed one`, async ({ page }) => {
+    await page.goto(`./${backend.slug}/`)
+    const screenshot = page.locator('figure img').first()
+    await expect(screenshot).toHaveAttribute(
+      'src',
+      new RegExp(`/images/${backend.screenshot}\\.png$`),
+    )
+    await expect(screenshot).not.toHaveAttribute('src', /\/images\/corpus\.png$/)
+    const alt = (await screenshot.getAttribute('alt')) ?? ''
+    expect(alt).toContain(backend.name)
+  })
 }
 
 /**

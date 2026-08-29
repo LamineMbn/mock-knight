@@ -31,3 +31,7 @@ packages/cli/LICENSE
 packages/site/src/styles/tokens.generated.css
 packages/site/public/images/
 packages/site/src/generated/
+
+# The Mockoon environment scripts/capture-screenshots.mts seeds for its corpus screenshot. A
+# runtime artifact of running the script, not a fixture — see the script's header comment.
+/.mockoon/
