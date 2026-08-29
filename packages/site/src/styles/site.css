@@ -141,12 +141,20 @@ img {
   margin: 0 0 1rem;
 }
 
+/* Neutral on purpose, and not the method tokens.
+ *
+ * `--mk-method-post-*` is byte-identical to `--mk-success-*` in all three definition blocks of
+ * the generated palette. In the application that reads correctly — a method chip is one of
+ * eight hues in a dense table. Here it would be the loudest green on the page, four rows above
+ * two rows that say "✓ matched" in exactly that colour, and spec §5.1 reserves the semantic
+ * green and red for matched and unmatched alone. The token is right; using it here is not. */
 .explainer .request .method {
   display: inline-block;
   padding: 0.125rem 0.5rem;
   border-radius: 0.25rem;
-  background: var(--mk-method-post-bg);
-  color: var(--mk-method-post-text);
+  background: var(--mk-bg-subtle);
+  color: var(--mk-text-primary);
+  border: 1px solid var(--mk-border-subtle);
   font-weight: 600;
 }
 
