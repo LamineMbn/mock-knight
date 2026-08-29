@@ -109,7 +109,7 @@ export const profileInputSchema = z.object({
   redactHeaders: z
     .array(z.string())
     .default([])
-    .describe('Header names to redact from stored request journal entries.'),
+    .describe('Request header names configured for redaction.'),
 })
 export type ProfileInput = z.infer<typeof profileInputSchema>
 

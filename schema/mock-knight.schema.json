@@ -165,7 +165,7 @@
           },
           "redactHeaders": {
             "default": [],
-            "description": "Header names to redact from stored request journal entries.",
+            "description": "Request header names configured for redaction.",
             "type": "array",
             "items": {
               "type": "string"
