@@ -35,8 +35,8 @@ export const profileInputSchema = z.object({
     .string()
     .url()
     .describe(
-      'Base URL of the mock server. A context path is kept — https://host/ctx calls ' +
-        'https://host/ctx/__admin by default.',
+      'Base URL of the mock server. A context path is kept — the adapter’s own admin path is ' +
+        'appended to it, so https://host/ctx calls https://host/ctx/__admin on WireMock.',
     ),
   adminPath: z
     .string()
@@ -44,7 +44,8 @@ export const profileInputSchema = z.object({
     .default(null)
     .describe(
       'Path appended to the base URL to reach the admin API, for a server whose admin API ' +
-        'is not at the default. Defaults to /__admin.',
+        'is not at the default. The default comes from the adapter: /__admin for WireMock, ' +
+        '/mockserver for MockServer, /mockoon-admin for Mockoon, / for Prism.',
     ),
   colour: profileColourSchema
     .default('indigo')
