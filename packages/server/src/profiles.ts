@@ -110,7 +110,11 @@ export const profileInputSchema = z.object({
   redactHeaders: z
     .array(z.string())
     .default([])
-    .describe('Request header names configured for redaction.'),
+    .describe(
+      'Request header names whose values are replaced with a marker before a journal entry is ' +
+        "stored — in the mock server's own payload as well as in the record Mock Knight builds " +
+        'from it. Matched case-insensitively.',
+    ),
 })
 export type ProfileInput = z.infer<typeof profileInputSchema>
 

@@ -1,4 +1,4 @@
-import { setKey } from '@mock-knight/core'
+import { REDACTION_MARKER, redactRawHeaders, setKey } from '@mock-knight/core'
 import type { ServeEvent } from '@mock-knight/core'
 import type { Database as Db } from 'better-sqlite3'
 
@@ -32,16 +32,28 @@ INSERT INTO serve_event (
 )
 ON CONFLICT (profile_id, upstream_id) DO NOTHING`
 
-/** Redact before storage, not before display — the mirror must not become a secret store. */
+/**
+ * Redact before storage, not before display — the mirror must not become a secret store.
+ *
+ * Both copies, because there are two. The canonical `request.headers` is what the Traffic list
+ * renders; `raw` is the vendor payload kept verbatim, and it is the one that reaches disk in the
+ * `raw` column and comes back out again for the match explainer and create-from-request. Through
+ * 0.7.1 only the first was scrubbed and the second was stored whole, which made the whole feature
+ * a no-op: every surface that shows a header reads it back from `raw`.
+ */
 function redact(event: ServeEvent, headerNames: readonly string[]): ServeEvent {
   if (headerNames.length === 0) return event
   const wanted = new Set(headerNames.map((name) => name.toLowerCase()))
   const headers: Record<string, string | string[]> = {}
   for (const [key, value] of Object.entries(event.request.headers)) {
     // setKey: a header literally named `__proto__` must not vanish from the stored journal.
-    setKey(headers, key, wanted.has(key.toLowerCase()) ? '«redacted»' : value)
+    setKey(headers, key, wanted.has(key.toLowerCase()) ? REDACTION_MARKER : value)
   }
-  return { ...event, request: { ...event.request, headers } }
+  return {
+    ...event,
+    request: { ...event.request, headers },
+    raw: redactRawHeaders(event.raw, headerNames),
+  }
 }
 
 export function recordServeEvents(

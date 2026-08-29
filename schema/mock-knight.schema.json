@@ -165,7 +165,7 @@
           },
           "redactHeaders": {
             "default": [],
-            "description": "Request header names configured for redaction.",
+            "description": "Request header names whose values are replaced with a marker before a journal entry is stored — in the mock server's own payload as well as in the record Mock Knight builds from it. Matched case-insensitively.",
             "type": "array",
             "items": {
               "type": "string"

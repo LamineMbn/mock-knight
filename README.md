@@ -255,7 +255,9 @@ machine you control.
   `--allow-stored-credentials` if you have put your own authentication in front.
 - A profile in a config file holds the *name* of an environment variable, never a value, so the
   file you commit contains nothing sensitive.
-- Configured headers are redacted before a request journal entry is stored.
+- Header names listed in a profile's `redactHeaders` are replaced before a request journal entry
+  is stored — in the mock server's own payload as well as in the record Mock Knight builds from
+  it, so nothing reads the value back out. Matching is case-insensitive.
 
 ## FAQ
 

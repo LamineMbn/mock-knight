@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`redactHeaders` did nothing, in every version that has shipped it.** A profile could name
+  request headers to keep out of the journal, and the README said they were redacted before an
+  entry was stored. The scrub ran on the canonical record and never on `raw`, the mock server's
+  own payload — which is the copy that goes into the `serve_event` table and the copy every
+  surface reads a header back out of, the match explainer and create-from-request included. So a
+  configured `Authorization` or `X-Api-Key` was written to the state database in plain text,
+  with a redacted duplicate beside it that nothing displayed. Confirmed against a running server:
+  the header value was present verbatim in the stored row.
+
+  Redaction now walks the retained payload and replaces the value wherever it finds one under a
+  key named `headers` — a generic walk rather than a per-adapter hook, so a backend added later
+  cannot forget to implement it. It handles the three encodings that exist in the wild
+  (WireMock's map of strings, MockServer's map of arrays, Mockoon's list of `{ key, value }`),
+  and anything it cannot recognise under that key it replaces rather than passes through: a
+  marker where a header used to be is a cosmetic bug, and the alternative is this one again.
+
+  **Rows already recorded are not rewritten.** If a profile has been running with
+  `redactHeaders` set and traffic in it, the secrets are in the mirror now — the mirror is a
+  disposable cache, so delete `~/.mock-knight/state.db` (or the path `--state` names) and it
+  rebuilds from the server.
+
 ## 0.7.1
 
 ### Fixed
