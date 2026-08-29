@@ -167,7 +167,7 @@ screen shows the full report and explains what each one being off costs you.
 
 | Flag | Default | |
 |---|---|---|
-| `--url <url>` | — | Mock server to connect to on startup. A context path is kept: `https://host/ctx` calls `https://host/ctx/__admin` |
+| `--url <url>` | — | Mock server to connect to on startup. A context path is kept — the adapter's own admin path is appended to it, e.g. `https://host/ctx/__admin` for WireMock |
 | `--adapter <name>` | probed | `wiremock`, `mockserver`, `mockoon` or `prism` |
 | `--port <n>` | `7777` | |
 | `--host <addr>` | `127.0.0.1` | Anything else prints a warning — there is no authentication |
