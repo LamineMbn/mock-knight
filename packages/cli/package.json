@@ -1,7 +1,7 @@
 {
   "name": "mock-knight",
   "version": "0.7.0",
-  "description": "A local-first web UI for HTTP mock servers",
+  "description": "Web UI for WireMock, MockServer, Mockoon and Prism \u2014 search, edit and debug HTTP mock stubs in the browser. Runs locally with npx.",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
@@ -32,12 +32,25 @@
   },
   "keywords": [
     "wiremock",
+    "wiremock-ui",
+    "wiremock-gui",
+    "wiremock-admin",
+    "mockserver",
+    "mockoon",
+    "prism",
+    "openapi",
     "mock-server",
-    "http-mock",
+    "mock-server-ui",
+    "mock-ui",
+    "mock-api",
     "api-mocking",
+    "http-mock",
+    "http-mocking",
+    "api-testing",
     "stub",
-    "devtools",
-    "testing"
+    "stub-management",
+    "test-doubles",
+    "devtools"
   ],
   "author": "Lamine Bendib",
   "homepage": "https://github.com/LamineMbn/mock-knight#readme",
