@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BACKENDS } from './backends.js'
+import { BACKENDS, CAPABILITY_ORDER } from './backends.js'
 import { ROUTES } from './routes.js'
 
 describe('BACKENDS', () => {
@@ -40,8 +40,18 @@ describe('BACKENDS', () => {
     }
   })
 
-  it('compares the same capabilities across every backend', () => {
+  /**
+   * `CapabilityMatrix.astro` zips `CAPABILITY_ORDER` (the row labels) with each backend's
+   * `capabilities[index]` (the row values) by position, not by label — so the row axis and the
+   * column axis have to agree on both order and membership, not just agree with each other. A
+   * matrix with different rows per column compares nothing; a matrix whose columns agree with
+   * each other but not with `CAPABILITY_ORDER` renders every row against the wrong label.
+   */
+  it('compares the same capabilities across every backend, in the order the matrix renders them', () => {
     const labels = BACKENDS.map((backend) => backend.capabilities.map((c) => c.label).join('|'))
-    expect(new Set(labels).size, 'a matrix with different rows per column compares nothing').toBe(1)
+    expect(
+      new Set([...labels, CAPABILITY_ORDER.join('|')]).size,
+      'a matrix whose rows do not match CAPABILITY_ORDER pairs every label with the wrong state',
+    ).toBe(1)
   })
 })

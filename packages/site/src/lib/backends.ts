@@ -61,7 +61,10 @@ export const BACKENDS: readonly Backend[] = [
         'Traffic log',
         'MockServer records no attribution for a served request, so there is nothing to show which expectation answered it. The screen is absent rather than empty.',
       ),
-      off('Why a request did not match', 'The near-miss ranking needs the traffic log it does not have.'),
+      off(
+        'Why a request did not match',
+        'The near-miss ranking needs the traffic log it does not have.',
+      ),
       off('Scenarios', 'MockServer has no named states, so there is no state graph to draw.'),
     ],
     caveat: null,

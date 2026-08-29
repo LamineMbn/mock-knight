@@ -25,9 +25,13 @@ const shown = only === undefined ? BACKENDS : BACKENDS.filter((b) => b.slug === 
   <thead>
     <tr>
       <th scope="col">Capability</th>
-      {shown.map((backend) => (
-        <th scope="col"><a href={href(`/${backend.slug}/`)}>{backend.name}</a></th>
-      ))}
+      {
+        shown.map((backend) => (
+          <th scope="col">
+            <a href={href(`/${backend.slug}/`)}>{backend.name}</a>
+          </th>
+        ))
+      }
     </tr>
   </thead>
   <tbody>
