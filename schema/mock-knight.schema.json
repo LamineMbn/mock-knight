@@ -1,23 +1,27 @@
 {
   "$id": "https://raw.githubusercontent.com/LamineMbn/mock-knight/main/schema/mock-knight.schema.json",
   "title": "mock-knight configuration",
-  "description": "Configuration for the mock-knight CLI. Every field is optional; a command-line flag always overrides the equivalent here. String values may reference environment variables as ${env:VAR}, except authRef, which names a variable rather than holding a value.",
+  "description": "Configuration for the mock-knight CLI. Every field is optional; a command-line flag always overrides the equivalent here. String values may reference environment variables as ${env:VAR} — use it for authSecret so the file you commit holds a variable name rather than a password.",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
     "$schema": {
+      "description": "Ignored at runtime; present so editors with JSON Schema support offer completion and validation for this file.",
       "type": "string"
     },
     "host": {
+      "description": "Bind address for the server. Anything other than the loopback default (127.0.0.1) prints a warning, since Mock Knight has no authentication of its own.",
       "type": "string",
       "minLength": 1
     },
     "port": {
+      "description": "Port the server listens on. Defaults to 7777.",
       "type": "integer",
       "minimum": 1,
       "maximum": 65535
     },
     "mode": {
+      "description": "'local' or 'deployed'. Inferred from the bind address when omitted; 'deployed' refuses to start with a non-loopback host while any profile holds a stored credential, unless --allow-stored-credentials is passed.",
       "type": "string",
       "enum": [
         "local",
@@ -25,10 +29,12 @@
       ]
     },
     "state": {
+      "description": "Path to the SQLite state database. Relative paths resolve against this config file, not the working directory. Defaults to ~/.mock-knight/state.db.",
       "type": "string",
       "minLength": 1
     },
     "allowedHosts": {
+      "description": "Hosts this instance may connect to. Absent means no restriction; an empty array means nothing is reachable.",
       "type": "array",
       "items": {
         "type": "string",
@@ -36,6 +42,7 @@
       }
     },
     "profiles": {
+      "description": "Servers to connect to on startup, reconciled by name on every start — the way to share a set of servers with a team through version control.",
       "type": "array",
       "items": {
         "type": "object",
@@ -43,7 +50,8 @@
           "name": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 60
+            "maxLength": 60,
+            "description": "Display name shown in the switcher and profile chrome."
           },
           "adapter": {
             "default": "wiremock",
@@ -53,14 +61,17 @@
               "mockserver",
               "mockoon",
               "prism"
-            ]
+            ],
+            "description": "Which backend this profile talks to: wiremock, mockserver, mockoon or prism."
           },
           "baseUrl": {
             "type": "string",
-            "format": "uri"
+            "format": "uri",
+            "description": "Base URL of the mock server. A context path is kept — https://host/ctx calls https://host/ctx/__admin by default."
           },
           "adminPath": {
             "default": null,
+            "description": "Path appended to the base URL to reach the admin API, for a server whose admin API is not at the default. Defaults to /__admin.",
             "anyOf": [
               {
                 "type": "string"
@@ -72,6 +83,7 @@
           },
           "colour": {
             "default": "indigo",
+            "description": "Colour badge for this profile in the switcher and header chrome.",
             "type": "string",
             "enum": [
               "slate",
@@ -84,14 +96,17 @@
           },
           "protected": {
             "default": false,
+            "description": "When true, every destructive operation is absent from the UI and refused by the server. The only way to change that is editing the profile — there is no in-session override.",
             "type": "boolean"
           },
           "readOnly": {
             "default": false,
+            "description": "When true, every write route for this profile returns 404, as if it did not exist.",
             "type": "boolean"
           },
           "mappingsDir": {
             "default": null,
+            "description": "Path to the corpus file for a document-backed backend (Mockoon's environment JSON, Prism's OpenAPI document). Required for those backends, unused otherwise.",
             "anyOf": [
               {
                 "type": "string"
@@ -103,6 +118,7 @@
           },
           "authKind": {
             "default": "none",
+            "description": "How this profile authenticates to the admin API: none, bearer, basic, or headers. Only WireMock currently accepts one.",
             "type": "string",
             "enum": [
               "none",
@@ -113,6 +129,7 @@
           },
           "authUsername": {
             "default": null,
+            "description": "Username for basic auth. Only used when authKind is basic.",
             "anyOf": [
               {
                 "type": "string"
@@ -124,6 +141,7 @@
           },
           "authSecret": {
             "default": null,
+            "description": "The password or token itself. Kept in memory for the run unless \"remember\" is chosen, in which case it is written to the state database in plain text. In a shared config file, reference an environment variable instead, e.g. \"${env:VAR}\".",
             "anyOf": [
               {
                 "type": "string"
@@ -135,6 +153,7 @@
           },
           "correlationHeader": {
             "default": null,
+            "description": "Name of a request header (e.g. a trace or test-run ID) used to group one batch of traffic together on the Traffic screen.",
             "anyOf": [
               {
                 "type": "string"
@@ -146,6 +165,7 @@
           },
           "redactHeaders": {
             "default": [],
+            "description": "Header names to redact before a request journal entry is stored, so a secret carried in a header never lands in the mirror.",
             "type": "array",
             "items": {
               "type": "string"

@@ -22,7 +22,8 @@ const schema = {
   description:
     'Configuration for the mock-knight CLI. Every field is optional; a command-line flag always ' +
     'overrides the equivalent here. String values may reference environment variables as ' +
-    '${env:VAR}, except authRef, which names a variable rather than holding a value.',
+    '${env:VAR} — use it for authSecret so the file you commit holds a variable name rather ' +
+    'than a password.',
   ...z.toJSONSchema(configSchema, { io: 'input' }),
 }
 

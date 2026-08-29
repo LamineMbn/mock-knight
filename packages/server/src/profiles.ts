@@ -17,19 +17,61 @@ export const PROFILE_COLOURS = ['slate', 'indigo', 'cyan', 'violet', 'rose', 'ol
 export const profileColourSchema = z.enum(PROFILE_COLOURS)
 
 export const profileInputSchema = z.object({
-  name: z.string().min(1).max(60),
+  name: z
+    .string()
+    .min(1)
+    .max(60)
+    .describe('Display name shown in the switcher and profile chrome.'),
   /**
    * Which backend this profile talks to. An enum built from the adapters this build actually
    * has, so a profile can never name one that cannot be constructed.
    */
-  adapter: z.enum(ADAPTER_IDS),
-  baseUrl: z.string().url(),
-  adminPath: z.string().nullable().default(null),
-  colour: profileColourSchema.default('indigo'),
-  protected: z.boolean().default(false),
-  readOnly: z.boolean().default(false),
-  mappingsDir: z.string().nullable().default(null),
-  authKind: authKindSchema.default('none'),
+  adapter: z
+    .enum(ADAPTER_IDS)
+    .describe('Which backend this profile talks to: wiremock, mockserver, mockoon or prism.'),
+  baseUrl: z
+    .string()
+    .url()
+    .describe(
+      'Base URL of the mock server. A context path is kept — https://host/ctx calls ' +
+        'https://host/ctx/__admin by default.',
+    ),
+  adminPath: z
+    .string()
+    .nullable()
+    .default(null)
+    .describe(
+      'Path appended to the base URL to reach the admin API, for a server whose admin API ' +
+        'is not at the default. Defaults to /__admin.',
+    ),
+  colour: profileColourSchema
+    .default('indigo')
+    .describe('Colour badge for this profile in the switcher and header chrome.'),
+  protected: z
+    .boolean()
+    .default(false)
+    .describe(
+      'When true, every destructive operation is absent from the UI and refused by the ' +
+        'server. The only way to change that is editing the profile — there is no in-session override.',
+    ),
+  readOnly: z
+    .boolean()
+    .default(false)
+    .describe('When true, every write route for this profile returns 404, as if it did not exist.'),
+  mappingsDir: z
+    .string()
+    .nullable()
+    .default(null)
+    .describe(
+      "Path to the corpus file for a document-backed backend (Mockoon's environment JSON, " +
+        "Prism's OpenAPI document). Required for those backends, unused otherwise.",
+    ),
+  authKind: authKindSchema
+    .default('none')
+    .describe(
+      'How this profile authenticates to the admin API: none, bearer, basic, or headers. ' +
+        'Only WireMock currently accepts one.',
+    ),
   /**
    * The credential itself, entered once and stored in the state database.
    *
@@ -40,10 +82,35 @@ export const profileInputSchema = z.object({
    * `authSecret` never leaves the server: the profile API strips it on the way out, so editing a
    * profile does not round-trip the password through the browser.
    */
-  authUsername: z.string().nullable().default(null),
-  authSecret: z.string().nullable().default(null),
-  correlationHeader: z.string().nullable().default(null),
-  redactHeaders: z.array(z.string()).default([]),
+  authUsername: z
+    .string()
+    .nullable()
+    .default(null)
+    .describe('Username for basic auth. Only used when authKind is basic.'),
+  authSecret: z
+    .string()
+    .nullable()
+    .default(null)
+    .describe(
+      'The password or token itself. Kept in memory for the run unless "remember" is chosen, ' +
+        'in which case it is written to the state database in plain text. In a shared config ' +
+        'file, reference an environment variable instead, e.g. "${env:VAR}".',
+    ),
+  correlationHeader: z
+    .string()
+    .nullable()
+    .default(null)
+    .describe(
+      'Name of a request header (e.g. a trace or test-run ID) used to group one batch of ' +
+        'traffic together on the Traffic screen.',
+    ),
+  redactHeaders: z
+    .array(z.string())
+    .default([])
+    .describe(
+      'Header names to redact before a request journal entry is stored, so a secret carried ' +
+        'in a header never lands in the mirror.',
+    ),
 })
 export type ProfileInput = z.infer<typeof profileInputSchema>
 

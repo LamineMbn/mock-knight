@@ -57,18 +57,63 @@ const configProfileSchema = profileInputSchema.extend({
 export const configSchema = z
   .object({
     /** Ignored at runtime; present so editors offer completion from the published schema. */
-    $schema: z.string().optional(),
-    host: z.string().min(1).optional(),
-    port: z.number().int().min(1).max(65535).optional(),
-    mode: z.enum(['local', 'deployed']).optional(),
+    $schema: z
+      .string()
+      .optional()
+      .describe(
+        'Ignored at runtime; present so editors with JSON Schema support offer completion ' +
+          'and validation for this file.',
+      ),
+    host: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Bind address for the server. Anything other than the loopback default (127.0.0.1) ' +
+          'prints a warning, since Mock Knight has no authentication of its own.',
+      ),
+    port: z
+      .number()
+      .int()
+      .min(1)
+      .max(65535)
+      .optional()
+      .describe('Port the server listens on. Defaults to 7777.'),
+    mode: z
+      .enum(['local', 'deployed'])
+      .optional()
+      .describe(
+        "'local' or 'deployed'. Inferred from the bind address when omitted; 'deployed' " +
+          'refuses to start with a non-loopback host while any profile holds a stored ' +
+          'credential, unless --allow-stored-credentials is passed.',
+      ),
     /** Relative paths resolve against the config file, not the working directory. */
-    state: z.string().min(1).optional(),
+    state: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Path to the SQLite state database. Relative paths resolve against this config file, ' +
+          'not the working directory. Defaults to ~/.mock-knight/state.db.',
+      ),
     /**
      * Hosts this instance may connect to. Absent means no restriction; an empty array means
      * nothing is reachable, which is a legitimate way to disable outbound entirely.
      */
-    allowedHosts: z.array(z.string().min(1)).optional(),
-    profiles: z.array(configProfileSchema).optional(),
+    allowedHosts: z
+      .array(z.string().min(1))
+      .optional()
+      .describe(
+        'Hosts this instance may connect to. Absent means no restriction; an empty array ' +
+          'means nothing is reachable.',
+      ),
+    profiles: z
+      .array(configProfileSchema)
+      .optional()
+      .describe(
+        'Servers to connect to on startup, reconciled by name on every start — the way to ' +
+          'share a set of servers with a team through version control.',
+      ),
   })
   .strict()
 
