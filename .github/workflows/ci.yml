@@ -310,11 +310,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with: { fetch-depth: 0 }
+      # `git diff | grep` alone fails closed and silently: if the diff itself errors (a base
+      # ref that fails to resolve), grep sees empty input, reports no match, and the budget
+      # skips on a pull request that may well have touched the site. The diff's own exit status
+      # is checked on its own line so that failure cannot hide behind grep's.
       - name: Does this change touch the site?
         id: touched
         run: |
-          if git diff --name-only origin/${{ github.base_ref }}...HEAD \
-             | grep -qE '^(packages/site/|docs/images/|docs/faq\.md|design/|packages/web/src/styles/tokens\.css|schema/)'; then
+          if ! git diff --name-only "origin/${{ github.base_ref }}...HEAD" > "$RUNNER_TEMP/site-budget-diff.txt"; then
+            echo "::error::git diff against origin/${{ github.base_ref }} failed to resolve. Cannot tell whether the site changed, so this cannot be treated as \"no\"."
+            exit 1
+          fi
+          if grep -qE '^(packages/site/|docs/images/|docs/faq\.md|design/|packages/web/src/styles/tokens\.css|schema/)' "$RUNNER_TEMP/site-budget-diff.txt"; then
             echo 'run=true' >> "$GITHUB_OUTPUT"
           else
             echo 'run=false' >> "$GITHUB_OUTPUT"

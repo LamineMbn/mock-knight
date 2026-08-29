@@ -24,6 +24,12 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # actions/configure-pages calls the Pages REST API, which needs pages: read at minimum.
+    # Stated explicitly rather than relying on this repository's ambient default token
+    # permissions, which nothing in this file otherwise establishes.
+    permissions:
+      contents: read
+      pages: read
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v5
