@@ -34,25 +34,44 @@ const rows = [
     <code>npx mock-knight --url http://localhost:8080</code>
   </div>
 
-  <section aria-label="Why a request did not match" class="explainer" data-stubbed={STUBBED.join(',')} data-closest={closest}>
+  <section
+    aria-label="Why a request did not match"
+    class="explainer"
+    data-stubbed={STUBBED.join(',')}
+    data-closest={closest}
+  >
     <p class="request">
-      <span class="method">POST</span> <span class="path">/payments/v2/charges</span>
+      <span class="method">POST</span>
+      <span class="path">/payments/v2/charges</span>
     </p>
     <p class="tenant-picker">
       <label for="tenant">X-Tenant</label>
       <select id="tenant" name="tenant">
-        {TENANTS.map((tenant) => <option value={tenant} selected={tenant === INITIAL}>{tenant}</option>)}
+        {
+          TENANTS.map((tenant) => (
+            <option value={tenant} selected={tenant === INITIAL}>
+              {tenant}
+            </option>
+          ))
+        }
       </select>
     </p>
 
     <table>
       <thead>
-        <tr><th scope="col">Field</th><th scope="col">Expected</th><th scope="col">Actual</th><th scope="col">Result</th></tr>
+        <tr
+          ><th scope="col">Field</th><th scope="col">Expected</th><th scope="col">Actual</th><th
+            scope="col">Result</th
+          ></tr
+        >
       </thead>
       <tbody>
         {
           rows.map((row) => (
-            <tr data-testid={`row-${row.id}`} data-state={row.expected === row.actual ? 'pass' : 'fail'}>
+            <tr
+              data-testid={`row-${row.id}`}
+              data-state={row.expected === row.actual ? 'pass' : 'fail'}
+            >
               <td>{row.field}</td>
               <td>{row.expected}</td>
               <td data-cell={row.id === 'header' ? 'actual-tenant' : undefined}>{row.actual}</td>
