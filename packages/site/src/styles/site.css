@@ -291,18 +291,23 @@ img {
 }
 
 /* Landing page sections: a heading, a paragraph of prose, then (mostly) a screenshot. A rule
- * between sections is enough separation on a page whose content is otherwise plain flow. */
-main > section {
+ * between sections is enough separation on a page whose content is otherwise plain flow.
+ *
+ * Scoped to the `.section` class, never the bare `<section>` tag. `MatchHero`'s root element is
+ * itself a `<section class="hero">`, so a tag-only selector reaches it too — that collision is
+ * exactly what shipped as a regression: a `:first-child` exception meant to zero *this* rule's
+ * own padding on whichever section happened to land first ended up zeroing `.hero`'s padding
+ * instead, because both rules matched the same element and specificity broke the tie away from
+ * `.hero` (one pseudo-class ties on the class column, so the tag count above it decides, and
+ * `main > section:first-child` has more tags than `.hero`). Content sections opt into `.section`
+ * explicitly; the hero never carries that class, so it can never be caught here again, on this
+ * page or a future one where a hero-like element happens to land first. */
+.section {
   padding: 2rem 0;
   border-top: 1px solid var(--mk-border-subtle);
 }
 
-main > section:first-child {
-  padding-top: 0;
-  border-top: none;
-}
-
-main > section h2 {
+.section h2 {
   margin: 0 0 0.75rem;
 }
 
@@ -328,7 +333,7 @@ figcaption {
 }
 
 /* The install command. A single line, so it gets the code chrome without a scroll box. */
-main > section pre {
+.section pre {
   margin: 0;
   padding: 0.75rem 1rem;
   background: var(--mk-code-bg);
@@ -337,7 +342,7 @@ main > section pre {
   overflow-x: auto;
 }
 
-main > section pre code {
+.section pre code {
   border: none;
   padding: 0;
   background: none;
