@@ -5,8 +5,12 @@ actually get a pull request rejected.
 
 ## Getting set up
 
-You need **Node ≥ 22** (`better-sqlite3` v13 requires it), **pnpm 10**, and Docker if you want
-to run the integration or end-to-end suites.
+You need **Node ≥ 22.19** (up from plain 22 — `better-sqlite3` v13 needs 22, and
+`packages/site`'s Astro dependency tree pulls in an `undici` that raises the floor further;
+`.npmrc` sets `engine-strict`, so `pnpm install` refuses anything older), **pnpm 10**, and
+Docker if you want to run the integration or end-to-end suites. The published CLI still only
+requires Node ≥ 22.0 — `packages/site` is `private`, so its dependencies never reach anyone who
+installs `mock-knight`.
 
 ```bash
 pnpm install
