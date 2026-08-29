@@ -26,6 +26,8 @@ packages/cli/README.md
 packages/cli/LICENSE
 
 # Copied into the site package at build time by packages/site/scripts/prepare-assets.mjs.
-# The committed originals are packages/web/src/styles/tokens.css and docs/images/.
+# The committed originals are packages/web/src/styles/tokens.css, docs/images/, and
+# schema/mock-knight.schema.json.
 packages/site/src/styles/tokens.generated.css
 packages/site/public/images/
+packages/site/src/generated/

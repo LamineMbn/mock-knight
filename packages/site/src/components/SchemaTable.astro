@@ -1,0 +1,67 @@
+---
+/**
+ * Renders one level of `schema/mock-knight.schema.json` as a table: field, type, required,
+ * description. Copied in at build time by `prepare-assets.mjs` (invariant 1 — this package
+ * imports nothing from `@mock-knight/server`, and the schema is generated there).
+ *
+ * `at` is a dotted path into the schema, or omitted for the document root. `profiles` is a
+ * JSON Schema array, so its field descriptions live under `items.properties` rather than
+ * `properties` directly — the reducer below falls through to `.items` for exactly that case.
+ */
+import schema from '../generated/mock-knight.schema.json'
+
+interface JsonSchemaNode {
+  type?: string | string[]
+  description?: string
+  default?: unknown
+  properties?: Record<string, JsonSchemaNode>
+  items?: JsonSchemaNode
+  required?: string[]
+}
+
+interface Props {
+  /** Dotted path into the schema, or omitted for the document root. */
+  at?: string
+}
+
+const { at } = Astro.props
+const root = schema as unknown as JsonSchemaNode
+const node =
+  at === undefined
+    ? root
+    : at.split('.').reduce<JsonSchemaNode>((current, key) => {
+        const next = current.properties?.[key] ?? current.items
+        if (next === undefined) throw new Error(`No "${key}" in the schema at "${at}".`)
+        return next
+      }, root)
+
+const fields = Object.entries(node.properties ?? {})
+const required = new Set(node.required ?? [])
+const typeOf = (field: JsonSchemaNode): string =>
+  Array.isArray(field.type) ? field.type.join(' | ') : (field.type ?? 'any')
+---
+
+<table class="schema">
+  <thead>
+    <tr>
+      <th scope="col">Field</th>
+      <th scope="col">Type</th>
+      <th scope="col">Required</th>
+      <th scope="col">What it does</th>
+    </tr>
+  </thead>
+  <tbody>
+    {
+      fields.map(([name, field]) => (
+        <tr>
+          <td>
+            <code>{name}</code>
+          </td>
+          <td>{typeOf(field)}</td>
+          <td>{required.has(name) ? 'Yes' : 'No'}</td>
+          <td>{field.description ?? '—'}</td>
+        </tr>
+      ))
+    }
+  </tbody>
+</table>

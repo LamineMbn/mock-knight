@@ -1,0 +1,39 @@
+---
+/**
+ * Generated from schema/mock-knight.schema.json (SchemaTable.astro), which `pnpm schema` emits
+ * from the zod schema the config loader validates against — CI fails if the committed copy is
+ * stale. This page cannot describe a field the program does not accept.
+ */
+import SchemaTable from '../components/SchemaTable.astro'
+import Base from '../layouts/Base.astro'
+---
+
+<Base path="/config/">
+  <section class="section">
+    <h1>Configuration</h1>
+    <p class="prose">
+      A <code>mock-knight.json</code> is optional — a flag always wins over the file, because a flag is
+      what you typed just now. The tables below are generated from the JSON Schema the program validates
+      against, so they cannot describe a field it does not accept.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>Top level</h2>
+    <SchemaTable />
+  </section>
+
+  <section class="section">
+    <h2>Profiles</h2>
+    <SchemaTable at="profiles" />
+  </section>
+
+  <section class="section">
+    <h2>Environment interpolation</h2>
+    <p class="prose">
+      <code>${'{'}env:VAR{'}'}</code> is interpolated into string values and refuses to start if the variable
+      is unset, rather than substituting an empty string. Use it for anything secret, so the file you
+      commit holds a variable name rather than a password.
+    </p>
+  </section>
+</Base>

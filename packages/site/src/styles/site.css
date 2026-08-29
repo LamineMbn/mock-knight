@@ -290,6 +290,34 @@ img {
   color: inherit;
 }
 
+/* The configuration reference (SchemaTable.astro): a plain field/type/required/description
+ * table, no pass/fail semantics to signal, so it gets the capability matrix's structure
+ * (surface, border, subtle row rule) without its coloured cells. */
+.schema {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--mk-bg-surface);
+  border: 1px solid var(--mk-border-default);
+  border-radius: 0.5rem;
+}
+
+.schema th,
+.schema td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--mk-border-subtle);
+}
+
+.schema thead th {
+  background: var(--mk-bg-subtle);
+  border-bottom: 1px solid var(--mk-border-default);
+}
+
+.schema tbody tr:last-child td {
+  border-bottom: none;
+}
+
 /* Landing page sections: a heading, a paragraph of prose, then (mostly) a screenshot. A rule
  * between sections is enough separation on a page whose content is otherwise plain flow.
  *
