@@ -42,7 +42,7 @@ const DEFAULT_PORT = 7777
 const MINIMUM_NODE_MAJOR = 22
 
 const USAGE = `
-mock-knight — a local-first web UI for HTTP mock servers
+mock-knight — a web UI for WireMock, MockServer, Mockoon and Prism
 
   npx mock-knight --url http://localhost:8080
 
@@ -59,7 +59,7 @@ Options
   --config <path>   Config file (default ./${DEFAULT_CONFIG_FILENAME} if present)
   --no-config       Ignore any config file
   --name <name>     Name for the profile created from --url
-  --adapter <id>    Backend kind: wiremock (default) or mockserver
+  --adapter <id>    Backend kind, one of: ${ADAPTER_IDS.join(', ')} (default wiremock)
   --no-refresh      Start without fetching the corpus
   --verbose         Log every upstream call
   --version         Print the version and exit
