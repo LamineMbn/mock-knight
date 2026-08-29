@@ -39,7 +39,8 @@
   - **`request.cookies`.** `Cookie` is the header most likely to be declared sensitive, and both
     WireMock and MockServer store its individual values in an object *beside* `headers`, which
     no header-scoped rule reached. It is now treated as the `Cookie` header decomposed:
-    declaring that header redacts every cookie in it.
+    declaring that header redacts every cookie in it, and the header's own value is swept like
+    any other declared value.
   - **`bodyAsBase64` and `body.rawBytes`.** Both backends store a base64 twin next to every
     body, so a scrubbed body shipped with an unscrubbed copy one decode away — a row that passed
     a plaintext search while still holding the secret. A blob that decodes to a declared value is
@@ -63,10 +64,12 @@
   carries a literal `«redacted»` matcher. Better a degraded explainer than a credential written
   into the corpus — but it is a real cost, and it falls on the people who configured redaction.
 
-  The sweep has no minimum length, by design, and declaring `Cookie` covers each cookie value
-  individually — so a cookie of `n=1` replaces every `1` in that entry and `localhost:11080`
-  reads `localhost:«redacted»«redacted»080` on the Traffic screen. That is the direction chosen
-  deliberately: a length guard is a hole, and a hole is what this release closes.
+  The sweep has no minimum length, by design — a value you declared sensitive is a secret
+  whatever its length. It sweeps only what you named, though. Declaring `Cookie` *replaces* every
+  cookie in the entry, but their individual values are not swept across the rest of it: a jar
+  routinely carries throwaway pairs like `n=1`, and sweeping `1` would corrupt unrelated data by
+  a term nobody called sensitive. What that leaves is narrow and worth knowing — a backend that
+  prints one cookie's value, alone, into free text.
 
   **Rows already recorded are not rewritten.** If a profile has been running with
   `redactHeaders` set and traffic in it, the secrets are in the mirror now — the mirror is a

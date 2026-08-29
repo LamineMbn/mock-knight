@@ -69,20 +69,14 @@ function redact(event: ServeEvent, headerNames: readonly string[]): ServeEvent {
   const secrets = new Set(values)
   for (const [key, value] of Object.entries(event.request.headers)) {
     if (!wanted.has(key.toLowerCase())) continue
-    for (const item of Array.isArray(value) ? value : [value]) {
-      remember(item, secrets)
-      // A `Cookie` header is a list of `name=value` pairs and it is the individual value that
-      // gets quoted elsewhere, never the whole header string.
-      if (key.toLowerCase() === 'cookie') {
-        for (const pair of item.split(';')) {
-          const at = pair.indexOf('=')
-          if (at !== -1) remember(pair.slice(at + 1).trim(), secrets)
-        }
-      }
-    }
+    // Whole values only, never decomposed — see `harvest` in core for why a declared `Cookie`
+    // header is not split into its individual pairs.
+    for (const item of Array.isArray(value) ? value : [value]) remember(item, secrets)
   }
+  // Only a cookie whose own name was declared joins the sweep. One covered merely because
+  // `Cookie` is declared is replaced, not swept — see `declared` in core.
   for (const [key, value] of Object.entries(event.request.cookies))
-    if (cookieDeclared(key)) remember(value, secrets)
+    if (wanted.has(key.toLowerCase())) remember(value, secrets)
 
   const all = [...secrets].sort((a, b) => b.length - a.length)
   const scrub = (text: string): string => scrubSecrets(text, all)

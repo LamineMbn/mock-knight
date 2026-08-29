@@ -265,11 +265,12 @@ machine you control.
   to it, and the columns derived from all of those. Whatever was replaced is then scrubbed from
   every string in the entry, because a near-miss diff quotes a header value in prose.
 
-  That sweep is deliberately blunt — a declared value is replaced wherever it occurs, with no
-  minimum length — so a near-miss report can read `«redacted»` mid-sentence. Declaring `Cookie`
-  sensitive also covers each individual cookie value, and a short one is not exempt: a cookie of
-  `n=1` turns every `1` in that entry into a marker, so `localhost:11080` is displayed as
-  `localhost:«redacted»«redacted»080`. Ugly, and the deliberate direction to fail in.
+  That sweep is deliberately blunt — a value you declared is replaced wherever it occurs, with no
+  minimum length — so a near-miss report can read `«redacted»` mid-sentence. It sweeps only what
+  you named, though: declaring `Cookie` replaces every cookie in the entry, but the individual
+  cookie values are not hunted for elsewhere, because a jar carries throwaway pairs like `n=1`
+  and sweeping `1` would corrupt far more than it protected. The one thing that leaves behind: a
+  backend printing a single cookie's value, alone, into free text.
 
   **It costs you something on the Traffic screen.** The match explainer and *create stub from
   request* rebuild the request from the redacted entry, so a redacted header always reports as a

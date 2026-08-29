@@ -473,6 +473,30 @@ describe('redactRawHeaders against payloads captured from a live server', () => 
     expect(JSON.stringify(safe)).not.toContain('deadbeef')
   })
 
+  it('does not sweep an individual cookie token quoted on its own', () => {
+    // The documented residual. A declared `Cookie` header's value is swept whole, and the
+    // `cookies` container is redacted structurally — but the header is never decomposed into
+    // per-cookie sweep terms, because a jar routinely carries throwaway pairs like `other=1`
+    // and sweeping `1` across the payload corrupts far more than it protects.
+    const safe = redacted(
+      {
+        headers: { Cookie: 'sid=COOKIESECRET; other=1' },
+        cookies: { sid: 'COOKIESECRET', other: '1' },
+        note: 'rejected sid=COOKIESECRET; other=1',
+        loose: 'saw COOKIESECRET on its own',
+        port: 'localhost:11080',
+      },
+      ['cookie'],
+    )
+    expect(safe['cookies']).toEqual({ sid: REDACTION_MARKER, other: REDACTION_MARKER })
+    expect(safe['headers']).toEqual({ Cookie: REDACTION_MARKER })
+    // The whole header string is a declared value, so it goes wherever it is quoted.
+    expect(safe['note']).toBe(`rejected ${REDACTION_MARKER}`)
+    // The token alone is not, and unrelated data is left intact — the point of the trade.
+    expect(safe['loose']).toBe('saw COOKIESECRET on its own')
+    expect(safe['port']).toBe('localhost:11080')
+  })
+
   it('leaves a cookies container alone when Cookie was not declared', () => {
     const safe = redacted({ headers: { 'X-Api-Key': 'SECRET123' }, cookies: { sid: 'kept' } }, [
       'x-api-key',
@@ -483,8 +507,11 @@ describe('redactRawHeaders against payloads captured from a live server', () => 
   it('reports the values it replaced, so the caller can redact its own columns', () => {
     const { values } = redactRawHeaders(WIREMOCK_LIVE, ['x-api-key', 'cookie'])
     expect(values).toContain('SECRET123')
-    // The individual cookie values, harvested out of the Cookie header and its container.
-    expect(values).toContain('COOKIESECRET')
+    // The whole `Cookie` header value, because that is what the user declared. Not the
+    // individual cookies inside it — those are replaced, never swept.
+    expect(values).toContain('sid=COOKIESECRET; other=1')
+    expect(values).not.toContain('COOKIESECRET')
+    expect(values).not.toContain('1')
     // Longest first, so a short value cannot fragment a longer one containing it.
     expect([...values]).toEqual([...values].sort((a, b) => b.length - a.length))
   })

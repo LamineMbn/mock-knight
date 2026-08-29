@@ -56,7 +56,8 @@ export interface PayloadRedaction {
  *  - **`cookies`** — the `Cookie` header decomposed, and a *sibling* of `headers` rather than a
  *    child of it. Both WireMock (`request.cookies`) and MockServer (`httpRequest.cookies`) write
  *    it. Declaring `Cookie` sensitive and leaving `{ "sid": "secret" }` beside it was a leak
- *    reachable with one curl and one line of config.
+ *    reachable with one curl and one line of config. Its entries are *replaced* but not swept —
+ *    see `declared`.
  *
  * Anything else found under either key is replaced whole. Over-redaction shows someone a marker
  * where a header used to be; under-redaction writes their credential to disk.
@@ -107,12 +108,24 @@ function containerOf(key: string): Container | null {
   return lower === 'headers' ? 'headers' : lower === 'cookies' ? 'cookies' : null
 }
 
-/** Is this entry of a container one the profile declared sensitive? */
-function declared(container: Container, name: string, wanted: ReadonlySet<string>): boolean {
-  // Every cookie is part of the `Cookie` header's value, so declaring that header covers all of
-  // them. A cookie whose own name matches a declared header is covered too.
-  if (container === 'cookies' && wanted.has('cookie')) return true
-  return wanted.has(name.toLowerCase())
+/**
+ * Is this entry of a container one the profile declared sensitive, and may its value be swept?
+ *
+ * Two different answers, and the difference is the whole cookie trade. Every cookie is part of
+ * the `Cookie` header's value, so declaring that header covers all of them — they are
+ * **replaced**. But the user declared one header, not each cookie in it, so a cookie's value is
+ * not **swept** across the payload: a jar routinely carries `other=1`, and sweeping `1` corrupts
+ * far more than it protects. A cookie whose own name matches a declared header is a declared
+ * value like any other, and gets both.
+ */
+function declared(
+  container: Container,
+  name: string,
+  wanted: ReadonlySet<string>,
+): 'replace-and-sweep' | 'replace-only' | 'keep' {
+  if (wanted.has(name.toLowerCase())) return 'replace-and-sweep'
+  if (container === 'cookies' && wanted.has('cookie')) return 'replace-only'
+  return 'keep'
 }
 
 function isObject(value: Json): value is JsonObject {
@@ -164,46 +177,52 @@ function collectContainer(
       // nothing in it has been shown to be the configured header, and sweeping an unrelated
       // `*/*` across the whole payload helps nobody.
       if (named === null || !isObject(entry)) continue
-      if (!declared(container, named.name, wanted)) {
+      if (declared(container, named.name, wanted) !== 'replace-and-sweep') {
         collectObject(entry, wanted, found, depth)
         continue
       }
       for (const [key, child] of Object.entries(entry)) {
-        if (key !== named.field) harvest(child, named.name, found, depth)
+        if (key !== named.field) harvest(child, found, depth)
       }
     }
     return
   }
   if (isObject(value)) {
     for (const [name, child] of Object.entries(value)) {
-      if (declared(container, name, wanted)) harvest(child, name, found, depth)
+      if (declared(container, name, wanted) === 'replace-and-sweep') harvest(child, found, depth)
       else collect(child, wanted, found, depth)
     }
   }
 }
 
-/** Every string inside a value we are about to replace becomes something to sweep for. */
-function harvest(value: Json, name: string, found: Set<string>, depth: number): void {
+/**
+ * Every string inside a value we are about to replace becomes something to sweep for.
+ *
+ * Whole values only. A declared header's value is taken as the user gave it and never
+ * decomposed — an earlier version split a declared `Cookie` header on `;` and swept each pair's
+ * value separately, and a jar routinely carries throwaway pairs like `other=1`, so sweeping `1`
+ * turned `localhost:11080` into `localhost:«redacted»«redacted»080`. That is not over-redaction
+ * of a secret, it is corruption of unrelated data by a term nobody declared sensitive — a
+ * different thing from the deliberate absence of a minimum-length guard, which applies to values
+ * a user *did* declare. `declared` draws the same line for the cookies container.
+ *
+ * The residual, stated plainly: an individual cookie token appearing outside both the `cookies`
+ * container and the full `Cookie` header string is not swept. Both of those are covered — the
+ * container structurally, the header string as any declared value — so what is left is a backend
+ * that prints one cookie's value, alone, into free text.
+ */
+function harvest(value: Json, found: Set<string>, depth: number): void {
   if (depth >= MAX_DEPTH) return
   if (typeof value === 'string') {
     remember(value, found)
-    // A `Cookie` header's value is a list of `name=value` pairs, and it is the individual value
-    // that a near-miss report or a log line quotes — the whole header string never appears
-    // there. Same blank/marker guards as anything else.
-    if (name.toLowerCase() === 'cookie') {
-      for (const pair of value.split(';')) {
-        const at = pair.indexOf('=')
-        if (at !== -1) remember(pair.slice(at + 1).trim(), found)
-      }
-    }
     return
   }
   if (Array.isArray(value)) {
-    for (const item of value) harvest(item, name, found, depth + 1)
+    for (const item of value) harvest(item, found, depth + 1)
     return
   }
   if (isObject(value)) {
-    for (const item of Object.values(value)) harvest(item, name, found, depth + 1)
+    for (const item of Object.values(value)) harvest(item, found, depth + 1)
   }
 }
 
@@ -263,9 +282,9 @@ function renderContainer(
       setKey(
         out,
         name,
-        declared(container, name, wanted)
-          ? marker(child)
-          : render(child, wanted, secrets, depth + 1),
+        declared(container, name, wanted) === 'keep'
+          ? render(child, wanted, secrets, depth + 1)
+          : marker(child),
       )
     }
     return out
@@ -285,7 +304,8 @@ function renderEntry(
   const named = entryName(entry)
   // An entry we cannot read a name from could be the configured header, and we would never know.
   if (named === null || !isObject(entry)) return REDACTION_MARKER
-  if (!declared(container, named.name, wanted)) return renderObject(entry, wanted, secrets, depth)
+  if (declared(container, named.name, wanted) === 'keep')
+    return renderObject(entry, wanted, secrets, depth)
 
   const out: JsonObject = {}
   for (const [key, child] of Object.entries(entry)) {
