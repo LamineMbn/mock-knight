@@ -1,0 +1,74 @@
+---
+import { asset, href } from '../lib/href.js'
+import { ROUTES, routeFor } from '../lib/routes.js'
+import '../styles/site.css'
+
+interface Props {
+  path: string
+}
+
+const { path } = Astro.props
+const route = routeFor(path)
+const canonical = new URL(href(path), Astro.site).toString()
+const ogImage = new URL(asset('/images/corpus.png'), Astro.site).toString()
+const favicon = asset('/brand/mock-knight-mark-mono.svg')
+
+/**
+ * schema.org SoftwareApplication. This is what lets a result carry an application category and
+ * a price rather than reading as an ordinary article, and "free" is a fact worth stating in the
+ * markup as well as the copy.
+ */
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Mock Knight',
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'macOS, Linux, Windows',
+  description: routeFor('/').description,
+  url: new URL(href('/'), Astro.site).toString(),
+  license: 'https://www.apache.org/licenses/LICENSE-2.0',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+}
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{route.title}</title>
+    <meta name="description" content={route.description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href={favicon} />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={route.title} />
+    <meta property="og:description" content={route.description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header>
+      <a href={href('/')}>mock-knight</a>
+      <nav aria-label="Backends and reference">
+        {
+          ROUTES.filter((entry) => entry.nav !== null).map((entry) => (
+            <a href={href(entry.path)} aria-current={entry.path === path ? 'page' : undefined}>
+              {entry.nav}
+            </a>
+          ))
+        }
+      </nav>
+    </header>
+    <main id="main"><slot /></main>
+    <footer>
+      <a href="https://github.com/LamineMbn/mock-knight">GitHub</a>
+      <a href="https://www.npmjs.com/package/mock-knight">npm</a>
+      <span>Apache-2.0</span>
+    </footer>
+  </body>
+</html>

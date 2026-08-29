@@ -22,7 +22,8 @@
     "build:site": "pnpm --filter @mock-knight/site build",
     "test:perf": "vitest run --config vitest.perf.config.ts",
     "schema": "pnpm --filter @mock-knight/core --filter \"@mock-knight/adapter-*\" build && tsx packages/server/scripts/emit-schema.mts",
-    "test:conformance": "vitest run --config vitest.conformance.config.ts"
+    "test:conformance": "vitest run --config vitest.conformance.config.ts",
+    "test:site": "playwright test --config playwright.site.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -19,3 +19,21 @@ export function joinBase(base: string, path: string): string {
 export function href(path: string): string {
   return joinBase(import.meta.env.BASE_URL, path)
 }
+
+/**
+ * `joinBase` always adds the trailing slash `trailingSlash: 'always'` requires — correct for a
+ * page route, wrong for a file. A static host resolves `/images/corpus.png` but 404s on
+ * `/images/corpus.png/`, and Astro's own preview server is too lenient to catch it: it serves
+ * both, which is what let this through once already. `joinBaseAsset` is the same base-joining
+ * knowledge as `joinBase`, minus the trailing slash a file must not carry.
+ *
+ * Guarded against stripping the bare root itself (`/`) down to an empty string.
+ */
+export function joinBaseAsset(base: string, path: string): string {
+  const joined = joinBase(base, path)
+  return joined.length > 1 ? joined.replace(/\/$/, '') : joined
+}
+
+export function asset(path: string): string {
+  return joinBaseAsset(import.meta.env.BASE_URL, path)
+}
